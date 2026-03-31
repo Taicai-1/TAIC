@@ -1,0 +1,120 @@
+{
+  "pageTitle": "Organization",
+  "pageSubtitle": "Manage your organization, members, and integrations",
+  "loading": "Loading...",
+  "noOrg": {
+    "title": "No Organization",
+    "description": "Create a new organization or join an existing one with an invite code.",
+    "createTitle": "Create Organization",
+    "namePlaceholder": "Organization name",
+    "createButton": "Create",
+    "joinTitle": "Join with Invite Code",
+    "codePlaceholder": "Paste invite code",
+    "joinButton": "Join"
+  },
+  "info": {
+    "title": "Organization",
+    "role": "Your role",
+    "memberSince": "Member since",
+    "leaveButton": "Leave organization",
+    "leaveConfirm": "Are you sure you want to leave this organization?"
+  },
+  "members": {
+    "title": "Members",
+    "username": "Username",
+    "email": "Email",
+    "role": "Role",
+    "agents": "Agents",
+    "joinedAt": "Joined",
+    "actions": "Actions",
+    "changeRole": "Change role",
+    "remove": "Remove",
+    "removeConfirm": "Remove this member from the organization?",
+    "roleUpdated": "Role updated",
+    "memberRemoved": "Member removed",
+    "owner": "Owner",
+    "admin": "Admin",
+    "member": "Member"
+  },
+  "invitations": {
+    "title": "Invitations",
+    "emailPlaceholder": "Email address to invite",
+    "role": "Role",
+    "sendButton": "Send Invitation",
+    "sent": "Invitation sent",
+    "inviteLink": "Invite Link",
+    "copyLink": "Copy link",
+    "copied": "Link copied!",
+    "codeEnabled": "Invite code is active",
+    "codeDisabled": "Invite code is disabled",
+    "toggleOn": "Enable",
+    "toggleOff": "Disable",
+    "regenerate": "Regenerate code",
+    "regenerated": "Invite code regenerated",
+    "regenerateConfirm": "This will invalidate the current invite code. Continue?"
+  },
+  "integrations": {
+    "title": "Integrations",
+    "description": "Configure shared credentials for all organization members.",
+    "neo4j": {
+      "title": "Neo4j Knowledge Graph",
+      "uri": "URI",
+      "uriPlaceholder": "bolt://localhost:7687",
+      "user": "User",
+      "userPlaceholder": "neo4j",
+      "password": "Password",
+      "passwordPlaceholder": "Password"
+    },
+    "notion": {
+      "title": "Notion",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "ntn_..."
+    },
+    "slack": {
+      "title": "Slack",
+      "botToken": "Bot Token",
+      "botTokenPlaceholder": "xoxb-...",
+      "signingSecret": "Signing Secret",
+      "signingSecretPlaceholder": "Signing secret"
+    },
+    "saveButton": "Save",
+    "saved": "Integrations saved",
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "removeButton": "Remove",
+    "removeConfirm": "Remove this integration? The credentials will be deleted.",
+    "removed": "Integration removed"
+  },
+  "agents": {
+    "title": "Organization Agents",
+    "name": "Name",
+    "type": "Type",
+    "status": "Status",
+    "owner": "Owner",
+    "documents": "Documents",
+    "createdAt": "Created",
+    "noAgents": "No agents in this organization yet",
+    "actions": "Actions",
+    "deleteConfirm": "Are you sure you want to delete this agent from the organization?",
+    "deleted": "Agent deleted",
+    "sharedWith": "Shared with",
+    "share": "Share",
+    "shareRemoved": "Share removed",
+    "shareModal": {
+      "title": "Share companion",
+      "selectUser": "Select a member...",
+      "shareButton": "Share",
+      "currentShares": "Current shares",
+      "noShares": "Not shared with anyone",
+      "remove": "Remove",
+      "canEdit": "Allow editing"
+    }
+  },
+  "errors": {
+    "generic": "An error occurred",
+    "loadFailed": "Failed to load organization data"
+  },
+  "navigation": {
+    "backToAgents": "Back to companions"
+  }
+}

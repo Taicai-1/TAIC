@@ -1,0 +1,29 @@
+{
+  "pageTitle": "Sources",
+  "backToChat": "Back to chat",
+  "sections": {
+    "documents": "RAG Documents",
+    "notion": "Notion Sources"
+  },
+  "documents": {
+    "empty": "No RAG documents for this agent",
+    "download": "Download",
+    "open": "Open",
+    "fromNotion": "Notion"
+  },
+  "notion": {
+    "empty": "No Notion sources linked",
+    "ingest": "Add to RAG",
+    "ingesting": "Ingesting...",
+    "ingested": "In sources",
+    "page": "Page",
+    "database": "Database"
+  },
+  "toast": {
+    "ingestSuccess": "Notion content ingested successfully ({{chunks}} chunks)",
+    "ingestError": "Error ingesting Notion content",
+    "alreadyIngested": "This Notion content has already been ingested",
+    "downloadError": "Error downloading file"
+  },
+  "loading": "Loading sources..."
+}

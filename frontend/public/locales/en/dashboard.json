@@ -1,0 +1,75 @@
+{
+  "navigation": {
+    "backToAgents": "Back to agents",
+    "myProfile": "My profile",
+    "logout": "Logout"
+  },
+  "header": {
+    "sources": "Sources",
+    "chatInterface": "Chat Interface"
+  },
+  "theme": {
+    "lightMode": "Light mode",
+    "darkMode": "Dark mode"
+  },
+  "agentInfo": {
+    "notFound": "AI Companion not found",
+    "loadError": "Error loading agent",
+    "companionType": "AI Companion"
+  },
+  "statistics": {
+    "total": "Total",
+    "selected": "Selected"
+  },
+  "fileUpload": {
+    "uploadInProgress": "Adding...",
+    "dropFileHere": "Drop the file here!",
+    "dragAndDrop": "Drag and drop your documents",
+    "supportedFormats": "PDF, TXT, DOCX",
+    "orClickToChoose": "or click to choose",
+    "success": "Document \"{{filename}}\" added successfully!",
+    "error": "Error adding document",
+    "unsupportedFormat": "Unsupported format. Use PDF, TXT or DOCX"
+  },
+  "urlUpload": {
+    "title": "Add from URL",
+    "placeholder": "https://...",
+    "success": "URL added successfully!",
+    "error": "Error adding URL",
+    "invalidUrl": "Invalid URL. Please enter a valid URL (e.g., https://example.com)"
+  },
+  "documents": {
+    "loading": "Loading documents...",
+    "loadError": "Error loading documents",
+    "noDocuments": "No documents",
+    "addToStart": "Add documents to get started",
+    "deleteSuccess": "Document deleted",
+    "deleteError": "Error during deletion",
+    "download": "Download",
+    "downloadError": "Error generating download link",
+    "downloadProxyError": "Error downloading (proxy)",
+    "delete": "Delete"
+  },
+  "chat": {
+    "placeholder": "Ask your question...",
+    "send": "Send",
+    "sending": "Sending...",
+    "analyzing": "Analyzing...",
+    "voiceInput": "Voice input"
+  },
+  "voiceRecognition": {
+    "notSupported": "Voice recognition is not supported on this browser."
+  },
+  "question": {
+    "emptyError": "Please ask a question",
+    "success": "Response generated successfully!",
+    "error": "Error generating response"
+  },
+  "welcome": {
+    "title": "Welcome to TAIC Companion",
+    "noDocuments": "Add documents and ask your questions",
+    "withDocuments": "Ask a question based on your selected documents",
+    "documentsReady": "{{count}} document ready to answer your questions",
+    "documentsReady_plural": "{{count}} documents ready to answer your questions"
+  }
+}

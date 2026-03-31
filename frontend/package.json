@@ -1,0 +1,35 @@
+{
+  "name": "rag-ceo-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@headlessui/react": "^1.7.17",
+    "@react-oauth/google": "^0.13.4",
+    "autoprefixer": "^10.4.16",
+    "axios": "^1.6.0",
+    "dompurify": "^3.3.1",
+    "i18next": "^25.8.0",
+    "lucide-react": "^0.290.0",
+    "next": "14.0.0",
+    "next-i18next": "^15.4.3",
+    "postcss": "^8.4.31",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-dropzone": "^14.2.3",
+    "react-hot-toast": "^2.4.1",
+    "react-i18next": "^16.5.4",
+    "react-markdown": "^9.0.0",
+    "recharts": "^3.8.0",
+    "tailwindcss": "^3.3.5"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "eslint-config-next": "14.0.0"
+  }
+}

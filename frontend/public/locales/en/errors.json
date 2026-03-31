@@ -1,0 +1,46 @@
+{
+  "network": {
+    "unreachable": "Unable to reach server",
+    "timeout": "Request timed out",
+    "unknown": "An error occurred",
+    "offline": "You are offline"
+  },
+  "auth": {
+    "invalid_credentials": "Invalid email or password",
+    "session_expired": "Your session has expired",
+    "unauthorized": "You are not authorized to perform this action",
+    "login_required": "You must log in",
+    "email_exists": "This email is already in use",
+    "weak_password": "Password must be at least 8 characters long"
+  },
+  "validation": {
+    "required_field": "This field is required",
+    "invalid_email": "Invalid email",
+    "invalid_format": "Invalid format",
+    "too_short": "Too short",
+    "too_long": "Too long",
+    "invalid_input": "Invalid input"
+  },
+  "upload": {
+    "file_too_large": "File is too large (max 10 MB)",
+    "unsupported_format": "Unsupported file format",
+    "upload_failed": "Upload failed",
+    "no_file": "No file selected"
+  },
+  "agent": {
+    "not_found": "Companion not found",
+    "creation_failed": "Failed to create companion",
+    "update_failed": "Update failed",
+    "deletion_failed": "Deletion failed"
+  },
+  "document": {
+    "not_found": "Document not found",
+    "processing_failed": "Document processing failed",
+    "deletion_failed": "Failed to delete document"
+  },
+  "team": {
+    "not_found": "Team not found",
+    "creation_failed": "Failed to create team",
+    "permission_denied": "Permission denied"
+  }
+}

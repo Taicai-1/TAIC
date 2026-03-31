@@ -1,0 +1,56 @@
+{
+  "loading": {
+    "text": "Chargement..."
+  },
+  "sidebar": {
+    "agentTypeLabel": "Assistant",
+    "newConversationButton": "Nouvelle conversation",
+    "noConversations": "Aucune conversation",
+    "noConversationsSubtext": "Créez-en une pour démarrer",
+    "conversationNumber": "Conversation",
+    "renameTooltip": "Renommer",
+    "deleteTooltip": "Supprimer",
+    "deleteConfirmation": "Supprimer cette conversation ?"
+  },
+  "header": {
+    "backButton": "Retour",
+    "agentTypeDefault": "Assistant IA",
+    "sourcesButton": "Sources"
+  },
+  "messages": {
+    "actionResult": "Résultat d'action",
+    "actionExecuted": "Action {{action}} exécutée",
+    "actionError": "Action {{action}} erreur",
+    "documentId": "document id",
+    "fileCreated": "fichier créé",
+    "openButton": "Ouvrir",
+    "copyButton": "Copier",
+    "usefulButton": "Utile",
+    "thinking": "{{agentName}} réfléchit",
+    "thinkingImage": "{{agentName}} génère une image",
+    "downloadImage": "Télécharger",
+    "fullSize": "Taille réelle",
+    "attachmentError": "[Erreur extraction pièce jointe]",
+    "attachmentContentLabel": "Contenu pièce jointe:",
+    "aiError": "[Erreur IA]"
+  },
+  "emptyState": {
+    "title": "Sélectionnez une conversation",
+    "description": "Ou créez-en une nouvelle pour commencer à discuter avec {{agentName}}",
+    "newConversationButton": "Nouvelle conversation"
+  },
+  "input": {
+    "placeholder": "Écrivez un message...",
+    "placeholderNoConversation": "Sélectionnez une conversation",
+    "listeningLabel": "Écoute...",
+    "attachmentTooltip": "Ajouter une pièce jointe",
+    "startDictationTooltip": "Démarrer la dictée",
+    "stopDictationTooltip": "Arrêter la dictée",
+    "sendButton": "Envoyer",
+    "sendingButton": "Envoi...",
+    "extractingButton": "Extraction..."
+  },
+  "voiceRecognition": {
+    "notSupportedAlert": "Votre navigateur ne supporte pas la reconnaissance vocale"
+  }
+}

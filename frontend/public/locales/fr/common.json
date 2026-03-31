@@ -1,0 +1,55 @@
+{
+  "buttons": {
+    "create": "Créer",
+    "add": "Ajouter",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "loading": "Chargement...",
+    "back": "Retour",
+    "next": "Suivant",
+    "send": "Envoyer",
+    "upload": "Téléverser",
+    "download": "Télécharger",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "refresh": "Actualiser",
+    "reset": "Réinitialiser"
+  },
+  "navigation": {
+    "dashboard": "Tableau de bord",
+    "agents": "Companions",
+    "teams": "Équipes",
+    "profile": "Profil",
+    "organization": "Organisation",
+    "logout": "Déconnexion",
+    "settings": "Paramètres"
+  },
+  "labels": {
+    "email": "Email",
+    "password": "Mot de passe",
+    "name": "Nom",
+    "description": "Description",
+    "status": "Statut",
+    "type": "Type",
+    "date": "Date",
+    "actions": "Actions"
+  },
+  "states": {
+    "loading": "Chargement en cours...",
+    "saving": "Enregistrement en cours...",
+    "deleting": "Suppression en cours...",
+    "success": "Succès",
+    "error": "Erreur",
+    "noData": "Aucune donnée disponible",
+    "empty": "Vide"
+  },
+  "confirmations": {
+    "deleteTitle": "Confirmer la suppression",
+    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet élément ?",
+    "unsavedChanges": "Vous avez des modifications non enregistrées. Voulez-vous continuer ?"
+  }
+}

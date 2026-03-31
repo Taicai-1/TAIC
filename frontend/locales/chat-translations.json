@@ -1,0 +1,184 @@
+{
+  "chat": {
+    "loading": {
+      "text": {
+        "fr": "Chargement...",
+        "en": "Loading..."
+      }
+    },
+    "sidebar": {
+      "agentTypeLabel": {
+        "fr": "Assistant",
+        "en": "Assistant"
+      },
+      "newConversationButton": {
+        "fr": "Nouvelle conversation",
+        "en": "New conversation"
+      },
+      "noConversations": {
+        "fr": "Aucune conversation",
+        "en": "No conversations"
+      },
+      "noConversationsSubtext": {
+        "fr": "Créez-en une pour démarrer",
+        "en": "Create one to get started"
+      },
+      "conversationNumber": {
+        "fr": "Conversation",
+        "en": "Conversation"
+      },
+      "renameTooltip": {
+        "fr": "Renommer",
+        "en": "Rename"
+      },
+      "deleteTooltip": {
+        "fr": "Supprimer",
+        "en": "Delete"
+      },
+      "deleteConfirmation": {
+        "fr": "Supprimer cette conversation ?",
+        "en": "Delete this conversation?"
+      }
+    },
+    "header": {
+      "backButton": {
+        "fr": "Retour",
+        "en": "Back"
+      },
+      "agentTypeDefault": {
+        "fr": "Assistant IA",
+        "en": "AI Assistant"
+      },
+      "sourcesButton": {
+        "fr": "Sources",
+        "en": "Sources"
+      }
+    },
+    "messages": {
+      "actionResult": {
+        "fr": "Résultat d'action",
+        "en": "Action result"
+      },
+      "actionExecuted": {
+        "fr": "Action {{action}} exécutée",
+        "en": "Action {{action}} executed"
+      },
+      "actionError": {
+        "fr": "Action {{action}} erreur",
+        "en": "Action {{action}} error"
+      },
+      "documentId": {
+        "fr": "document id",
+        "en": "document id"
+      },
+      "fileCreated": {
+        "fr": "fichier créé",
+        "en": "file created"
+      },
+      "openButton": {
+        "fr": "Ouvrir",
+        "en": "Open"
+      },
+      "copyButton": {
+        "fr": "Copier",
+        "en": "Copy"
+      },
+      "usefulButton": {
+        "fr": "Utile",
+        "en": "Useful"
+      },
+      "thinking": {
+        "fr": "{{agentName}} réfléchit",
+        "en": "{{agentName}} is thinking"
+      },
+      "attachmentError": {
+        "fr": "[Erreur extraction pièce jointe]",
+        "en": "[Attachment extraction error]"
+      },
+      "attachmentContentLabel": {
+        "fr": "Contenu pièce jointe:",
+        "en": "Attachment content:"
+      },
+      "aiError": {
+        "fr": "[Erreur IA]",
+        "en": "[AI Error]"
+      }
+    },
+    "emptyState": {
+      "title": {
+        "fr": "Sélectionnez une conversation",
+        "en": "Select a conversation"
+      },
+      "description": {
+        "fr": "Ou créez-en une nouvelle pour commencer à discuter avec {{agentName}}",
+        "en": "Or create a new one to start chatting with {{agentName}}"
+      },
+      "newConversationButton": {
+        "fr": "Nouvelle conversation",
+        "en": "New conversation"
+      }
+    },
+    "input": {
+      "placeholder": {
+        "fr": "Écrivez un message...",
+        "en": "Write a message..."
+      },
+      "placeholderNoConversation": {
+        "fr": "Sélectionnez une conversation",
+        "en": "Select a conversation"
+      },
+      "listeningLabel": {
+        "fr": "Écoute...",
+        "en": "Listening..."
+      },
+      "attachmentTooltip": {
+        "fr": "Ajouter une pièce jointe",
+        "en": "Add attachment"
+      },
+      "startDictationTooltip": {
+        "fr": "Démarrer la dictée",
+        "en": "Start dictation"
+      },
+      "stopDictationTooltip": {
+        "fr": "Arrêter la dictée",
+        "en": "Stop dictation"
+      },
+      "sendButton": {
+        "fr": "Envoyer",
+        "en": "Send"
+      },
+      "sendingButton": {
+        "fr": "Envoi...",
+        "en": "Sending..."
+      },
+      "extractingButton": {
+        "fr": "Extraction...",
+        "en": "Extracting..."
+      }
+    },
+    "voiceRecognition": {
+      "notSupportedAlert": {
+        "fr": "Votre navigateur ne supporte pas la reconnaissance vocale",
+        "en": "Your browser does not support voice recognition"
+      }
+    },
+    "comments": {
+      "loadAgent": {
+        "fr": "Charge les infos de l'agent",
+        "en": "Load agent information"
+      },
+      "markdownParser": {
+        "fr": "Fonction pour parser le Markdown simple (gras, italique, listes)",
+        "en": "Function to parse simple Markdown (bold, italic, lists)"
+      },
+      "markdownComponent": {
+        "fr": "Composant pour afficher du texte avec Markdown",
+        "en": "Component to display text with Markdown"
+      },
+      "attachments": {
+        "fr": "Pièces jointes",
+        "en": "Attachments"
+      }
+    }
+  }
+}

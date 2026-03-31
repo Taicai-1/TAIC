@@ -1,0 +1,75 @@
+{
+  "navigation": {
+    "backToAgents": "Retour aux agents",
+    "myProfile": "Mon profil",
+    "logout": "Se déconnecter"
+  },
+  "header": {
+    "sources": "Sources",
+    "chatInterface": "Chat Interface"
+  },
+  "theme": {
+    "lightMode": "Mode clair",
+    "darkMode": "Mode sombre"
+  },
+  "agentInfo": {
+    "notFound": "Companion IA non trouvé",
+    "loadError": "Erreur lors du chargement de l'agent",
+    "companionType": "Companion IA"
+  },
+  "statistics": {
+    "total": "Total",
+    "selected": "Sélectionnés"
+  },
+  "fileUpload": {
+    "uploadInProgress": "Ajout en cours...",
+    "dropFileHere": "Déposez le fichier ici !",
+    "dragAndDrop": "Glissez-déposez vos documents",
+    "supportedFormats": "PDF, TXT, DOCX",
+    "orClickToChoose": "ou cliquez pour choisir",
+    "success": "Document \"{{filename}}\" ajouté avec succès !",
+    "error": "Erreur lors de l'ajout du document",
+    "unsupportedFormat": "Format non supporté. Utilisez PDF, TXT ou DOCX"
+  },
+  "urlUpload": {
+    "title": "Ajouter depuis une URL",
+    "placeholder": "https://...",
+    "success": "URL ajoutée avec succès !",
+    "error": "Erreur lors de l'ajout de l'URL",
+    "invalidUrl": "URL invalide. Veuillez entrer une URL valide (ex: https://example.com)"
+  },
+  "documents": {
+    "loading": "Chargement des documents...",
+    "loadError": "Erreur lors du chargement des documents",
+    "noDocuments": "Aucun document",
+    "addToStart": "Ajoutez des documents pour commencer",
+    "deleteSuccess": "Document supprimé",
+    "deleteError": "Erreur lors de la suppression",
+    "download": "Télécharger",
+    "downloadError": "Erreur lors de la génération du lien de téléchargement",
+    "downloadProxyError": "Erreur lors du téléchargement (proxy)",
+    "delete": "Supprimer"
+  },
+  "chat": {
+    "placeholder": "Posez votre question...",
+    "send": "Envoyer",
+    "sending": "Envoi...",
+    "analyzing": "Analyse en cours...",
+    "voiceInput": "Entrée vocale"
+  },
+  "voiceRecognition": {
+    "notSupported": "La reconnaissance vocale n'est pas supportée sur ce navigateur."
+  },
+  "question": {
+    "emptyError": "Veuillez poser une question",
+    "success": "Réponse générée avec succès !",
+    "error": "Erreur lors de la génération de la réponse"
+  },
+  "welcome": {
+    "title": "Bienvenue dans TAIC Companion",
+    "noDocuments": "Ajoutez des documents et posez vos questions",
+    "withDocuments": "Posez une question basée sur vos documents sélectionnés",
+    "documentsReady": "{{count}} document prêt pour répondre à vos questions",
+    "documentsReady_plural": "{{count}} documents prêts pour répondre à vos questions"
+  }
+}

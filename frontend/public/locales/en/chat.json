@@ -1,0 +1,56 @@
+{
+  "loading": {
+    "text": "Loading..."
+  },
+  "sidebar": {
+    "agentTypeLabel": "Assistant",
+    "newConversationButton": "New conversation",
+    "noConversations": "No conversations",
+    "noConversationsSubtext": "Create one to get started",
+    "conversationNumber": "Conversation",
+    "renameTooltip": "Rename",
+    "deleteTooltip": "Delete",
+    "deleteConfirmation": "Delete this conversation?"
+  },
+  "header": {
+    "backButton": "Back",
+    "agentTypeDefault": "AI Assistant",
+    "sourcesButton": "Sources"
+  },
+  "messages": {
+    "actionResult": "Action result",
+    "actionExecuted": "Action {{action}} executed",
+    "actionError": "Action {{action}} error",
+    "documentId": "document id",
+    "fileCreated": "file created",
+    "openButton": "Open",
+    "copyButton": "Copy",
+    "usefulButton": "Useful",
+    "thinking": "{{agentName}} is thinking",
+    "thinkingImage": "{{agentName}} is generating an image",
+    "downloadImage": "Download",
+    "fullSize": "Full size",
+    "attachmentError": "[Attachment extraction error]",
+    "attachmentContentLabel": "Attachment content:",
+    "aiError": "[AI Error]"
+  },
+  "emptyState": {
+    "title": "Select a conversation",
+    "description": "Or create a new one to start chatting with {{agentName}}",
+    "newConversationButton": "New conversation"
+  },
+  "input": {
+    "placeholder": "Write a message...",
+    "placeholderNoConversation": "Select a conversation",
+    "listeningLabel": "Listening...",
+    "attachmentTooltip": "Add attachment",
+    "startDictationTooltip": "Start dictation",
+    "stopDictationTooltip": "Stop dictation",
+    "sendButton": "Send",
+    "sendingButton": "Sending...",
+    "extractingButton": "Extracting..."
+  },
+  "voiceRecognition": {
+    "notSupportedAlert": "Your browser does not support voice recognition"
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "loading": "Loading...",
+  "navigation": {
+    "backToDashboard": "Back to companions"
+  },
+  "title": "My Profile",
+  "sections": {
+    "accountInfo": {
+      "title": "Account Information",
+      "username": "Username:",
+      "email": "Email:",
+      "memberSince": "Member since:"
+    },
+    "statistics": {
+      "title": "📊 My Statistics",
+      "agents": "Agents",
+      "documents": "Documents",
+      "conversations": "Conversations",
+      "messages": "Messages"
+    },
+    "gdpr": {
+      "title": "🇪🇺 My Data (GDPR)",
+      "description": "In accordance with GDPR Article 15, you can download all your personal data.",
+      "exportButton": {
+        "idle": "📥 Download all my data",
+        "loading": "Downloading..."
+      },
+      "formatInfo": "Format: JSON • Includes: profile, agents, documents, conversations, teams"
+    },
+    "analytics": {
+      "title": "Analytics",
+      "description": "Visualize your activity and companion usage.",
+      "activityOverTime": "Activity over 30 days",
+      "messagesPerAgent": "Messages per companion",
+      "conversationsPerAgent": "Conversations per companion",
+      "feedbackDistribution": "Feedback distribution",
+      "userVsAgent": "User vs Assistant",
+      "avgMessagesPerConversation": "Avg. messages / conversation",
+      "mostActiveAgent": "Most active companion",
+      "messages": "messages",
+      "conversations": "conversations",
+      "feedback": {
+        "like": "Positive",
+        "dislike": "Negative",
+        "none": "None"
+      },
+      "roles": {
+        "user": "User",
+        "agent": "Assistant"
+      },
+      "empty": "No activity yet. Start chatting with your companions!",
+      "last30days": "Last 30 days"
+    },
+    "dangerZone": {
+      "title": "⚠️ Danger Zone",
+      "description": "These actions are irreversible. Your data will be permanently deleted or anonymized.",
+      "anonymize": {
+        "button": "🔒 Anonymize my account",
+        "description": "Keeps your data for statistics but removes your personal information"
+      },
+      "delete": {
+        "button": "❌ Permanently delete my account",
+        "description": "Completely deletes your account and all your data (agents, documents, conversations)"
+      }
+    }
+  },
+  "modal": {
+    "anonymize": {
+      "title": "Anonymize account?",
+      "description": "Your account will be anonymized. Your data will be kept for statistics but all your personal information (name, email) will be deleted."
+    },
+    "delete": {
+      "title": "Delete account?",
+      "description": "This action is IRREVERSIBLE. All your data will be permanently deleted: agents, documents, conversations, teams.",
+      "warningTitle": "⚠️ You will lose:",
+      "warningItems": {
+        "agents": "agent(s)",
+        "documents": "document(s)",
+        "conversations": "conversation(s)",
+        "teams": "All your teams"
+      }
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "processing": "Processing..."
+    }
+  },
+  "company": {
+    "title": "Organization",
+    "description": "Join or create an organization to collaborate and share integrations.",
+    "inputPlaceholder": "Company name",
+    "join": "Join",
+    "create": "Create",
+    "created": "Company created successfully",
+    "joined": "You have joined the company",
+    "notFound": "Company not found",
+    "error": "An error occurred",
+    "manage": "Manage",
+    "joinOrCreate": "Join or create an organization"
+  },
+  "changePassword": {
+    "title": "Change Password",
+    "description": "Change your password by entering your current and new password.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "submit": "Change password",
+    "submitting": "Changing...",
+    "success": "Password changed successfully",
+    "errorMismatch": "New passwords do not match",
+    "errorSamePassword": "New password must be different from current password",
+    "errorIncorrect": "Current password is incorrect",
+    "errorRateLimit": "Too many attempts. Please try again later.",
+    "errorGeneric": "Error changing password",
+    "requirements": {
+      "length": "8 characters minimum",
+      "uppercase": "One uppercase letter",
+      "lowercase": "One lowercase letter",
+      "digit": "One digit"
+    }
+  },
+  "twoFactor": {
+    "title": "Two-Factor Authentication",
+    "description": "Your account is protected with two-factor authentication (TOTP).",
+    "enabled": "2FA is active",
+    "activatedOn": "Activated on",
+    "backupCodesRemaining": "Backup codes remaining",
+    "regenerateButton": "Regenerate backup codes",
+    "regenerated": "Backup codes regenerated successfully",
+    "regenerateError": "Error regenerating backup codes",
+    "newCodesTitle": "New Backup Codes",
+    "newCodesWarning": "Your previous backup codes have been invalidated. Save these new codes in a secure location.",
+    "codesCopied": "Codes copied to clipboard",
+    "copyCodes": "Copy all codes",
+    "done": "Done"
+  },
+  "alerts": {
+    "exportSuccess": "✓ Your data has been downloaded successfully",
+    "exportError": "Error exporting data",
+    "anonymizeSuccess": "✓ Your account has been anonymized successfully",
+    "deleteSuccess": "✓ Your account has been deleted successfully",
+    "deleteError": "Error deleting account"
+  }
+}

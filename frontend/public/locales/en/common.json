@@ -1,0 +1,55 @@
+{
+  "buttons": {
+    "create": "Create",
+    "add": "Add",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "loading": "Loading...",
+    "back": "Back",
+    "next": "Next",
+    "send": "Send",
+    "upload": "Upload",
+    "download": "Download",
+    "search": "Search",
+    "filter": "Filter",
+    "refresh": "Refresh",
+    "reset": "Reset"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "agents": "Companions",
+    "teams": "Teams",
+    "profile": "Profile",
+    "organization": "Organization",
+    "logout": "Logout",
+    "settings": "Settings"
+  },
+  "labels": {
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "description": "Description",
+    "status": "Status",
+    "type": "Type",
+    "date": "Date",
+    "actions": "Actions"
+  },
+  "states": {
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "deleting": "Deleting...",
+    "success": "Success",
+    "error": "Error",
+    "noData": "No data available",
+    "empty": "Empty"
+  },
+  "confirmations": {
+    "deleteTitle": "Confirm deletion",
+    "deleteMessage": "Are you sure you want to delete this item?",
+    "unsavedChanges": "You have unsaved changes. Do you want to continue?"
+  }
+}

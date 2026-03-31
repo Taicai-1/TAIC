@@ -1,0 +1,145 @@
+{
+  "loading": "Chargement...",
+  "navigation": {
+    "backToDashboard": "Retour aux companions"
+  },
+  "title": "Mon Profil",
+  "sections": {
+    "accountInfo": {
+      "title": "Informations du compte",
+      "username": "Nom d'utilisateur:",
+      "email": "Email:",
+      "memberSince": "Membre depuis:"
+    },
+    "statistics": {
+      "title": "📊 Mes statistiques",
+      "agents": "Agents",
+      "documents": "Documents",
+      "conversations": "Conversations",
+      "messages": "Messages"
+    },
+    "gdpr": {
+      "title": "🇪🇺 Mes données (RGPD)",
+      "description": "Conformément au RGPD Article 15, vous pouvez télécharger toutes vos données personnelles.",
+      "exportButton": {
+        "idle": "📥 Télécharger toutes mes données",
+        "loading": "Téléchargement..."
+      },
+      "formatInfo": "Format: JSON • Inclut: profil, agents, documents, conversations, équipes"
+    },
+    "analytics": {
+      "title": "Analytics",
+      "description": "Visualisez votre activite et l'utilisation de vos companions.",
+      "activityOverTime": "Activite sur 30 jours",
+      "messagesPerAgent": "Messages par companion",
+      "conversationsPerAgent": "Conversations par companion",
+      "feedbackDistribution": "Distribution des feedbacks",
+      "userVsAgent": "User vs Assistant",
+      "avgMessagesPerConversation": "Moy. messages / conversation",
+      "mostActiveAgent": "Companion le plus actif",
+      "messages": "messages",
+      "conversations": "conversations",
+      "feedback": {
+        "like": "Positif",
+        "dislike": "Negatif",
+        "none": "Aucun"
+      },
+      "roles": {
+        "user": "Utilisateur",
+        "agent": "Assistant"
+      },
+      "empty": "Aucune activite pour le moment. Commencez a discuter avec vos companions !",
+      "last30days": "30 derniers jours"
+    },
+    "dangerZone": {
+      "title": "⚠️ Zone de danger",
+      "description": "Ces actions sont irréversibles. Vos données seront définitivement supprimées ou anonymisées.",
+      "anonymize": {
+        "button": "🔒 Anonymiser mon compte",
+        "description": "Conserve vos données pour les statistiques mais supprime vos informations personnelles"
+      },
+      "delete": {
+        "button": "❌ Supprimer définitivement mon compte",
+        "description": "Supprime complètement votre compte et toutes vos données (agents, documents, conversations)"
+      }
+    }
+  },
+  "modal": {
+    "anonymize": {
+      "title": "Anonymiser le compte ?",
+      "description": "Votre compte sera anonymisé. Vos données seront conservées pour les statistiques mais toutes vos informations personnelles (nom, email) seront supprimées."
+    },
+    "delete": {
+      "title": "Supprimer le compte ?",
+      "description": "Cette action est IRRÉVERSIBLE. Toutes vos données seront définitivement supprimées : agents, documents, conversations, équipes.",
+      "warningTitle": "⚠️ Vous perdrez :",
+      "warningItems": {
+        "agents": "agent(s)",
+        "documents": "document(s)",
+        "conversations": "conversation(s)",
+        "teams": "Toutes vos équipes"
+      }
+    },
+    "buttons": {
+      "cancel": "Annuler",
+      "confirm": "Confirmer",
+      "processing": "Traitement..."
+    }
+  },
+  "company": {
+    "title": "Organisation",
+    "description": "Rejoignez ou creez une organisation pour collaborer et partager des integrations.",
+    "inputPlaceholder": "Nom de l'entreprise",
+    "join": "Rejoindre",
+    "create": "Creer",
+    "created": "Entreprise creee avec succes",
+    "joined": "Vous avez rejoint l'entreprise",
+    "notFound": "Entreprise introuvable",
+    "error": "Erreur lors de l'operation",
+    "manage": "Gerer",
+    "joinOrCreate": "Rejoindre ou creer une organisation"
+  },
+  "changePassword": {
+    "title": "Modifier le mot de passe",
+    "description": "Changez votre mot de passe en saisissant l'ancien et le nouveau.",
+    "currentPassword": "Mot de passe actuel",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le nouveau mot de passe",
+    "submit": "Changer le mot de passe",
+    "submitting": "Modification...",
+    "success": "Mot de passe modifie avec succes",
+    "errorMismatch": "Les nouveaux mots de passe ne correspondent pas",
+    "errorSamePassword": "Le nouveau mot de passe doit etre different de l'ancien",
+    "errorIncorrect": "Mot de passe actuel incorrect",
+    "errorRateLimit": "Trop de tentatives. Reessayez plus tard.",
+    "errorGeneric": "Erreur lors du changement de mot de passe",
+    "requirements": {
+      "length": "8 caracteres minimum",
+      "uppercase": "Une majuscule",
+      "lowercase": "Une minuscule",
+      "digit": "Un chiffre"
+    }
+  },
+  "twoFactor": {
+    "title": "Authentification Double Facteur",
+    "description": "Votre compte est protege par l'authentification double facteur (TOTP).",
+    "enabled": "2FA active",
+    "activatedOn": "Active le",
+    "backupCodesRemaining": "Codes de secours restants",
+    "regenerateButton": "Regenerer les codes de secours",
+    "regenerated": "Codes de secours regeneres avec succes",
+    "regenerateError": "Erreur lors de la regeneration des codes",
+    "newCodesTitle": "Nouveaux Codes de Secours",
+    "newCodesWarning": "Vos anciens codes de secours ont ete invalides. Sauvegardez ces nouveaux codes dans un endroit sur.",
+    "codesCopied": "Codes copies dans le presse-papiers",
+    "copyCodes": "Copier tous les codes",
+    "done": "Termine"
+  },
+  "alerts": {
+    "exportSuccess": "✓ Vos données ont été téléchargées avec succès",
+    "exportError": "Erreur lors de l'export des données",
+    "anonymizeSuccess": "✓ Votre compte a été anonymisé avec succès",
+    "deleteSuccess": "✓ Votre compte a été supprimé avec succès",
+    "deleteError": "Erreur lors de la suppression du compte"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "page": {
+    "title": "Équipes de companions",
+    "subtitle": "Gérez et créez des équipes de companions",
+    "loading": "Chargement des équipes..."
+  },
+  "buttons": {
+    "logout": "Se déconnecter",
+    "createTeam": "Créer une équipe de companions",
+    "backToAgents": "Retour aux companions",
+    "open": "Ouvrir",
+    "cancel": "Annuler",
+    "createTeamAction": "Créer l'équipe",
+    "creating": "Création..."
+  },
+  "form": {
+    "title": "Créer une équipe de companions",
+    "teamName": "Nom de l'équipe",
+    "teamContext": "Contexte de l'équipe",
+    "leaderLabel": "Companion conversationnel (leader)",
+    "leaderPlaceholder": "Sélectionner un companion leader",
+    "subAgentsLabel": "Sous-companions conversationnels",
+    "teamLeader": "Chef d'équipe",
+    "subCompanions": "Sous-companions"
+  },
+  "emptyState": {
+    "title": "Aucune équipe de companions créée",
+    "description": "Créez votre première équipe pour commencer"
+  },
+  "errors": {
+    "loadingTeams": "Erreur lors du chargement des équipes",
+    "loadingAgents": "Erreur lors du chargement des agents",
+    "deletingAgent": "Erreur lors de la suppression",
+    "creatingTeam": "Erreur lors de la création",
+    "nameRequired": "Le nom est obligatoire",
+    "leaderRequired": "Choisir un companion conversationnel"
+  },
+  "success": {
+    "teamCreated": "Équipe créée avec succès !",
+    "agentDeleted": "Agent supprimé"
+  },
+  "confirmations": {
+    "deleteAgent": "Êtes-vous sûr de vouloir supprimer cet agent ?"
+  },
+  "agentTypes": {
+    "conversationnel": {
+      "name": "Conversationnel",
+      "description": "Dialogue / chat (OpenAI par défaut)"
+    },
+    "actionnable": {
+      "name": "Actionnable",
+      "description": "Peut exécuter des actions (Gemini recommandé)"
+    },
+    "recherche_live": {
+      "name": "Recherche live",
+      "description": "Recherche web en direct (Perplexity recommandé)"
+    }
+  },
+  "tooltips": {
+    "backToAgents": "Retour à la page companions"
+  },
+  "chat": {
+    "loading": "Chargement de l'équipe...",
+    "backToTeams": "Retour aux équipes",
+    "teamChat": "Chat d'équipe",
+    "teamThinking": "L'équipe réfléchit",
+    "startConversation": "Commencez la conversation",
+    "sendMessageToStart": "Envoyez un message pour démarrer",
+    "newConversation": "Nouvelle conversation",
+    "creatingConversation": "Création...",
+    "conversationCreated": "Nouvelle conversation créée",
+    "conversationDeleted": "Conversation supprimée",
+    "titleUpdated": "Titre modifié",
+    "feedbackThanks": "Merci pour votre retour !",
+    "loadingError": "Erreur lors du chargement de l'équipe",
+    "createError": "Erreur lors de la création",
+    "deleteError": "Erreur lors de la suppression",
+    "updateError": "Erreur lors de la modification",
+    "sendError": "Erreur lors de l'envoi du message"
+  },
+  "detail": {
+    "loading": "Chargement...",
+    "notFound": "Équipe introuvable",
+    "loadError": "Impossible de charger l'équipe",
+    "leaderAgent": "Chef d'agent:",
+    "actionableAgents": "Agents actionnables:"
+  }
+}

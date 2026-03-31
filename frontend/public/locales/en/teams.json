@@ -1,0 +1,88 @@
+{
+  "page": {
+    "title": "Companion Teams",
+    "subtitle": "Manage and create companion teams",
+    "loading": "Loading teams..."
+  },
+  "buttons": {
+    "logout": "Log out",
+    "createTeam": "Create companion team",
+    "backToAgents": "Back to companions",
+    "open": "Open",
+    "cancel": "Cancel",
+    "createTeamAction": "Create team",
+    "creating": "Creating..."
+  },
+  "form": {
+    "title": "Create companion team",
+    "teamName": "Team name",
+    "teamContext": "Team context",
+    "leaderLabel": "Conversational companion (leader)",
+    "leaderPlaceholder": "Select a leader companion",
+    "subAgentsLabel": "Conversational sub-companions",
+    "teamLeader": "Team leader",
+    "subCompanions": "Sub-companions"
+  },
+  "emptyState": {
+    "title": "No companion teams created",
+    "description": "Create your first team to get started"
+  },
+  "errors": {
+    "loadingTeams": "Error loading teams",
+    "loadingAgents": "Error loading agents",
+    "deletingAgent": "Error deleting agent",
+    "creatingTeam": "Error creating team",
+    "nameRequired": "Name is required",
+    "leaderRequired": "Select a conversational companion"
+  },
+  "success": {
+    "teamCreated": "Team created successfully!",
+    "agentDeleted": "Agent deleted"
+  },
+  "confirmations": {
+    "deleteAgent": "Are you sure you want to delete this agent?"
+  },
+  "agentTypes": {
+    "conversationnel": {
+      "name": "Conversational",
+      "description": "Dialogue / chat (OpenAI default)"
+    },
+    "actionnable": {
+      "name": "Actionable",
+      "description": "Can execute actions (Gemini recommended)"
+    },
+    "recherche_live": {
+      "name": "Live search",
+      "description": "Real-time web search (Perplexity recommended)"
+    }
+  },
+  "tooltips": {
+    "backToAgents": "Return to companions page"
+  },
+  "chat": {
+    "loading": "Loading team...",
+    "backToTeams": "Back to teams",
+    "teamChat": "Team chat",
+    "teamThinking": "The team is thinking",
+    "startConversation": "Start the conversation",
+    "sendMessageToStart": "Send a message to get started",
+    "newConversation": "New conversation",
+    "creatingConversation": "Creating...",
+    "conversationCreated": "New conversation created",
+    "conversationDeleted": "Conversation deleted",
+    "titleUpdated": "Title updated",
+    "feedbackThanks": "Thank you for your feedback!",
+    "loadingError": "Error loading team",
+    "createError": "Error creating conversation",
+    "deleteError": "Error deleting conversation",
+    "updateError": "Error updating title",
+    "sendError": "Error sending message"
+  },
+  "detail": {
+    "loading": "Loading...",
+    "notFound": "Team not found",
+    "loadError": "Unable to load team",
+    "leaderAgent": "Agent leader:",
+    "actionableAgents": "Actionable agents:"
+  }
+}

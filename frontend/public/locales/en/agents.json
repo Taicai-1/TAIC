@@ -1,0 +1,201 @@
+{
+  "pageTitle": "TAIC Companion",
+  "pageSubtitle": "Create an expert twin.",
+  "logout": "Logout",
+  "types": {
+    "conversationnel": {
+      "name": "Conversational",
+      "description": "Intelligent dialogue and chat"
+    },
+    "recherche_live": {
+      "name": "Live search",
+      "description": "Live web search"
+    },
+    "visuel": {
+      "name": "Visual",
+      "description": "AI image generation"
+    }
+  },
+  "buttons": {
+    "createNew": "Create a new AI companion",
+    "teamCompanions": "Team companions",
+    "teamCompanionsTooltip": "Switch to team companions page",
+    "openCompanion": "Open companion",
+    "edit": "Edit",
+    "delete": "Delete",
+    "resyncNotion": "Update from Notion",
+    "cancel": "Cancel",
+    "create": "Create",
+    "modify": "Modify",
+    "creating": "Creating...",
+    "modifying": "Modifying...",
+    "addTag": "Add",
+    "changePhoto": "Change photo",
+    "choosePhoto": "Choose a photo",
+    "uploading": "Uploading...",
+    "clickToChoose": "Or click to choose",
+    "sendRecapNow": "Send recap now",
+    "sendingRecap": "Sending..."
+  },
+  "modal": {
+    "titleEdit": "Edit companion",
+    "titleCreate": "Create a new companion"
+  },
+  "form": {
+    "name": {
+      "placeholder": "Companion name"
+    },
+    "context": {
+      "placeholder": "Context"
+    },
+    "biography": {
+      "placeholder": "Biography"
+    },
+    "type": {
+      "label": "Companion type:"
+    },
+    "modelChoice": {
+      "label": "Model choice:"
+    },
+    "emailTags": {
+      "label": "Email Tags (automatic routing):",
+      "placeholder": "E.g.: finance, hr, legal...",
+      "helpText": "Emails with these @tags in the subject will be automatically added to this companion's sources."
+    },
+    "neo4j": {
+      "label": "Knowledge Graph (Neo4j)",
+      "person": "Target person",
+      "selectPerson": "-- Select a person --",
+      "depth": "Relationship depth",
+      "depth1": "Level 1 - Direct relationships",
+      "depth2": "Level 2 - Second-degree relationships"
+    },
+    "photo": {
+      "preview": "Preview"
+    },
+    "weeklyRecap": {
+      "label": "Weekly Recap",
+      "helpText": "Receive a weekly AI-generated summary every Monday by email based on conversations and traceability documents."
+    }
+  },
+  "slack": {
+    "title": "Slack Integration",
+    "desc": "Connect your companion to a Slack workspace",
+    "botToken": "Bot Token",
+    "botTokenPlaceholder": "xoxb-...",
+    "signingSecret": "Signing Secret",
+    "signingSecretPlaceholder": "Signing secret from Slack app settings",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "test": "Test connection",
+    "testing": "Testing...",
+    "connecting": "Connecting...",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "testSuccess": "Slack connection OK: workspace {{team}}, bot {{bot}}",
+    "testError": "Slack connection failed: {{error}}",
+    "saveSuccess": "Slack connected to workspace {{team}}",
+    "saveError": "Error saving Slack config",
+    "disconnected": "Slack disconnected",
+    "disconnectConfirm": "Disconnect Slack integration?",
+    "disconnectError": "Error disconnecting Slack",
+    "webhookUrl": "Webhook URL",
+    "webhookHelp": "Add this URL in your Slack app Event Subscriptions",
+    "copied": "Copied!",
+    "workspace": "Workspace",
+    "botUser": "Bot User ID"
+  },
+  "notion": {
+    "title": "Notion Pages ({{count}})",
+    "placeholder": "Paste a Notion page or database URL...",
+    "addButton": "Add",
+    "noLinks": "No Notion pages linked",
+    "typePage": "Page",
+    "typeDatabase": "Database",
+    "ingestButton": "Add to RAG",
+    "ingested": "In sources"
+  },
+  "traceabilityDocs": {
+    "title": "Traceability Documents ({{count}})",
+    "dragDrop": "Drag and drop your traceability documents",
+    "formats": "PDF, TXT, DOCX, XLSX, XLS, CSV",
+    "noDocuments": "No traceability documents added"
+  },
+  "documents": {
+    "title": "RAG Documents ({{count}})",
+    "dragDrop": "Drag and drop your documents",
+    "dropHere": "Drop file here!",
+    "formats": "PDF, TXT, DOC, DOCX",
+    "noDocuments": "No documents added"
+  },
+  "toast": {
+    "loadError": "Error loading companions",
+    "deleteConfirm": "Are you sure you want to delete this companion?",
+    "deleted": "Companion deleted",
+    "deleteError": "Deletion error",
+    "documentAdded": "Document added successfully",
+    "documentAddError": "Error adding document",
+    "documentDeleteConfirm": "Delete this document?",
+    "documentDeleted": "Document deleted",
+    "nameRequired": "Name is required",
+    "modifySuccess": "Companion modified successfully!",
+    "createSuccess": "Companion created successfully!",
+    "modifyError": "Modification error",
+    "createError": "Creation error",
+    "unsupportedFormat": "Unsupported format. Use PDF, TXT, DOC, or DOCX",
+    "unsupportedTraceabilityFormat": "Unsupported format. Use PDF, TXT, DOCX, XLSX, XLS, or CSV",
+    "traceabilityDocAdded": "Traceability document added successfully",
+    "traceabilityDocAddError": "Error adding traceability document",
+    "notionLinkAdded": "Notion page linked successfully",
+    "notionLinkError": "Error linking Notion page",
+    "notionLinkDeleted": "Notion link removed",
+    "notionIngestSuccess": "Notion content ingested successfully ({{chunks}} chunks)",
+    "notionIngestError": "Error ingesting Notion content",
+    "notionResyncSuccess": "Notion document updated ({{chunks}} chunks)",
+    "notionResyncError": "Error updating Notion document",
+    "notionAlreadyIngested": "This Notion content has already been ingested",
+    "recapSendSuccess": "Recap sent to {{email}}",
+    "recapSendNoData": "No data this week to generate a recap",
+    "recapSendError": "Error sending recap"
+  },
+  "settings": {
+    "openChat": "Open chat",
+    "save": "Save",
+    "identity": "Identity & Personality",
+    "identityDesc": "Define your companion's context and biography",
+    "configuration": "Configuration",
+    "configurationDesc": "Type and advanced settings",
+    "neo4jDesc": "Connect your companion to a Neo4j knowledge graph",
+    "enableNeo4j": "Enable Neo4j",
+    "ragDocsDesc": "Documents used for retrieval-augmented generation (RAG)",
+    "traceabilityDesc": "Tracking documents for weekly recap",
+    "notionDesc": "Notion pages and databases linked to this companion",
+    "statusPrivateDesc": "Only accessible by you"
+  },
+  "badges": {
+    "shared": "Shared",
+    "sharedReadOnly": "Shared (read only)",
+    "sharedEdit": "Shared (edit)",
+    "sharedBy": "Owner: {{owner}}"
+  },
+  "loading": "Loading your companions...",
+  "empty": {
+    "title": "No AI companion created",
+    "subtitle": "Create your first companion to get started"
+  },
+  "feedback": {
+    "button": "Report an issue",
+    "title": "Feedback",
+    "subtitle": "Help us improve TAIC Companion",
+    "typeBug": "Bug",
+    "typeFeature": "Suggestion",
+    "typeFeedback": "Feedback",
+    "typeOther": "Other",
+    "messagePlaceholder": "Describe your issue or suggestion...",
+    "send": "Send",
+    "sending": "Sending...",
+    "cancel": "Cancel",
+    "success": "Thank you for your feedback!",
+    "error": "Error sending feedback"
+  }
+}

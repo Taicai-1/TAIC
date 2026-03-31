@@ -1,0 +1,201 @@
+{
+  "pageTitle": "TAIC Companion",
+  "pageSubtitle": "Créez un jumeau expert.",
+  "logout": "Se déconnecter",
+  "types": {
+    "conversationnel": {
+      "name": "Conversationnel",
+      "description": "Dialogue et chat intelligent"
+    },
+    "recherche_live": {
+      "name": "Recherche live",
+      "description": "Recherche web en direct"
+    },
+    "visuel": {
+      "name": "Visuel",
+      "description": "Génération d'images par IA"
+    }
+  },
+  "buttons": {
+    "createNew": "Créer un nouveau companion IA",
+    "teamCompanions": "Équipe de companions",
+    "teamCompanionsTooltip": "Basculer vers la page équipe de companions",
+    "openCompanion": "Ouvrir le companion",
+    "edit": "Éditer",
+    "delete": "Supprimer",
+    "resyncNotion": "Mettre à jour depuis Notion",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "modify": "Modifier",
+    "creating": "Création...",
+    "modifying": "Modification...",
+    "addTag": "Ajouter",
+    "changePhoto": "Changer la photo",
+    "choosePhoto": "Choisir une photo",
+    "uploading": "Upload...",
+    "clickToChoose": "Ou cliquez pour choisir",
+    "sendRecapNow": "Envoyer le recap maintenant",
+    "sendingRecap": "Envoi en cours..."
+  },
+  "modal": {
+    "titleEdit": "Modifier le companion",
+    "titleCreate": "Créer un nouveau companion"
+  },
+  "form": {
+    "name": {
+      "placeholder": "Nom du companion"
+    },
+    "context": {
+      "placeholder": "Contexte"
+    },
+    "biography": {
+      "placeholder": "Biographie"
+    },
+    "type": {
+      "label": "Type de companion :"
+    },
+    "modelChoice": {
+      "label": "Choix du modèle :"
+    },
+    "emailTags": {
+      "label": "Email Tags (routage automatique) :",
+      "placeholder": "Ex: finance, rh, juridique...",
+      "helpText": "Les emails avec ces @tags dans l'objet seront automatiquement ajoutés aux sources de ce companion."
+    },
+    "neo4j": {
+      "label": "Graphe de connaissances (Neo4j)",
+      "person": "Personne cible",
+      "selectPerson": "-- Selectionnez une personne --",
+      "depth": "Profondeur des relations",
+      "depth1": "Niveau 1 - Relations directes",
+      "depth2": "Niveau 2 - Relations de second degre"
+    },
+    "photo": {
+      "preview": "Aperçu"
+    },
+    "weeklyRecap": {
+      "label": "Recap Hebdomadaire",
+      "helpText": "Recevez chaque lundi par email un résumé IA basé sur les conversations et documents de traçabilité."
+    }
+  },
+  "slack": {
+    "title": "Intégration Slack",
+    "desc": "Connectez votre companion à un workspace Slack",
+    "botToken": "Bot Token",
+    "botTokenPlaceholder": "xoxb-...",
+    "signingSecret": "Signing Secret",
+    "signingSecretPlaceholder": "Signing secret depuis les paramètres de l'app Slack",
+    "connect": "Connecter",
+    "disconnect": "Déconnecter",
+    "test": "Tester la connexion",
+    "testing": "Test en cours...",
+    "connecting": "Connexion...",
+    "connected": "Connecté",
+    "notConnected": "Non connecté",
+    "testSuccess": "Connexion Slack OK : workspace {{team}}, bot {{bot}}",
+    "testError": "Connexion Slack échouée : {{error}}",
+    "saveSuccess": "Slack connecté au workspace {{team}}",
+    "saveError": "Erreur lors de la sauvegarde Slack",
+    "disconnected": "Slack déconnecté",
+    "disconnectConfirm": "Déconnecter l'intégration Slack ?",
+    "disconnectError": "Erreur lors de la déconnexion Slack",
+    "webhookUrl": "URL du webhook",
+    "webhookHelp": "Ajoutez cette URL dans les Event Subscriptions de votre app Slack",
+    "copied": "Copié !",
+    "workspace": "Workspace",
+    "botUser": "Bot User ID"
+  },
+  "notion": {
+    "title": "Pages Notion ({{count}})",
+    "placeholder": "Collez une URL de page ou base Notion...",
+    "addButton": "Ajouter",
+    "noLinks": "Aucune page Notion liée",
+    "typePage": "Page",
+    "typeDatabase": "Base de données",
+    "ingestButton": "Ajouter au RAG",
+    "ingested": "Dans les sources"
+  },
+  "traceabilityDocs": {
+    "title": "Documents de traçabilité ({{count}})",
+    "dragDrop": "Glissez-déposez vos documents de traçabilité",
+    "formats": "PDF, TXT, DOCX, XLSX, XLS, CSV",
+    "noDocuments": "Aucun document de traçabilité ajouté"
+  },
+  "documents": {
+    "title": "Documents RAG ({{count}})",
+    "dragDrop": "Glissez-déposez vos documents",
+    "dropHere": "Déposez le fichier ici !",
+    "formats": "PDF, TXT, DOC, DOCX",
+    "noDocuments": "Aucun document ajouté"
+  },
+  "toast": {
+    "loadError": "Erreur lors du chargement des companions",
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce companion ?",
+    "deleted": "Companion supprimé",
+    "deleteError": "Erreur lors de la suppression",
+    "documentAdded": "Document ajouté avec succès",
+    "documentAddError": "Erreur lors de l'ajout du document",
+    "documentDeleteConfirm": "Supprimer ce document ?",
+    "documentDeleted": "Document supprimé",
+    "nameRequired": "Le nom est obligatoire",
+    "modifySuccess": "Companion modifié avec succès !",
+    "createSuccess": "Companion créé avec succès !",
+    "modifyError": "Erreur lors de la modification",
+    "createError": "Erreur lors de la création",
+    "unsupportedFormat": "Format non supporté. Utilisez PDF, TXT, DOC ou DOCX",
+    "unsupportedTraceabilityFormat": "Format non supporté. Utilisez PDF, TXT, DOCX, XLSX, XLS ou CSV",
+    "traceabilityDocAdded": "Document de traçabilité ajouté avec succès",
+    "traceabilityDocAddError": "Erreur lors de l'ajout du document de traçabilité",
+    "notionLinkAdded": "Page Notion liée avec succès",
+    "notionLinkError": "Erreur lors de la liaison Notion",
+    "notionLinkDeleted": "Lien Notion supprimé",
+    "notionIngestSuccess": "Contenu Notion ingéré avec succès ({{chunks}} chunks)",
+    "notionIngestError": "Erreur lors de l'ingestion Notion",
+    "notionResyncSuccess": "Document Notion mis à jour ({{chunks}} chunks)",
+    "notionResyncError": "Erreur lors de la mise à jour du document Notion",
+    "notionAlreadyIngested": "Ce contenu Notion a déjà été ingéré",
+    "recapSendSuccess": "Recap envoyé à {{email}}",
+    "recapSendNoData": "Aucune donnée cette semaine pour générer un recap",
+    "recapSendError": "Erreur lors de l'envoi du recap"
+  },
+  "settings": {
+    "openChat": "Ouvrir le chat",
+    "save": "Enregistrer",
+    "identity": "Identité & Personnalité",
+    "identityDesc": "Définissez le contexte et la biographie de votre companion",
+    "configuration": "Configuration",
+    "configurationDesc": "Type et paramètres avancés",
+    "neo4jDesc": "Connectez votre companion à un graphe de connaissances Neo4j",
+    "enableNeo4j": "Activer Neo4j",
+    "ragDocsDesc": "Documents utilisés pour la recherche augmentée (RAG)",
+    "traceabilityDesc": "Documents de suivi pour le recap hebdomadaire",
+    "notionDesc": "Pages et bases Notion liées à ce companion",
+    "statusPrivateDesc": "Accessible uniquement par vous"
+  },
+  "badges": {
+    "shared": "Partage",
+    "sharedReadOnly": "Partage (lecture seule)",
+    "sharedEdit": "Partage (edition)",
+    "sharedBy": "Proprietaire : {{owner}}"
+  },
+  "loading": "Chargement de vos companions...",
+  "empty": {
+    "title": "Aucun companion IA créé",
+    "subtitle": "Créez votre premier companion pour commencer"
+  },
+  "feedback": {
+    "button": "Signaler un problème",
+    "title": "Feedback",
+    "subtitle": "Aidez-nous à améliorer TAIC Companion",
+    "typeBug": "Bug",
+    "typeFeature": "Suggestion",
+    "typeFeedback": "Feedback",
+    "typeOther": "Autre",
+    "messagePlaceholder": "Décrivez votre problème ou suggestion...",
+    "send": "Envoyer",
+    "sending": "Envoi...",
+    "cancel": "Annuler",
+    "success": "Merci pour votre feedback !",
+    "error": "Erreur lors de l'envoi"
+  }
+}

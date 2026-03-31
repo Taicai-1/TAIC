@@ -1,0 +1,120 @@
+{
+  "pageTitle": "Organisation",
+  "pageSubtitle": "Gerez votre organisation, vos membres et vos integrations",
+  "loading": "Chargement...",
+  "noOrg": {
+    "title": "Aucune organisation",
+    "description": "Creez une nouvelle organisation ou rejoignez-en une avec un code d'invitation.",
+    "createTitle": "Creer une organisation",
+    "namePlaceholder": "Nom de l'organisation",
+    "createButton": "Creer",
+    "joinTitle": "Rejoindre avec un code",
+    "codePlaceholder": "Collez le code d'invitation",
+    "joinButton": "Rejoindre"
+  },
+  "info": {
+    "title": "Organisation",
+    "role": "Votre role",
+    "memberSince": "Membre depuis",
+    "leaveButton": "Quitter l'organisation",
+    "leaveConfirm": "Etes-vous sur de vouloir quitter cette organisation ?"
+  },
+  "members": {
+    "title": "Membres",
+    "username": "Nom d'utilisateur",
+    "email": "Email",
+    "role": "Role",
+    "agents": "Agents",
+    "joinedAt": "Rejoint le",
+    "actions": "Actions",
+    "changeRole": "Changer le role",
+    "remove": "Retirer",
+    "removeConfirm": "Retirer ce membre de l'organisation ?",
+    "roleUpdated": "Role mis a jour",
+    "memberRemoved": "Membre retire",
+    "owner": "Proprietaire",
+    "admin": "Admin",
+    "member": "Membre"
+  },
+  "invitations": {
+    "title": "Invitations",
+    "emailPlaceholder": "Adresse email a inviter",
+    "role": "Role",
+    "sendButton": "Envoyer l'invitation",
+    "sent": "Invitation envoyee",
+    "inviteLink": "Lien d'invitation",
+    "copyLink": "Copier le lien",
+    "copied": "Lien copie !",
+    "codeEnabled": "Code d'invitation actif",
+    "codeDisabled": "Code d'invitation desactive",
+    "toggleOn": "Activer",
+    "toggleOff": "Desactiver",
+    "regenerate": "Regenerer le code",
+    "regenerated": "Code d'invitation regenere",
+    "regenerateConfirm": "Cela invalidera le code d'invitation actuel. Continuer ?"
+  },
+  "integrations": {
+    "title": "Integrations",
+    "description": "Configurez les identifiants partages pour tous les membres de l'organisation.",
+    "neo4j": {
+      "title": "Neo4j Knowledge Graph",
+      "uri": "URI",
+      "uriPlaceholder": "bolt://localhost:7687",
+      "user": "Utilisateur",
+      "userPlaceholder": "neo4j",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Mot de passe"
+    },
+    "notion": {
+      "title": "Notion",
+      "apiKey": "Cle API",
+      "apiKeyPlaceholder": "ntn_..."
+    },
+    "slack": {
+      "title": "Slack",
+      "botToken": "Token du bot",
+      "botTokenPlaceholder": "xoxb-...",
+      "signingSecret": "Signing Secret",
+      "signingSecretPlaceholder": "Signing secret"
+    },
+    "saveButton": "Enregistrer",
+    "saved": "Integrations enregistrees",
+    "configured": "Configure",
+    "notConfigured": "Non configure",
+    "removeButton": "Supprimer",
+    "removeConfirm": "Supprimer cette integration ? Les identifiants seront effaces.",
+    "removed": "Integration supprimee"
+  },
+  "agents": {
+    "title": "Agents de l'organisation",
+    "name": "Nom",
+    "type": "Type",
+    "status": "Statut",
+    "owner": "Proprietaire",
+    "documents": "Documents",
+    "createdAt": "Cree le",
+    "noAgents": "Aucun agent dans cette organisation",
+    "actions": "Actions",
+    "deleteConfirm": "Etes-vous sur de vouloir supprimer cet agent de l'organisation ?",
+    "deleted": "Agent supprime",
+    "sharedWith": "Partage avec",
+    "share": "Partager",
+    "shareRemoved": "Partage retire",
+    "shareModal": {
+      "title": "Partager le companion",
+      "selectUser": "Selectionner un membre...",
+      "shareButton": "Partager",
+      "currentShares": "Partages actuels",
+      "noShares": "Partage avec personne",
+      "remove": "Retirer",
+      "canEdit": "Autoriser l'edition"
+    }
+  },
+  "errors": {
+    "generic": "Une erreur s'est produite",
+    "loadFailed": "Impossible de charger les donnees de l'organisation"
+  },
+  "navigation": {
+    "backToAgents": "Retour aux companions"
+  }
+}
