@@ -33,6 +33,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import Layout from '../components/Layout';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend
@@ -372,7 +373,7 @@ export default function Profile() {
                     </span>
                   </div>
                 </div>
-                <div className="flex flex-wrap justify-center sm:justify-start gap-2">
+                <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2">
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
                     <Award className="w-3 h-3 mr-1" />
                     Active Member
@@ -381,6 +382,7 @@ export default function Profile() {
                     <TrendingUp className="w-3 h-3 mr-1" />
                     Pro User
                   </span>
+                  <LanguageSwitcher />
                 </div>
               </div>
             </div>
