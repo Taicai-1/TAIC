@@ -129,9 +129,7 @@ export default function AgentChatPage() {
     return () => {
       try {
         if (recognitionRef.current) {
-          recognitionRef.current.onresult = null;
-          recognitionRef.current.onerror = null;
-          recognitionRef.current.stop && recognitionRef.current.stop();
+          recognitionRef.current.stop();
           recognitionRef.current = null;
         }
       } catch (e) {}
@@ -379,9 +377,12 @@ const handleDeleteConversation = async (convId) => {
     }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.lang = 'fr-FR';
+    recognition.lang = router.locale === 'en' ? 'en-US' : 'fr-FR';
     recognition.continuous = true;
     recognition.interimResults = true;
+
+    setBaseInput(input);
+    setTranscript('');
 
     recognition.onresult = (event) => {
       let interim = '';
@@ -413,11 +414,12 @@ const handleDeleteConversation = async (convId) => {
   const stopListening = () => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
-      setListening(false);
-      setInput(baseInput + (baseInput && transcript ? ' ' : '') + transcript);
-      setBaseInput('');
-      setTranscript('');
     }
+    const finalText = baseInput + (baseInput && transcript ? ' ' : '') + transcript;
+    setListening(false);
+    setInput(finalText);
+    setBaseInput('');
+    setTranscript('');
   };
 
   if (!agent) return (
