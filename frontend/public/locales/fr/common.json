@@ -51,5 +51,10 @@
     "deleteTitle": "Confirmer la suppression",
     "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet élément ?",
     "unsavedChanges": "Vous avez des modifications non enregistrées. Voulez-vous continuer ?"
+  },
+  "cookies": {
+    "message": "Ce site utilise des cookies analytiques pour améliorer votre expérience. Acceptez-vous l'utilisation de cookies de mesure d'audience ?",
+    "accept": "Accepter",
+    "refuse": "Refuser"
   }
 }

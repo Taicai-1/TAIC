@@ -51,5 +51,10 @@
     "deleteTitle": "Confirm deletion",
     "deleteMessage": "Are you sure you want to delete this item?",
     "unsavedChanges": "You have unsaved changes. Do you want to continue?"
+  },
+  "cookies": {
+    "message": "This site uses analytics cookies to improve your experience. Do you accept the use of audience measurement cookies?",
+    "accept": "Accept",
+    "refuse": "Decline"
   }
 }
