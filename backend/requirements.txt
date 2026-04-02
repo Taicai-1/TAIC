@@ -12,6 +12,7 @@ google-cloud-storage
 google-auth
 python-dotenv
 psycopg2-binary
+pgvector
 bcrypt
 pyjwt
 python-jose[cryptography]

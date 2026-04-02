@@ -6,7 +6,8 @@ import time
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.orm import Session
-from openai_client import get_embedding, get_chat_response, get_embedding_fast
+from mistral_embeddings import get_embedding, get_embedding_fast
+from openai_client import get_chat_response
 from database import Document, DocumentChunk, User, Agent
 from file_loader import load_text_from_pdf, chunk_text
 from file_generator import FileGenerator
@@ -361,73 +362,79 @@ def get_answer(
         logger.error(f"Error getting answer: {e}")
         raise Exception(f"Erreur lors du traitement de votre question avec l'API OpenAI : {str(e)}")
 def search_similar_texts_for_user(query_embedding: List[float], user_id: int, db: Session, top_k: int = 3, selected_doc_ids: List[int] = None, agent_id: int = None) -> List[dict]:
-    """Search similar texts for a specific user - returns structured data with document info"""
+    """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context."""
     try:
-        # Get all chunks for user's documents (filter by selected documents if provided)
-        query = db.query(DocumentChunk, Document).join(Document)
-        # Exclude traceability documents from RAG search
-        query = query.filter(Document.document_type != "traceability")
-        # Respect agent_id when provided: prefer chunks from documents attached to the agent
+        # Build query using SQLAlchemy ORM with pgvector native operators
+        query = db.query(
+            DocumentChunk.id,
+            DocumentChunk.chunk_text,
+            DocumentChunk.chunk_index,
+            DocumentChunk.document_id,
+            Document.filename,
+            Document.created_at,
+            (1 - DocumentChunk.embedding_vec.cosine_distance(query_embedding)).label('similarity')
+        ).join(Document, DocumentChunk.document_id == Document.id).filter(
+            DocumentChunk.embedding_vec.isnot(None),
+            Document.document_type != "traceability"
+        )
+
         if agent_id:
             query = query.filter(Document.agent_id == agent_id)
         else:
             query = query.filter(Document.user_id == user_id)
+
         if selected_doc_ids:
             query = query.filter(Document.id.in_(selected_doc_ids))
-        chunks_with_docs = query.all()
-        if not chunks_with_docs:
+
+        query = query.order_by(
+            DocumentChunk.embedding_vec.cosine_distance(query_embedding)
+        ).limit(top_k)
+
+        rows = query.all()
+
+        if not rows:
             return []
-        # Similarity search with document info
-        similarities = []
-        chunk_map = {}  # document_id -> [chunks ordered by chunk_index]
-        for chunk, document in chunks_with_docs:
-            if chunk.embedding:
-                chunk_embedding = json.loads(chunk.embedding)
-                similarity = cosine_similarity(query_embedding, chunk_embedding)
-                similarities.append({
-                    'similarity': similarity,
-                    'text': chunk.chunk_text,
-                    'document_id': document.id,
-                    'document_name': document.filename,
-                    'created_at': document.created_at.isoformat(),
-                    'chunk_index': chunk.chunk_index
-                })
-                # Build chunk map for context retrieval
-                if document.id not in chunk_map:
-                    chunk_map[document.id] = []
-                chunk_map[document.id].append((chunk.chunk_index, chunk.chunk_text))
-        # Sort by similarity and get top_k
-        similarities.sort(key=lambda x: x['similarity'], reverse=True)
-        top_chunks = similarities[:top_k]
-        # Ajoute les chunks voisins pour le contexte
+
+        # Fetch neighbor chunks for context
+        doc_ids = list({r.document_id for r in rows})
+        neighbor_rows = db.query(
+            DocumentChunk.document_id,
+            DocumentChunk.chunk_index,
+            DocumentChunk.chunk_text
+        ).filter(
+            DocumentChunk.document_id.in_(doc_ids)
+        ).order_by(
+            DocumentChunk.document_id,
+            DocumentChunk.chunk_index
+        ).all()
+
+        # Build chunk map: document_id -> [(chunk_index, chunk_text), ...]
+        chunk_map: Dict[int, List] = {}
+        for nr in neighbor_rows:
+            chunk_map.setdefault(nr.document_id, []).append((nr.chunk_index, nr.chunk_text))
+
+        # Enrich top results with neighbor context
         context_results = []
-        for item in top_chunks:
-            doc_id = item['document_id']
-            idx = item['chunk_index']
-            # Récupère les chunks voisins (avant/après)
+        for row in rows:
             neighbors = []
-            if doc_id in chunk_map:
-                ordered_chunks = sorted(chunk_map[doc_id], key=lambda x: x[0])
-                for i, (chunk_idx, chunk_text) in enumerate(ordered_chunks):
-                    if chunk_idx == idx:
-                        # Ajoute le chunk principal
-                        neighbors.append(chunk_text)
-                        # Ajoute le chunk précédent si dispo
-                        if i > 0:
-                            neighbors.insert(0, ordered_chunks[i-1][1])
-                        # Ajoute le chunk suivant si dispo
-                        if i < len(ordered_chunks)-1:
-                            neighbors.append(ordered_chunks[i+1][1])
-                        break
-            # Concatène les chunks pour le contexte
-            context_text = "\n".join(neighbors)
+            ordered = chunk_map.get(row.document_id, [])
+            for i, (cidx, ctxt) in enumerate(ordered):
+                if cidx == row.chunk_index:
+                    if i > 0:
+                        neighbors.append(ordered[i - 1][1])
+                    neighbors.append(ctxt)
+                    if i < len(ordered) - 1:
+                        neighbors.append(ordered[i + 1][1])
+                    break
+
             context_results.append({
-                'similarity': item['similarity'],
-                'text': context_text,
-                'document_id': item['document_id'],
-                'document_name': item['document_name'],
-                'created_at': item['created_at']
+                'similarity': float(row.similarity),
+                'text': "\n".join(neighbors) if neighbors else row.chunk_text,
+                'document_id': row.document_id,
+                'document_name': row.filename,
+                'created_at': row.created_at.isoformat()
             })
+
         return context_results
     except Exception as e:
         logger.error(f"Error searching similar texts: {e}")
@@ -516,8 +523,9 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     return dot_product / (norm_vec1 * norm_vec2)
 
 def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id: int, db: Session, gcs_url: str = None, notion_link_id: int = None) -> int:
-    """Chunk text, create Document + DocumentChunks with embeddings. Returns document.id."""
+    """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
+    from mistral_embeddings import EMBEDDING_DIM
     try:
         chunks = chunk_text(text_content)
         logger.info(f"ingest_text_content: {len(chunks)} chunks for '{filename}'")
@@ -541,7 +549,7 @@ def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id
             return [chunk[i:i+max_chars] for i in range(0, len(chunk), max_chars)]
 
         for i, chunk in enumerate(chunks):
-            logger.info(f"Processing chunk {i+1}/{len(chunks)} with embedding")
+            logger.info(f"Processing chunk {i+1}/{len(chunks)} with Mistral embedding")
             try:
                 sub_chunks = split_for_embedding(chunk, 8192)
                 embeddings = []
@@ -551,14 +559,14 @@ def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id
                 if embeddings:
                     avg_embedding = list(np.mean(np.array(embeddings), axis=0))
                 else:
-                    avg_embedding = [0.0] * 1536
+                    raise ValueError("No sub-chunks produced for embedding")
             except Exception as e:
-                logger.warning(f"Failed to get embedding for chunk {i}, using dummy: {e}")
-                avg_embedding = [0.0] * 1536
+                logger.error(f"Failed to get Mistral embedding for chunk {i}: {e}")
+                raise
             doc_chunk = DocumentChunk(
                 document_id=document.id,
                 chunk_text=chunk,
-                embedding=json.dumps(avg_embedding),
+                embedding_vec=avg_embedding,
                 chunk_index=i
             )
             db.add(doc_chunk)

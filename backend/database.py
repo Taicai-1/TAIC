@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, F
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import UniqueConstraint
+from pgvector.sqlalchemy import Vector
 from datetime import datetime, timedelta
 
 # Configuration logging
@@ -303,14 +304,15 @@ class Document(Base):
 
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
     chunk_text = Column(Text, nullable=False)
-    embedding = Column(Text)  # JSON string of embedding vector
+    embedding = Column(Text, nullable=True)  # Legacy JSON string (kept for backward compat)
+    embedding_vec = Column(Vector(1024), nullable=True)  # pgvector native column (Mistral 1024d)
     chunk_index = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relation avec le document
     document = relationship("Document", back_populates="chunks")
 
@@ -432,6 +434,40 @@ def init_db():
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise e
+
+def ensure_pgvector():
+    """Enable the pgvector extension and add the embedding_vec column + HNSW index."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+            logger.info("pgvector extension enabled")
+
+            # Add embedding_vec column if missing
+            try:
+                conn.execute(text(
+                    "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)"
+                ))
+                conn.commit()
+                logger.info("ensure_pgvector: embedding_vec column OK")
+            except Exception as e:
+                logger.warning(f"ensure_pgvector: embedding_vec column skipped: {e}")
+                conn.rollback()
+
+            # Create HNSW index for cosine distance if it doesn't exist
+            try:
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_chunks_embedding_vec_hnsw "
+                    "ON document_chunks USING hnsw (embedding_vec vector_cosine_ops)"
+                ))
+                conn.commit()
+                logger.info("ensure_pgvector: HNSW index OK")
+            except Exception as e:
+                logger.warning(f"ensure_pgvector: HNSW index skipped: {e}")
+                conn.rollback()
+    except Exception as e:
+        logger.error(f"ensure_pgvector failed: {e}")
+
 
 def ensure_columns():
     """Add new columns to existing tables if they don't exist (safe migration)"""

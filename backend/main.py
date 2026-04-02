@@ -36,9 +36,9 @@ from google.auth.transport.requests import AuthorizedSession
 # Local modules
 from auth import create_access_token, verify_token, hash_password, verify_password, hash_reset_token, verify_pre_2fa_token, verify_setup_token
 from email_service import send_password_reset_email, send_invitation_email, send_verification_email, send_feedback_email
-from database import get_db, init_db, ensure_columns, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare
+from database import get_db, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare
 from rag_engine import get_answer, get_answer_with_files, process_document_for_user
-from openai_client import get_embedding
+from mistral_embeddings import get_embedding
 from file_generator import FileGenerator
 from utils import logger, event_tracker
 from utils_ai import normalize_model_output, extract_json_object_from_text
@@ -527,6 +527,7 @@ async def startup_event():
         logger.info("Creating database tables...")
         Base.metadata.create_all(bind=engine)
         ensure_columns()
+        ensure_pgvector()
         migrate_existing_company_memberships()
         logger.info("Database initialization completed successfully")
     except Exception as e:
@@ -4064,7 +4065,8 @@ async def extract_text_from_file(
 
 def update_agent_embedding(agent, db):
     if agent.contexte:
-        agent.embedding = json.dumps(get_embedding(agent.contexte))
+        from mistral_embeddings import get_embedding as mistral_get_embedding
+        agent.embedding = json.dumps(mistral_get_embedding(agent.contexte))
         db.commit()
 
 # Security: /debug/test-openai-embeddings endpoint removed (exposed API connectivity)
@@ -4217,7 +4219,7 @@ async def ingest_email(
 
         # Importer les fonctions nécessaires
         from file_loader import chunk_text
-        from openai_client import get_embedding_fast
+        from mistral_embeddings import get_embedding_fast
         from database import DocumentChunk
         import numpy as np
 
@@ -4231,7 +4233,7 @@ async def ingest_email(
         chunks = chunk_text(enriched_content)
         logger.info(f"Created {len(chunks)} chunks for email")
 
-        # Calculer les embeddings une seule fois
+        # Calculer les embeddings une seule fois avec Mistral
         chunk_embeddings = []
         max_immediate_chunks = 20
         for i, chunk in enumerate(chunks):
@@ -4245,10 +4247,10 @@ async def ingest_email(
                     if embeddings:
                         avg_embedding = list(np.mean(np.array(embeddings), axis=0))
                     else:
-                        avg_embedding = [0.0] * 1536
+                        raise ValueError("No sub-chunks produced for embedding")
                 except Exception as e:
-                    logger.warning(f"Failed to get embedding for chunk {i}: {e}")
-                    avg_embedding = [0.0] * 1536
+                    logger.error(f"Failed to get Mistral embedding for chunk {i}: {e}")
+                    raise
             else:
                 avg_embedding = None
             chunk_embeddings.append(avg_embedding)
@@ -4284,12 +4286,12 @@ async def ingest_email(
 
             logger.info(f"Document created for agent {agent.name} with ID: {document.id}")
 
-            # Créer les chunks avec les embeddings pré-calculés
+            # Créer les chunks avec les embeddings pré-calculés (pgvector)
             for i, chunk in enumerate(chunks):
                 doc_chunk = DocumentChunk(
                     document_id=document.id,
                     chunk_text=chunk,
-                    embedding=json.dumps(chunk_embeddings[i]) if chunk_embeddings[i] else None,
+                    embedding_vec=chunk_embeddings[i] if chunk_embeddings[i] else None,
                     chunk_index=i
                 )
                 db.add(doc_chunk)
