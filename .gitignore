@@ -186,11 +186,8 @@ logs/
 *.log
 
 # Temporary files
-tmp/
-temp/
-agent-52-sa.json
-cloudbuild.yaml
-cloudbuild_dev.yaml
+
+
 nul
 
 # Secrets & keys
