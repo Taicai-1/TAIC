@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
 import toast, { Toaster } from "react-hot-toast";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -10,7 +9,6 @@ import {
   Trash2,
   Pencil,
   ArrowRight,
-  LogOut,
   Users,
   TrendingUp,
   UserCheck,
@@ -21,27 +19,16 @@ import {
   CheckCircle2
 } from "lucide-react";
 import Layout from '../components/Layout';
-
-// Auto-detect API URL based on environment
-const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== "undefined" && window.location.hostname.includes("run.app")) {
-    return window.location.origin.replace("frontend", "backend");
-  }
-  return "http://localhost:8080";
-};
-
-const API_URL = getApiUrl();
+import { useAuth } from '../hooks/useAuth';
+import api from '../lib/api';
 
 export default function TeamsPage() {
   const { t } = useTranslation(['teams', 'common', 'errors']);
+  const { user, loading: authLoading, authenticated, logout: authLogout } = useAuth();
   const [editingAgent, setEditingAgent] = useState(null); // kept for modal reuse
   const [teams, setTeams] = useState([]);
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", contexte: "", leaderId: null, actionIds: [] });
   const [creating, setCreating] = useState(false);
@@ -73,16 +60,10 @@ export default function TeamsPage() {
   };
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (!savedToken) {
-      router.push("/login");
-    } else {
-      setToken(savedToken);
-      loadTeams(savedToken);
-      loadAgents(savedToken);
-    }
-    // eslint-disable-next-line
-  }, [router]);
+    if (!authenticated) return;
+    loadTeams();
+    loadAgents();
+  }, [authenticated]);
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -97,11 +78,9 @@ export default function TeamsPage() {
     };
   }, [showForm]);
 
-  const loadTeams = async (authToken) => {
+  const loadTeams = async () => {
     try {
-      const response = await axios.get(`${API_URL}/teams`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const response = await api.get('/teams');
       setTeams(response.data.teams || []);
     } catch (error) {
       console.error("Error loading teams:", error);
@@ -111,11 +90,9 @@ export default function TeamsPage() {
     }
   };
 
-  const loadAgents = async (authToken) => {
+  const loadAgents = async () => {
     try {
-      const response = await axios.get(`${API_URL}/agents`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const response = await api.get('/agents');
       setAgents(response.data.agents || []);
     } catch (error) {
       console.error("Error loading agents:", error);
@@ -128,25 +105,16 @@ export default function TeamsPage() {
       return;
     }
     try {
-      await axios.delete(`${API_URL}/agents/${agentId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/agents/${agentId}`);
       toast.success(t('teams:success.agentDeleted'));
-      loadAgents(token);
+      loadAgents();
     } catch (error) {
       console.error("Error deleting agent:", error);
       toast.error(t('teams:errors.deletingAgent'));
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    // Also remove from cookies
-    document.cookie = 'token=;path=/;max-age=0';
-    router.push("/login");
-  };
-
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center">
@@ -158,7 +126,7 @@ export default function TeamsPage() {
   }
 
   return (
-    <Layout showBack backHref="/agents" title={t('teams:page.title')} onLogout={logout}>
+    <Layout showBack backHref="/agents" title={t('teams:page.title')} onLogout={authLogout}>
       <Toaster position="top-right" />
 
       {/* Create New Team Button */}
@@ -278,11 +246,11 @@ export default function TeamsPage() {
                       leader_agent_id: form.leaderId,
                       action_agent_ids: form.actionIds
                     };
-                    await axios.post(`${API_URL}/teams`, payload, { headers: { Authorization: `Bearer ${token}` } });
+                    await api.post('/teams', payload);
                     toast.success(t('teams:success.teamCreated'));
                     setShowForm(false);
                     setForm({ name: "", contexte: "", leaderId: null, actionIds: [] });
-                    loadTeams(token);
+                    loadTeams();
                   } catch (err) {
                     console.error("Error creating team:", err);
                     toast.error(t('teams:errors.creatingTeam'));
@@ -394,7 +362,7 @@ export default function TeamsPage() {
 }
 
 export async function getServerSideProps({ locale }) {
-  // Auth check is handled client-side via useEffect + localStorage
+  // Auth check is handled client-side via useAuth hook
   return {
     props: {
       ...(await serverSideTranslations(locale, ['teams', 'common', 'errors'])),

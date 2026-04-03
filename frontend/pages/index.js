@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
 import toast, { Toaster } from "react-hot-toast";
 import {
   ArrowLeft, Bot, MessageCircle, Save, Camera, Trash2, Plus,
@@ -10,15 +9,8 @@ import {
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import Layout from '../components/Layout';
-
-const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (typeof window !== "undefined" && window.location.hostname.includes("run.app"))
-    return window.location.origin.replace("frontend", "backend");
-  return "http://localhost:8080";
-};
-
-const API_URL = getApiUrl();
+import { useAuth } from '../hooks/useAuth';
+import api from '../lib/api';
 
 const AGENT_TYPES_CONFIG = {
   conversationnel: { key: 'conversationnel', icon: Users, color: 'bg-blue-500', gradient: 'from-blue-500 to-blue-600' },
@@ -55,8 +47,8 @@ export default function CompanionSettings() {
   const { t } = useTranslation(['agents', 'common', 'errors']);
   const router = useRouter();
   const urlAgentId = router.query.agentId;
+  const { user, loading: authLoading, authenticated, logout: authLogout } = useAuth();
 
-  const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [currentAgent, setCurrentAgent] = useState(null);
@@ -105,16 +97,16 @@ export default function CompanionSettings() {
   }), [t]);
 
   // --- Data loading ---
-  const loadAgentData = useCallback(async (agentId, authToken) => {
+  const loadAgentData = useCallback(async (agentId) => {
     try {
-      const agentRes = await axios.get(`${API_URL}/agents/${agentId}`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const agentRes = await api.get(`/agents/${agentId}`);
       const agent = agentRes.data.agent;
       if (!agent) { router.push("/agents"); return; }
 
       // Shared agents without edit permission → redirect straight to chat
       if (agent.shared && !agent.can_edit) { router.push(`/chat/${agentId}`); return; }
 
-      const docsRes = await axios.get(`${API_URL}/user/documents?agent_id=${agentId}`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const docsRes = await api.get(`/user/documents?agent_id=${agentId}`);
 
       setCurrentAgent(agent);
       setAgentDocuments(docsRes.data.documents || []);
@@ -141,34 +133,34 @@ export default function CompanionSettings() {
     }
   }, [router, t]);
 
-  const loadTraceabilityDocs = useCallback(async (agentId, authToken) => {
+  const loadTraceabilityDocs = useCallback(async (agentId) => {
     try {
-      const res = await axios.get(`${API_URL}/api/agents/${agentId}/traceability-docs`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const res = await api.get(`/api/agents/${agentId}/traceability-docs`);
       setTraceabilityDocs(res.data.documents || []);
     } catch { setTraceabilityDocs([]); }
   }, []);
 
-  const loadNotionLinks = useCallback(async (agentId, authToken) => {
+  const loadNotionLinks = useCallback(async (agentId) => {
     try {
-      const res = await axios.get(`${API_URL}/api/agents/${agentId}/notion-links`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const res = await api.get(`/api/agents/${agentId}/notion-links`);
       setNotionLinks(res.data.links || []);
     } catch { setNotionLinks([]); }
   }, []);
 
-  const loadNeo4jData = useCallback(async (authToken) => {
+  const loadNeo4jData = useCallback(async () => {
     try {
       const [companyRes, personsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/companies/mine`, { headers: { Authorization: `Bearer ${authToken}` } }),
-        axios.get(`${API_URL}/api/neo4j/persons`, { headers: { Authorization: `Bearer ${authToken}` } })
+        api.get(`/api/companies/mine`),
+        api.get(`/api/neo4j/persons`)
       ]);
       setUserCompany(companyRes.data.company);
       setNeo4jPersons(personsRes.data.persons || []);
     } catch { /* Neo4j is optional */ }
   }, []);
 
-  const loadSlackConfig = useCallback(async (agentId, authToken) => {
+  const loadSlackConfig = useCallback(async (agentId) => {
     try {
-      const res = await axios.get(`${API_URL}/api/agents/${agentId}/slack-config`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const res = await api.get(`/api/agents/${agentId}/slack-config`);
       setSlackConfig(res.data);
     } catch { setSlackConfig({ is_configured: false, team_id: '', bot_user_id: '', masked_token: '', masked_secret: '' }); }
   }, []);
@@ -177,13 +169,12 @@ export default function CompanionSettings() {
     if (!slackForm.bot_token.trim() || !slackForm.signing_secret.trim()) return;
     setSavingSlack(true);
     try {
-      const res = await axios.put(`${API_URL}/api/agents/${currentAgent.id}/slack-config`,
-        { slack_bot_token: slackForm.bot_token, slack_signing_secret: slackForm.signing_secret },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await api.put(`/api/agents/${currentAgent.id}/slack-config`,
+        { slack_bot_token: slackForm.bot_token, slack_signing_secret: slackForm.signing_secret }
       );
       toast.success(t('agents:slack.saveSuccess', { team: res.data.team_name }));
       setSlackForm({ bot_token: '', signing_secret: '' });
-      await loadSlackConfig(currentAgent.id, token);
+      await loadSlackConfig(currentAgent.id);
     } catch (error) {
       toast.error(error.response?.data?.detail || t('agents:slack.saveError'));
     } finally { setSavingSlack(false); }
@@ -192,7 +183,7 @@ export default function CompanionSettings() {
   const testSlackConnection = async () => {
     setTestingSlack(true);
     try {
-      const res = await axios.post(`${API_URL}/api/agents/${currentAgent.id}/slack-test`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api.post(`/api/agents/${currentAgent.id}/slack-test`, {});
       if (res.data.is_valid) {
         toast.success(t('agents:slack.testSuccess', { team: res.data.team_name, bot: res.data.bot_name }));
       } else {
@@ -206,16 +197,16 @@ export default function CompanionSettings() {
   const disconnectSlack = async () => {
     if (!confirm(t('agents:slack.disconnectConfirm'))) return;
     try {
-      await axios.delete(`${API_URL}/api/agents/${currentAgent.id}/slack-config`, { headers: { Authorization: `Bearer ${token}` } });
+      await api.delete(`/api/agents/${currentAgent.id}/slack-config`);
       toast.success(t('agents:slack.disconnected'));
-      await loadSlackConfig(currentAgent.id, token);
+      await loadSlackConfig(currentAgent.id);
     } catch { toast.error(t('agents:slack.disconnectError')); }
   };
 
   const sendRecapNow = async () => {
     setSendingRecap(true);
     try {
-      const res = await axios.post(`${API_URL}/api/agents/${currentAgent.id}/recap-send`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api.post(`/api/agents/${currentAgent.id}/recap-send`, {});
       if (res.data.status === "success") {
         toast.success(t('agents:toast.recapSendSuccess', { email: res.data.email }));
       } else if (res.data.status === "no_data") {
@@ -227,20 +218,21 @@ export default function CompanionSettings() {
   };
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (!savedToken) { router.push("/login"); return; }
-    setToken(savedToken);
+    if (!authenticated && !authLoading) {
+      router.push("/login");
+      return;
+    }
 
-    if (urlAgentId) {
-      loadAgentData(urlAgentId, savedToken);
-      loadTraceabilityDocs(urlAgentId, savedToken);
-      loadNotionLinks(urlAgentId, savedToken);
-      loadNeo4jData(savedToken);
-      loadSlackConfig(urlAgentId, savedToken);
-    } else if (router.isReady) {
+    if (authenticated && urlAgentId) {
+      loadAgentData(urlAgentId);
+      loadTraceabilityDocs(urlAgentId);
+      loadNotionLinks(urlAgentId);
+      loadNeo4jData();
+      loadSlackConfig(urlAgentId);
+    } else if (authenticated && router.isReady) {
       router.push("/agents");
     }
-  }, [urlAgentId, router.isReady]);
+  }, [authenticated, authLoading, urlAgentId, router.isReady]);
 
   // --- Actions ---
   const saveAgent = async () => {
@@ -259,13 +251,12 @@ export default function CompanionSettings() {
       formData.append("neo4j_depth", String(form.neo4j_depth || 1));
       formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
 
-      await axios.put(`${API_URL}/agents/${currentAgent.id}`, formData, {
-        headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` },
-        withCredentials: true
+      await api.put(`/agents/${currentAgent.id}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
       });
       toast.success(t('agents:toast.modifySuccess'));
       // Reload to get fresh data (including new photo URL)
-      await loadAgentData(currentAgent.id, token);
+      await loadAgentData(currentAgent.id);
     } catch (error) {
       const detail = error.response?.data?.detail;
       if (Array.isArray(detail)) {
@@ -286,12 +277,12 @@ export default function CompanionSettings() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("agent_id", currentAgent.id);
-      await axios.post(`${API_URL}/upload-agent`, fd, {
-        headers: { Authorization: `Bearer ${token}` }, withCredentials: true
+      await api.post(`/upload-agent`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success(t('agents:toast.documentAdded'));
       await new Promise(r => setTimeout(r, 500));
-      const res = await axios.get(`${API_URL}/user/documents?agent_id=${currentAgent.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
       setAgentDocuments(res.data.documents || []);
     } catch (error) {
       toast.error(error.response?.data?.detail || t('agents:toast.documentAddError'));
@@ -301,7 +292,7 @@ export default function CompanionSettings() {
   const deleteDocument = async (docId) => {
     if (!confirm(t('agents:toast.documentDeleteConfirm'))) return;
     try {
-      await axios.delete(`${API_URL}/documents/${docId}`, { headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
+      await api.delete(`/documents/${docId}`);
       toast.success(t('agents:toast.documentDeleted'));
       setAgentDocuments(prev => prev.filter(d => d.id !== docId));
     } catch { toast.error(t('agents:toast.deleteError')); }
@@ -312,11 +303,11 @@ export default function CompanionSettings() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      await axios.post(`${API_URL}/api/agents/${currentAgent.id}/traceability-docs`, fd, {
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }, withCredentials: true
+      await api.post(`/api/agents/${currentAgent.id}/traceability-docs`, fd, {
+        headers: { "Content-Type": "multipart/form-data" }
       });
       toast.success(t('agents:toast.traceabilityDocAdded'));
-      await loadTraceabilityDocs(currentAgent.id, token);
+      await loadTraceabilityDocs(currentAgent.id);
     } catch (error) {
       toast.error(error.response?.data?.detail || t('agents:toast.traceabilityDocAddError'));
     } finally { setUploadingTraceabilityDoc(false); }
@@ -325,9 +316,9 @@ export default function CompanionSettings() {
   const deleteTraceabilityDoc = async (docId) => {
     if (!confirm(t('agents:toast.documentDeleteConfirm'))) return;
     try {
-      await axios.delete(`${API_URL}/api/agents/${currentAgent.id}/traceability-docs/${docId}`, { headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
+      await api.delete(`/api/agents/${currentAgent.id}/traceability-docs/${docId}`);
       toast.success(t('agents:toast.documentDeleted'));
-      await loadTraceabilityDocs(currentAgent.id, token);
+      await loadTraceabilityDocs(currentAgent.id);
     } catch { toast.error(t('agents:toast.deleteError')); }
   };
 
@@ -335,13 +326,12 @@ export default function CompanionSettings() {
     if (!notionInput.trim()) return;
     setAddingNotionLink(true);
     try {
-      await axios.post(`${API_URL}/api/agents/${currentAgent.id}/notion-links`,
-        { url: notionInput, type: notionType },
-        { headers: { Authorization: `Bearer ${token}` }, withCredentials: true }
+      await api.post(`/api/agents/${currentAgent.id}/notion-links`,
+        { url: notionInput, type: notionType }
       );
       toast.success(t('agents:toast.notionLinkAdded'));
       setNotionInput("");
-      await loadNotionLinks(currentAgent.id, token);
+      await loadNotionLinks(currentAgent.id);
     } catch (error) {
       toast.error(error.response?.data?.detail || t('agents:toast.notionLinkError'));
     } finally { setAddingNotionLink(false); }
@@ -349,7 +339,7 @@ export default function CompanionSettings() {
 
   const refreshAgentDocuments = async () => {
     try {
-      const res = await axios.get(`${API_URL}/user/documents?agent_id=${currentAgent.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
       setAgentDocuments(res.data.documents || []);
     } catch { /* silent */ }
   };
@@ -358,10 +348,9 @@ export default function CompanionSettings() {
     if (!doc.notion_link_id) return;
     setResyncingDocId(doc.id);
     try {
-      const res = await axios.post(
-        `${API_URL}/api/agents/${currentAgent.id}/notion-links/${doc.notion_link_id}/resync`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` }, withCredentials: true }
+      const res = await api.post(
+        `/api/agents/${currentAgent.id}/notion-links/${doc.notion_link_id}/resync`,
+        {}
       );
       toast.success(t('agents:toast.notionResyncSuccess', { chunks: res.data.chunk_count }));
       await refreshAgentDocuments();
@@ -374,18 +363,18 @@ export default function CompanionSettings() {
 
   const deleteNotionLink = async (linkId) => {
     try {
-      await axios.delete(`${API_URL}/api/agents/${currentAgent.id}/notion-links/${linkId}`, { headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
+      await api.delete(`/api/agents/${currentAgent.id}/notion-links/${linkId}`);
       toast.success(t('agents:toast.notionLinkDeleted'));
-      await Promise.all([loadNotionLinks(currentAgent.id, token), refreshAgentDocuments()]);
+      await Promise.all([loadNotionLinks(currentAgent.id), refreshAgentDocuments()]);
     } catch { toast.error(t('agents:toast.deleteError')); }
   };
 
   const ingestNotionLink = async (linkId) => {
     try {
       setIngestingNotionLinkId(linkId);
-      const res = await axios.post(`${API_URL}/api/agents/${currentAgent.id}/notion-links/${linkId}/ingest`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api.post(`/api/agents/${currentAgent.id}/notion-links/${linkId}/ingest`, {});
       toast.success(t('agents:toast.notionIngestSuccess', { chunks: res.data.chunk_count }));
-      await Promise.all([loadNotionLinks(currentAgent.id, token), refreshAgentDocuments()]);
+      await Promise.all([loadNotionLinks(currentAgent.id), refreshAgentDocuments()]);
     } catch (error) {
       if (error.response?.status === 409) {
         toast.error(t('agents:toast.notionAlreadyIngested'));
@@ -415,10 +404,12 @@ export default function CompanionSettings() {
     }
   };
 
-  const logout = () => { localStorage.removeItem("token"); router.push("/login"); };
+  const logout = () => {
+    authLogout();
+  };
 
   // --- Loading state ---
-  if (loading || !currentAgent) {
+  if (authLoading || loading || !currentAgent) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -430,10 +421,11 @@ export default function CompanionSettings() {
   }
 
   const typeConfig = AGENT_TYPES[currentAgent.type] || AGENT_TYPES.conversationnel;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" && window.location.hostname.includes("run.app") ? window.location.origin.replace("frontend", "backend") : "http://localhost:8080");
   const profilePhotoUrl = form.profile_photo
     ? URL.createObjectURL(form.profile_photo)
     : currentAgent.profile_photo
-      ? (currentAgent.profile_photo.startsWith('http') ? currentAgent.profile_photo : `${API_URL}/profile_photos/${currentAgent.profile_photo.replace(/^.*[\\/]/, '')}`)
+      ? (currentAgent.profile_photo.startsWith('http') ? currentAgent.profile_photo : `${apiUrl}/profile_photos/${currentAgent.profile_photo.replace(/^.*[\\/]/, '')}`)
       : null;
 
   return (
@@ -981,11 +973,11 @@ export default function CompanionSettings() {
                 <p className="text-xs font-medium text-gray-500 mb-1">{t('agents:slack.webhookUrl')}</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-sm bg-white px-3 py-2 rounded-lg border border-pink-200 text-gray-700 truncate">
-                    {API_URL}/slack/events
+                    {apiUrl}/slack/events
                   </code>
                   <button
                     type="button"
-                    onClick={() => { navigator.clipboard.writeText(`${API_URL}/slack/events`); toast.success(t('agents:slack.copied')); }}
+                    onClick={() => { navigator.clipboard.writeText(`${apiUrl}/slack/events`); toast.success(t('agents:slack.copied')); }}
                     className="p-2 text-pink-600 hover:bg-pink-100 rounded-lg transition-colors flex-shrink-0"
                     title="Copy"
                   >
@@ -1062,11 +1054,11 @@ export default function CompanionSettings() {
                 <p className="text-xs font-medium text-gray-500 mb-1">{t('agents:slack.webhookUrl')}</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs bg-white px-2 py-1.5 rounded-lg border border-gray-200 text-gray-600 truncate">
-                    {API_URL}/slack/events
+                    {apiUrl}/slack/events
                   </code>
                   <button
                     type="button"
-                    onClick={() => { navigator.clipboard.writeText(`${API_URL}/slack/events`); toast.success(t('agents:slack.copied')); }}
+                    onClick={() => { navigator.clipboard.writeText(`${apiUrl}/slack/events`); toast.success(t('agents:slack.copied')); }}
                     className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                   >
                     <Copy className="w-3.5 h-3.5" />

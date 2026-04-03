@@ -25,17 +25,11 @@ export default function AgentLogin() {
     e.preventDefault();
     setLoading(true);
     try {
-      // Security Phase 1: Dual storage for compatibility during migration
-      const response = await axios.post(`${API_URL}/login-agent`, formData);
-
-      // Store in localStorage (temporary compatibility)
-      localStorage.setItem("token", response.data.access_token);
-      localStorage.setItem("agent_id", response.data.agent_id);
-
-      // Backend also sets HttpOnly cookie (secure, XSS protected)
+      const response = await axios.post(`${API_URL}/login-agent`, formData, {
+        withCredentials: true
+      });
 
       toast.success(t('auth:agentLogin.success'));
-      // Redirige vers la page de chat de l'agent
       router.push(`/chat/${response.data.agent_id}`);
     } catch (err) {
       toast.error(t('auth:agentLogin.error'));

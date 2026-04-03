@@ -1,22 +1,17 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
 import toast, { Toaster } from "react-hot-toast";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { Users, Zap, UserCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import Layout from '../../components/Layout';
-
-const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  return "http://localhost:8080";
-};
-const API_URL = getApiUrl();
+import { useAuth } from '../../hooks/useAuth';
+import api from '../../lib/api';
 
 export default function CreateTeamPage() {
   const { t } = useTranslation(['teams', 'common', 'errors']);
   const router = useRouter();
-  const [token, setToken] = useState("");
+  const { user, loading: authLoading, authenticated } = useAuth();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -26,19 +21,14 @@ export default function CreateTeamPage() {
   const [actionIds, setActionIds] = useState([]);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (!savedToken) {
-      router.push('/login');
-      return;
-    }
-    setToken(savedToken);
-    loadAgents(savedToken);
+    if (!authenticated) return;
+    loadAgents();
     // eslint-disable-next-line
-  }, []);
+  }, [authenticated]);
 
-  const loadAgents = async (authToken) => {
+  const loadAgents = async () => {
     try {
-      const res = await axios.get(`${API_URL}/agents`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const res = await api.get('/agents');
       setAgents(res.data.agents || []);
     } catch (e) {
       console.error(e);
@@ -61,7 +51,7 @@ export default function CreateTeamPage() {
     setCreating(true);
     try {
       const payload = { name, contexte, leader_agent_id: leaderId, action_agent_ids: actionIds };
-      const res = await axios.post(`${API_URL}/teams`, payload, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api.post('/teams', payload);
       toast.success(t('teams:success.teamCreated'));
       const id = res.data.team && res.data.team.id;
       router.push(id ? `/teams/${id}` : '/teams');
@@ -76,7 +66,7 @@ export default function CreateTeamPage() {
   const convAgents = agents.filter(a => (a.type || 'conversationnel') === 'conversationnel');
   const actionAgentsList = agents.filter(a => a.type === 'actionnable');
 
-  if (loading) return (
+  if (authLoading || loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
     </div>
@@ -199,7 +189,6 @@ export default function CreateTeamPage() {
 }
 
 export async function getServerSideProps({ locale }) {
-  // Auth check is handled client-side via useEffect + localStorage
   return {
     props: {
       ...(await serverSideTranslations(locale, ['teams', 'common', 'errors'])),

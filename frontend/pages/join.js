@@ -4,22 +4,22 @@ import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import toast, { Toaster } from 'react-hot-toast';
 import { Building2, Loader2, CheckCircle, XCircle } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { useAuth } from '../hooks/useAuth';
+import api from '../lib/api';
 
 export default function JoinOrganization() {
   const router = useRouter();
   const { t } = useTranslation(['organization', 'common']);
   const { token: inviteToken, code: inviteCode } = router.query;
+  const { user, loading: authLoading, authenticated } = useAuth({ required: false });
 
   const [status, setStatus] = useState('loading'); // loading | success | error | login_required
   const [message, setMessage] = useState('');
   const [companyName, setCompanyName] = useState('');
 
   useEffect(() => {
-    if (!router.isReady) return;
+    if (!router.isReady || authLoading) return;
 
-    const authToken = localStorage.getItem('token');
     const tokenParam = inviteToken || '';
     const codeParam = inviteCode || '';
 
@@ -29,7 +29,7 @@ export default function JoinOrganization() {
       return;
     }
 
-    if (!authToken) {
+    if (!authenticated) {
       // Store the invite info and redirect to login
       if (tokenParam) sessionStorage.setItem('pending_invite_token', tokenParam);
       if (codeParam) sessionStorage.setItem('pending_invite_code', codeParam);
@@ -39,13 +39,12 @@ export default function JoinOrganization() {
     }
 
     // Attempt to join
-    joinOrganization(authToken, tokenParam, codeParam);
-  }, [router.isReady, inviteToken, inviteCode]);
+    joinOrganization(tokenParam, codeParam);
+  }, [router.isReady, inviteToken, inviteCode, authLoading, authenticated]);
 
   // Also check on mount if there's a pending invite from a previous redirect
   useEffect(() => {
-    const authToken = localStorage.getItem('token');
-    if (!authToken) return;
+    if (!authenticated) return;
 
     const pendingToken = sessionStorage.getItem('pending_invite_token');
     const pendingCode = sessionStorage.getItem('pending_invite_code');
@@ -53,37 +52,25 @@ export default function JoinOrganization() {
     if (pendingToken || pendingCode) {
       sessionStorage.removeItem('pending_invite_token');
       sessionStorage.removeItem('pending_invite_code');
-      joinOrganization(authToken, pendingToken || '', pendingCode || '');
+      joinOrganization(pendingToken || '', pendingCode || '');
     }
-  }, []);
+  }, [authenticated]);
 
-  const joinOrganization = async (authToken, tokenParam, codeParam) => {
+  const joinOrganization = async (tokenParam, codeParam) => {
     setStatus('loading');
     try {
       const body = {};
       if (tokenParam) body.token = tokenParam;
       if (codeParam) body.invite_code = codeParam;
 
-      const res = await fetch(`${API_URL}/api/companies/join`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setStatus('success');
-        setCompanyName(data.company?.name || '');
-        setMessage(data.message);
-        setTimeout(() => router.push('/organization'), 3000);
-      } else {
-        const err = await res.json();
-        setStatus('error');
-        setMessage(err.detail || t('organization:errors.generic'));
-      }
-    } catch {
+      const res = await api.post('/api/companies/join', body);
+      setStatus('success');
+      setCompanyName(res.data.company?.name || '');
+      setMessage(res.data.message);
+      setTimeout(() => router.push('/organization'), 3000);
+    } catch (error) {
       setStatus('error');
-      setMessage(t('organization:errors.generic'));
+      setMessage(error.response?.data?.detail || t('organization:errors.generic'));
     }
   };
 

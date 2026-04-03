@@ -88,9 +88,8 @@ export default function Setup2FA() {
         withCredentials: true
       });
 
-      // Clean up setup token, store full token
+      // Clean up setup token - cookie is set by backend
       sessionStorage.removeItem("setup_token");
-      localStorage.setItem("token", response.data.access_token);
 
       toast.success(t('auth:twoFactor.setup.setupComplete'));
       window.location.href = "/agents";

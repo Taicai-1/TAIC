@@ -1,16 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
 import toast, { Toaster } from "react-hot-toast";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { useAuth } from '../hooks/useAuth';
+import api from '../lib/api';
 import {
   Bot,
   Plus,
   Trash2,
   Pencil,
   ArrowRight,
-  LogOut,
   Users,
   UserCircle,
   TrendingUp,
@@ -25,19 +25,6 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import Layout from '../components/Layout';
-
-// Auto-detect API URL based on environment
-const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== "undefined" && window.location.hostname.includes("run.app")) {
-    return window.location.origin.replace("frontend", "backend");
-  }
-  return "http://localhost:8080";
-};
-
-const API_URL = getApiUrl();
 
 const AGENT_TYPES_CONFIG = {
   conversationnel: {
@@ -59,9 +46,9 @@ const AGENT_TYPES_CONFIG = {
 
 export default function AgentsPage() {
   const { t } = useTranslation(['agents', 'common', 'errors']);
+  const { user, loading: authLoading, authenticated, logout: authLogout } = useAuth();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false });
   const [emailTagInput, setEmailTagInput] = useState("");
@@ -94,18 +81,10 @@ export default function AgentsPage() {
   }), [t]);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-
-    if (!savedToken) {
-      router.push("/login");
-      return;
-    }
-
-    setToken(savedToken);
-    loadAgents(savedToken);
-    loadNeo4jData(savedToken);
-    // eslint-disable-next-line
-  }, []);
+    if (!authenticated) return;
+    loadAgents();
+    loadNeo4jData();
+  }, [authenticated]);
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -120,17 +99,13 @@ export default function AgentsPage() {
     };
   }, [showForm]);
 
-  const loadAgents = useCallback(async (authToken) => {
+  const loadAgents = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_URL}/agents`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-        withCredentials: true
-      });
+      const response = await api.get('/agents');
       setAgents(response.data.agents || []);
     } catch (error) {
       toast.error(t('agents:toast.loadError'));
       if (error.response?.status === 401) {
-        localStorage.removeItem("token");
         router.push("/login");
       }
     } finally {
@@ -138,17 +113,11 @@ export default function AgentsPage() {
     }
   }, [t, router]);
 
-  const loadNeo4jData = async (authToken) => {
+  const loadNeo4jData = async () => {
     try {
       const [companyRes, personsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/companies/mine`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-          withCredentials: true
-        }),
-        axios.get(`${API_URL}/api/neo4j/persons`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-          withCredentials: true
-        })
+        api.get('/api/companies/mine'),
+        api.get('/api/neo4j/persons')
       ]);
       setUserCompany(companyRes.data.company);
       setNeo4jPersons(personsRes.data.persons || []);
@@ -162,36 +131,28 @@ export default function AgentsPage() {
       return;
     }
     try {
-      await axios.delete(`${API_URL}/agents/${agentId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true
-      });
+      await api.delete(`/agents/${agentId}`);
       toast.success(t('agents:toast.deleted'));
-      loadAgents(token);
+      loadAgents();
     } catch (error) {
       toast.error(t('agents:toast.deleteError'));
       if (error.response?.status === 401) {
-        localStorage.removeItem("token");
         router.push("/login");
       }
     }
-  }, [t, token, router, loadAgents]);
+  }, [t, router, loadAgents]);
 
   const logout = () => {
-    localStorage.removeItem("token");
-    router.push("/login");
+    authLogout();
   };
 
   const handleSendFeedback = async () => {
     if (!feedbackMessage.trim()) return;
     setSendingFeedback(true);
     try {
-      await axios.post(`${API_URL}/feedback`, {
+      await api.post('/feedback', {
         type: feedbackType,
         message: feedbackMessage
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true
       });
       toast.success(t('agents:feedback.success'));
       setShowFeedback(false);
@@ -204,7 +165,7 @@ export default function AgentsPage() {
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="bg-white border-b border-gray-200">
@@ -518,17 +479,15 @@ export default function AgentsPage() {
                     if (form.neo4j_person_name) formData.append("neo4j_person_name", form.neo4j_person_name);
                     formData.append("neo4j_depth", String(form.neo4j_depth || 1));
                     formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
-                    await axios.post(`${API_URL}/agents`, formData, {
+                    await api.post('/agents', formData, {
                       headers: {
-                        "Content-Type": "multipart/form-data",
-                        Authorization: `Bearer ${token}`
-                      },
-                      withCredentials: true
+                        "Content-Type": "multipart/form-data"
+                      }
                     });
                     toast.success(t('agents:toast.createSuccess'));
                     setShowForm(false);
                     setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false });
-                    loadAgents(token);
+                    loadAgents();
                   } catch (err) {
                     toast.error(t('agents:toast.createError'));
                   } finally {
@@ -575,6 +534,7 @@ export default function AgentsPage() {
             {agents.map((agent) => {
               const typeConfig = AGENT_TYPES[agent.type] || AGENT_TYPES.conversationnel;
               const IconComponent = typeConfig.icon;
+              const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
               return (
                 <div
                   key={agent.id}
@@ -758,7 +718,7 @@ export default function AgentsPage() {
 }
 
 export async function getServerSideProps({ locale }) {
-  // Auth check is handled client-side via useEffect + localStorage
+  // Auth check is handled client-side via useEffect + useAuth hook
   // Cannot check cookies server-side because backend and frontend are on different domains
   return {
     props: {

@@ -1,14 +1,15 @@
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 import { ArrowLeft, Users, UserCircle, MessageSquarePlus, LogOut } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 export default function Layout({ children, showBack, backHref, title, actions, onFeedback, onLogout }) {
   const router = useRouter();
   const { t } = useTranslation(['common', 'agents']);
+  const { logout: authLogout } = useAuth({ required: false });
 
   const handleLogout = onLogout || (() => {
-    localStorage.removeItem('token');
-    router.push('/login');
+    authLogout();
   });
 
   return (

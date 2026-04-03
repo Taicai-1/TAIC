@@ -1,26 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
 import Link from "next/link";
 import { Pencil, Trash2, Plus, Users, ArrowLeft, Send, ThumbsUp, MessageCircle, Sparkles, Bot } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import toast, { Toaster } from "react-hot-toast";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
-
-const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (typeof window !== "undefined" && window.location.hostname.includes("run.app")) {
-    return window.location.origin.replace("frontend", "backend");
-  }
-  return "http://localhost:8080";
-};
-const API_URL = getApiUrl();
+import { useAuth } from '../../../hooks/useAuth';
+import api from '../../../lib/api';
 
 export default function TeamChatPage() {
   const { t } = useTranslation(['chat', 'teams', 'common', 'errors']);
   const router = useRouter();
   const { id: teamId } = router.query;
+  const { user, loading: authLoading, authenticated } = useAuth();
   const [team, setTeam] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [selectedConv, setSelectedConv] = useState(null);
@@ -28,27 +21,26 @@ export default function TeamChatPage() {
   const [pendingUserMessage, setPendingUserMessage] = useState(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [token, setToken] = useState("");
   const chatEndRef = useRef(null);
   const [creatingConv, setCreatingConv] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState(null);
   const [editedTitle, setEditedTitle] = useState("");
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (!savedToken) router.push("/login");
-    setToken(savedToken);
-    if (teamId) {
-      loadTeam(teamId, savedToken);
-      loadConversations(teamId, savedToken, true);
+    if (authLoading) return;
+    if (!authenticated) {
+      router.push("/login");
+      return;
     }
-  }, [teamId]);
+    if (teamId) {
+      loadTeam(teamId);
+      loadConversations(teamId, true);
+    }
+  }, [teamId, authenticated, authLoading]);
 
-  const loadTeam = async (id, authToken) => {
+  const loadTeam = async (id) => {
     try {
-      const res = await axios.get(`${API_URL}/teams/${id}`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await api.get(`/teams/${id}`);
       setTeam(res.data);
     } catch (e) {
       toast.error(t('teams:chat.loadingError'));
@@ -56,29 +48,25 @@ export default function TeamChatPage() {
     }
   };
 
-  const loadConversations = async (teamId, authToken, autoCreateIfNone = false) => {
+  const loadConversations = async (teamId, autoCreateIfNone = false) => {
     try {
-      const res = await axios.get(`${API_URL}/conversations?team_id=${teamId}`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await api.get(`/conversations?team_id=${teamId}`);
       setConversations(res.data);
       if (res.data.length > 0) {
-        selectConversation(res.data[0].id, authToken);
+        selectConversation(res.data[0].id);
       } else if (autoCreateIfNone) {
-        await handleNewConversation(true, authToken);
+        await handleNewConversation(true);
       }
     } catch (e) {
       setConversations([]);
     }
   };
 
-  const selectConversation = async (convId, authToken = token) => {
+  const selectConversation = async (convId) => {
     setSelectedConv(convId);
     if (!pendingUserMessage) setMessages([]);
     try {
-      const res = await axios.get(`${API_URL}/conversations/${convId}/messages`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await api.get(`/conversations/${convId}/messages`);
       if (pendingUserMessage && res.data.length === 0) {
         setMessages([pendingUserMessage]);
       } else {
@@ -95,19 +83,17 @@ export default function TeamChatPage() {
     }
   };
 
-  const handleNewConversation = async (auto = false, overrideToken = null) => {
+  const handleNewConversation = async (auto = false) => {
     setCreatingConv(true);
     const convCount = conversations.length + 1;
     const convTitle = `${t('chat:sidebar.conversationNumber')} ${convCount}`;
     try {
-      const res = await axios.post(`${API_URL}/conversations`, {
+      const res = await api.post(`/conversations`, {
         team_id: teamId,
         title: convTitle
-      }, {
-        headers: { Authorization: `Bearer ${overrideToken || token}` }
       });
       setCreatingConv(false);
-      await loadConversations(teamId, overrideToken || token);
+      await loadConversations(teamId);
       if (res.data.conversation_id) {
         setSelectedConv(res.data.conversation_id);
         setMessages([]);
@@ -121,10 +107,8 @@ export default function TeamChatPage() {
 
   const handleEditTitle = async (convId) => {
     try {
-      await axios.put(`${API_URL}/conversations/${convId}/title`, { title: editedTitle }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      await loadConversations(teamId, token);
+      await api.put(`/conversations/${convId}/title`, { title: editedTitle });
+      await loadConversations(teamId);
       setEditingTitleId(null);
       toast.success(t('teams:chat.titleUpdated'));
     } catch (e) {
@@ -135,10 +119,8 @@ export default function TeamChatPage() {
   const handleDeleteConversation = async (convId) => {
     if (!confirm(t('chat:sidebar.deleteConfirmation'))) return;
     try {
-      await axios.delete(`${API_URL}/conversations/${convId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      await loadConversations(teamId, token);
+      await api.delete(`/conversations/${convId}`);
+      await loadConversations(teamId);
       if (selectedConv === convId) {
         setSelectedConv(null);
         setMessages([]);
@@ -161,39 +143,26 @@ export default function TeamChatPage() {
       const conv = conversations.find(c => c.id === selectedConv);
       if (conv && (conv.title === `${t('chat:sidebar.conversationNumber')} ${conversations.indexOf(conv)+1}` || !conv.title || conv.title === "")) {
         const firstMsgTitle = userMessage.length > 50 ? userMessage.slice(0, 50) + "..." : userMessage;
-        await axios.put(`${API_URL}/conversations/${selectedConv}/title`, { title: firstMsgTitle }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        await loadConversations(teamId, token);
+        await api.put(`/conversations/${selectedConv}/title`, { title: firstMsgTitle });
+        await loadConversations(teamId);
       }
-      await axios.post(`${API_URL}/conversations/${selectedConv}/messages`, {
+      await api.post(`/conversations/${selectedConv}/messages`, {
         conversation_id: selectedConv,
         role: "user",
         content: userMessage
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
-      const resHist = await axios.get(`${API_URL}/conversations/${selectedConv}/messages`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const resHist = await api.get(`/conversations/${selectedConv}/messages`);
       const history = resHist.data.map(m => ({ role: m.role, content: m.content }));
-      const resAsk = await axios.post(`${API_URL}/ask`, {
+      const resAsk = await api.post(`/ask`, {
         question: userMessage,
         team_id: teamId,
         history: history
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
       });
       const iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
-      await axios.post(`${API_URL}/conversations/${selectedConv}/messages`, {
+      await api.post(`/conversations/${selectedConv}/messages`, {
         conversation_id: selectedConv,
         role: "agent",
         content: iaAnswer
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
       const actionResults = resAsk.data.action_results || [];
       for (const ar of actionResults) {
@@ -219,12 +188,10 @@ export default function TeamChatPage() {
           } else {
             content = `Action ${ar.action}: ${JSON.stringify(ar)}`;
           }
-          await axios.post(`${API_URL}/conversations/${selectedConv}/messages`, {
+          await api.post(`/conversations/${selectedConv}/messages`, {
             conversation_id: selectedConv,
             role: "system",
             content: content
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
           });
         } catch (e) {}
       }
@@ -454,10 +421,9 @@ export default function TeamChatPage() {
                               prevMsgs.map((m, i) => (i === idx ? { ...m, feedback: "like" } : m))
                             );
                             try {
-                              await axios.patch(
-                                `${API_URL}/messages/${msg.id}/feedback`,
-                                { feedback: "like" },
-                                { headers: { Authorization: `Bearer ${token}` } }
+                              await api.patch(
+                                `/messages/${msg.id}/feedback`,
+                                { feedback: "like" }
                               );
                               toast.success(t('teams:chat.feedbackThanks'));
                             } catch {}
@@ -515,7 +481,7 @@ export default function TeamChatPage() {
 }
 
 export async function getServerSideProps({ locale }) {
-  // Auth check is handled client-side via useEffect + localStorage
+  // Auth check is handled client-side via useAuth hook
   return {
     props: {
       ...(await serverSideTranslations(locale, ['chat', 'teams', 'common', 'errors'])),

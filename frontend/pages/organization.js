@@ -4,6 +4,8 @@ import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import Layout from '../components/Layout';
 import toast, { Toaster } from 'react-hot-toast';
+import { useAuth } from '../hooks/useAuth';
+import api from '../lib/api';
 import {
   ArrowLeft,
   Building2,
@@ -31,19 +33,10 @@ import {
   X,
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
-function getToken() {
-  return typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-}
-
-function authHeaders() {
-  return { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' };
-}
-
 export default function Organization() {
   const router = useRouter();
   const { t } = useTranslation(['organization', 'common', 'errors']);
+  const { user: authUser, loading: authLoading, authenticated } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [company, setCompany] = useState(null);
@@ -83,17 +76,15 @@ export default function Organization() {
   const [shareLoading, setShareLoading] = useState(false);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) { router.push('/login'); return; }
+    if (!authenticated) return;
     loadCompany();
-  }, []);
+  }, [authenticated]);
 
   const loadCompany = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/companies/mine`, { headers: authHeaders() });
-      if (res.status === 401) { router.push('/login'); return; }
-      const data = await res.json();
+      const res = await api.get('/api/companies/mine');
+      const data = res.data;
       setCompany(data.company);
 
       if (data.company && ['admin', 'owner'].includes(data.company.role)) {
@@ -101,8 +92,8 @@ export default function Organization() {
         loadOrgAgents();
         if (data.company.role === 'owner') loadIntegrations();
       }
-    } catch {
-      toast.error(t('organization:errors.loadFailed'));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -110,31 +101,25 @@ export default function Organization() {
 
   const loadMembers = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/companies/members`, { headers: authHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setMembers(data.members || []);
-      }
+      const res = await api.get('/api/companies/members');
+      const data = res.data;
+      setMembers(data.members || []);
     } catch {}
   };
 
   const loadIntegrations = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/companies/integrations`, { headers: authHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setIntegrations(data);
-      }
+      const res = await api.get('/api/companies/integrations');
+      const data = res.data;
+      setIntegrations(data);
     } catch {}
   };
 
   const loadOrgAgents = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/companies/agents`, { headers: authHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setOrgAgents(data.agents || []);
-      }
+      const res = await api.get('/api/companies/agents');
+      const data = res.data;
+      setOrgAgents(data.agents || []);
     } catch {}
   };
 
@@ -143,58 +128,45 @@ export default function Organization() {
     if (!createName.trim()) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/companies`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ name: createName.trim() }),
-      });
-      if (res.ok) {
-        toast.success(t('organization:noOrg.createButton') + ' OK');
-        loadCompany();
-        setCreateName('');
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
-    finally { setActionLoading(false); }
+      await api.post('/api/companies', { name: createName.trim() });
+      toast.success(t('organization:noOrg.createButton') + ' OK');
+      loadCompany();
+      setCreateName('');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleJoin = async () => {
     if (!joinCode.trim()) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/companies/join`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ invite_code: joinCode.trim() }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        toast.success(data.message);
-        loadCompany();
-        setJoinCode('');
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
-    finally { setActionLoading(false); }
+      const res = await api.post('/api/companies/join', { invite_code: joinCode.trim() });
+      const data = res.data;
+      toast.success(data.message);
+      loadCompany();
+      setJoinCode('');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   // ---- Leave ----
   const handleLeave = async () => {
     if (!confirm(t('organization:info.leaveConfirm'))) return;
     try {
-      const res = await fetch(`${API_URL}/api/companies/leave`, { method: 'POST', headers: authHeaders() });
-      if (res.ok) {
-        toast.success('OK');
-        setCompany(null);
-        setMembers([]);
-        setOrgAgents([]);
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
+      await api.post('/api/companies/leave');
+      toast.success('OK');
+      setCompany(null);
+      setMembers([]);
+      setOrgAgents([]);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
   };
 
   // ---- Invitations ----
@@ -202,19 +174,14 @@ export default function Organization() {
     if (!inviteEmail.trim()) return;
     setInviteLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/companies/invite`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
-      });
-      if (res.ok) {
-        toast.success(t('organization:invitations.sent'));
-        setInviteEmail('');
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
-    finally { setInviteLoading(false); }
+      await api.post('/api/companies/invite', { email: inviteEmail.trim(), role: inviteRole });
+      toast.success(t('organization:invitations.sent'));
+      setInviteEmail('');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    } finally {
+      setInviteLoading(false);
+    }
   };
 
   const handleCopyInviteLink = () => {
@@ -227,61 +194,45 @@ export default function Organization() {
 
   const handleToggleCode = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/companies/invite-code/toggle`, {
-        method: 'PUT', headers: authHeaders(),
-        body: JSON.stringify({ enabled: !company.invite_code_enabled }),
-      });
-      if (res.ok) {
-        setCompany(prev => ({ ...prev, invite_code_enabled: !prev.invite_code_enabled }));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
+      await api.put('/api/companies/invite-code/toggle', { enabled: !company.invite_code_enabled });
+      setCompany(prev => ({ ...prev, invite_code_enabled: !prev.invite_code_enabled }));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
   };
 
   const handleRegenerateCode = async () => {
     if (!confirm(t('organization:invitations.regenerateConfirm'))) return;
     try {
-      const res = await fetch(`${API_URL}/api/companies/invite-code/regenerate`, {
-        method: 'POST', headers: authHeaders(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCompany(prev => ({ ...prev, invite_code: data.invite_code }));
-        toast.success(t('organization:invitations.regenerated'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
+      const res = await api.post('/api/companies/invite-code/regenerate');
+      const data = res.data;
+      setCompany(prev => ({ ...prev, invite_code: data.invite_code }));
+      toast.success(t('organization:invitations.regenerated'));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
   };
 
   // ---- Members ----
   const handleChangeRole = async (memberId, newRole) => {
     try {
-      const res = await fetch(`${API_URL}/api/companies/members/${memberId}/role`, {
-        method: 'PUT', headers: authHeaders(),
-        body: JSON.stringify({ role: newRole }),
-      });
-      if (res.ok) {
-        toast.success(t('organization:members.roleUpdated'));
-        loadMembers();
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
+      await api.put(`/api/companies/members/${memberId}/role`, { role: newRole });
+      toast.success(t('organization:members.roleUpdated'));
+      loadMembers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
   };
 
   const handleRemoveMember = async (memberId) => {
     if (!confirm(t('organization:members.removeConfirm'))) return;
     try {
-      const res = await fetch(`${API_URL}/api/companies/members/${memberId}`, {
-        method: 'DELETE', headers: authHeaders(),
-      });
-      if (res.ok) {
-        toast.success(t('organization:members.memberRemoved'));
-        loadMembers();
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
+      await api.delete(`/api/companies/members/${memberId}`);
+      toast.success(t('organization:members.memberRemoved'));
+      loadMembers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
   };
 
   // ---- Integrations ----
@@ -290,20 +241,15 @@ export default function Organization() {
     try {
       const body = {};
       Object.entries(integForm).forEach(([k, v]) => { if (v) body[k] = v; });
-      const res = await fetch(`${API_URL}/api/companies/integrations`, {
-        method: 'PUT', headers: authHeaders(),
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        toast.success(t('organization:integrations.saved'));
-        setIntegForm({ neo4j_uri: '', neo4j_user: '', neo4j_password: '', notion_api_key: '' });
-        loadIntegrations();
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
-    finally { setIntegLoading(false); }
+      await api.put('/api/companies/integrations', body);
+      toast.success(t('organization:integrations.saved'));
+      setIntegForm({ neo4j_uri: '', neo4j_user: '', neo4j_password: '', notion_api_key: '' });
+      loadIntegrations();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    } finally {
+      setIntegLoading(false);
+    }
   };
 
   const handleDeleteIntegration = async (type) => {
@@ -313,36 +259,26 @@ export default function Organization() {
       const body = type === 'neo4j'
         ? { neo4j_uri: '', neo4j_user: '', neo4j_password: '' }
         : { notion_api_key: '' };
-      const res = await fetch(`${API_URL}/api/companies/integrations`, {
-        method: 'PUT', headers: authHeaders(),
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        toast.success(t('organization:integrations.removed'));
-        loadIntegrations();
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
-    finally { setIntegLoading(false); }
+      await api.put('/api/companies/integrations', body);
+      toast.success(t('organization:integrations.removed'));
+      loadIntegrations();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    } finally {
+      setIntegLoading(false);
+    }
   };
 
   // ---- Org Agent Actions ----
   const handleDeleteOrgAgent = async (agentId) => {
     if (!confirm(t('organization:agents.deleteConfirm'))) return;
     try {
-      const res = await fetch(`${API_URL}/api/companies/agents/${agentId}`, {
-        method: 'DELETE', headers: authHeaders(),
-      });
-      if (res.ok) {
-        toast.success(t('organization:agents.deleted'));
-        loadOrgAgents();
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
+      await api.delete(`/api/companies/agents/${agentId}`);
+      toast.success(t('organization:agents.deleted'));
+      loadOrgAgents();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
   };
 
   const openShareModal = async (agent) => {
@@ -350,11 +286,9 @@ export default function Organization() {
     setShareTargetUserId('');
     setShareCanEdit(false);
     try {
-      const res = await fetch(`${API_URL}/api/companies/agents/${agent.id}/shares`, { headers: authHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setAgentShares(data.shares || []);
-      }
+      const res = await api.get(`/api/companies/agents/${agent.id}/shares`);
+      const data = res.data;
+      setAgentShares(data.shares || []);
     } catch {}
   };
 
@@ -362,53 +296,42 @@ export default function Organization() {
     if (!shareTargetUserId || !shareModalAgent) return;
     setShareLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/companies/agents/${shareModalAgent.id}/share`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ user_id: parseInt(shareTargetUserId), can_edit: shareCanEdit }),
+      await api.post(`/api/companies/agents/${shareModalAgent.id}/share`, {
+        user_id: parseInt(shareTargetUserId),
+        can_edit: shareCanEdit
       });
-      if (res.ok) {
-        toast.success(t('organization:agents.share') + ' OK');
-        openShareModal(shareModalAgent);
-        loadOrgAgents();
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
-    finally { setShareLoading(false); }
+      toast.success(t('organization:agents.share') + ' OK');
+      openShareModal(shareModalAgent);
+      loadOrgAgents();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    } finally {
+      setShareLoading(false);
+    }
   };
 
   const handleRemoveShare = async (targetUserId) => {
     if (!shareModalAgent) return;
     try {
-      const res = await fetch(`${API_URL}/api/companies/agents/${shareModalAgent.id}/share/${targetUserId}`, {
-        method: 'DELETE', headers: authHeaders(),
-      });
-      if (res.ok) {
-        toast.success(t('organization:agents.shareRemoved'));
-        openShareModal(shareModalAgent);
-        loadOrgAgents();
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
+      await api.delete(`/api/companies/agents/${shareModalAgent.id}/share/${targetUserId}`);
+      toast.success(t('organization:agents.shareRemoved'));
+      openShareModal(shareModalAgent);
+      loadOrgAgents();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
   };
 
   const handleToggleCanEdit = async (targetUserId, currentCanEdit) => {
     if (!shareModalAgent) return;
     try {
-      const res = await fetch(`${API_URL}/api/companies/agents/${shareModalAgent.id}/share/${targetUserId}`, {
-        method: 'PUT', headers: authHeaders(),
-        body: JSON.stringify({ can_edit: !currentCanEdit }),
+      await api.put(`/api/companies/agents/${shareModalAgent.id}/share/${targetUserId}`, {
+        can_edit: !currentCanEdit
       });
-      if (res.ok) {
-        openShareModal(shareModalAgent);
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('organization:errors.generic'));
-      }
-    } catch { toast.error(t('organization:errors.generic')); }
+      openShareModal(shareModalAgent);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
   };
 
   const roleLabel = (role) => t(`organization:members.${role}`);
@@ -423,7 +346,7 @@ export default function Organization() {
   };
 
   // ---- Render ----
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />

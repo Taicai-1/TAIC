@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
 import Link from "next/link";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { useAuth } from '../../hooks/useAuth';
+import api from '../../lib/api';
 import {
   Pencil,
   Trash2,
@@ -70,25 +71,15 @@ const MarkdownText = ({ children }) => {
   );
 };
 
-const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (typeof window !== "undefined" && window.location.hostname.includes("run.app")) {
-    return window.location.origin.replace("frontend", "backend");
-  }
-  return "http://localhost:8080";
-};
-const API_URL = getApiUrl();
-
 export default function AgentChatPage() {
   const router = useRouter();
   const { t } = useTranslation(['chat', 'common', 'errors']);
+  const { user, loading: authLoading, authenticated } = useAuth();
 
   // Charge les infos de l'agent (doit être dans le scope du composant pour accéder à router)
-  const loadAgent = async (id, authToken) => {
+  const loadAgent = async (id) => {
     try {
-      const res = await axios.get(`${API_URL}/agents`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await api.get('/agents');
       const found = res.data.agents?.find(a => a.id.toString() === id.toString());
       if (!found) router.push("/agents");
       setAgent(found);
@@ -107,7 +98,6 @@ export default function AgentChatPage() {
   const [transcript, setTranscript] = useState("");
   const [baseInput, setBaseInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [token, setToken] = useState("");
   const chatEndRef = useRef(null);
   const [creatingConv, setCreatingConv] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState(null);
@@ -118,12 +108,10 @@ export default function AgentChatPage() {
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (!savedToken) router.push("/login");
-    setToken(savedToken);
-    if (agentId) {
-      loadAgent(agentId, savedToken);
-      loadConversations(agentId, savedToken, true); // pass flag to auto-create if none
+    if (!authenticated && !authLoading) router.push("/login");
+    if (authenticated && agentId) {
+      loadAgent(agentId);
+      loadConversations(agentId, true); // pass flag to auto-create if none
     }
     // Cleanup on unmount
     return () => {
@@ -134,7 +122,7 @@ export default function AgentChatPage() {
         }
       } catch (e) {}
     };
-  }, [agentId]);
+  }, [agentId, authenticated, authLoading]);
 
   // Update input with transcript while listening
   useEffect(() => {
@@ -142,18 +130,16 @@ export default function AgentChatPage() {
       setInput(baseInput + (baseInput && transcript ? ' ' : '') + transcript);
     }
   }, [baseInput, transcript, listening]);
-  const loadConversations = async (agentId, authToken, autoCreateIfNone = false, autoSelect = true) => {
+  const loadConversations = async (agentId, autoCreateIfNone = false, autoSelect = true) => {
     try {
-      const res = await axios.get(`${API_URL}/conversations?agent_id=${agentId}`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await api.get(`/conversations?agent_id=${agentId}`);
       setConversations(res.data);
       if (autoSelect) {
         if (res.data.length > 0) {
-          await selectConversation(res.data[0].id, authToken);
+          await selectConversation(res.data[0].id);
         } else if (autoCreateIfNone) {
           // Auto-create first conversation for this agent
-          await handleNewConversation(true, authToken);
+          await handleNewConversation(true);
         }
       }
     } catch (e) {
@@ -161,29 +147,25 @@ export default function AgentChatPage() {
     }
   };
 
-  const selectConversation = async (convId, authToken = token) => {
+  const selectConversation = async (convId) => {
     setSelectedConv(convId);
     setMessages([]);
     try {
-      const res = await axios.get(`${API_URL}/conversations/${convId}/messages`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await api.get(`/conversations/${convId}/messages`);
       setMessages(res.data);
     } catch (e) {
       setMessages([]);
     }
   };
 
-  const handleNewConversation = async (auto = false, overrideToken = null) => {
+  const handleNewConversation = async (auto = false) => {
     setCreatingConv(true);
   const convCount = conversations.length + 1;
   const convTitle = `${t('chat:sidebar.conversationNumber')} ${convCount}`;
     try {
-      const res = await axios.post(`${API_URL}/conversations`, {
+      const res = await api.post('/conversations', {
         agent_id: agentId,
         title: convTitle
-      }, {
-        headers: { Authorization: `Bearer ${overrideToken || token}` }
       });
       setCreatingConv(false);
 
@@ -191,7 +173,7 @@ export default function AgentChatPage() {
         setSelectedConv(res.data.conversation_id);
         setMessages([]);
         // Recharge les conversations sans auto-sélection
-        await loadConversations(agentId, overrideToken || token, false, false);
+        await loadConversations(agentId, false, false);
       }
     } catch (e) {
       setCreatingConv(false);
@@ -200,21 +182,18 @@ export default function AgentChatPage() {
 
 const handleEditTitle = async (convId) => {
   try {
-    await axios.put(`${API_URL}/conversations/${convId}/title`, { title: editedTitle }, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    await api.put(`/conversations/${convId}/title`, { title: editedTitle });
     setEditingTitleId(null);
     setEditedTitle("");
-    await loadConversations(agentId, token);
+    await loadConversations(agentId);
   } catch {}
 };
 
 const handleDeleteConversation = async (convId) => {
   if (!window.confirm(t('chat:sidebar.deleteConfirmation'))) return;
   try {
-    await axios.delete(`${API_URL}/conversations/${convId}`,
-      { headers: { Authorization: `Bearer ${token}` } });
-    await loadConversations(agentId, token);
+    await api.delete(`/conversations/${convId}`);
+    await loadConversations(agentId);
     if (selectedConv === convId) {
       setSelectedConv(null);
       setMessages([]);
@@ -236,8 +215,8 @@ const handleDeleteConversation = async (convId) => {
       const formData = new FormData();
       formData.append("file", attachments[0]);
       try {
-        const res = await axios.post(`${API_URL}/api/agent/extractText`, formData, {
-          headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` },
+        const res = await api.post('/api/agent/extractText', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
         extractedText = res.data.text || "";
         // Tronquer le texte extrait pour éviter de dépasser la limite de tokens LLM
@@ -257,50 +236,37 @@ const handleDeleteConversation = async (convId) => {
     setMessages(prev => [...prev, userMsg]);
     try {
       // Ajoute le message utilisateur côté backend
-      await axios.post(`${API_URL}/conversations/${selectedConv}/messages`, {
+      await api.post(`/conversations/${selectedConv}/messages`, {
         conversation_id: selectedConv,
         role: "user",
         content: finalPrompt
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
 
       // Récupère l'historique de la conversation pour vérifier si c'est le premier message
-      const resHist = await axios.get(`${API_URL}/conversations/${selectedConv}/messages`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const resHist = await api.get(`/conversations/${selectedConv}/messages`);
       const history = resHist.data.map(m => ({ role: m.role, content: m.content }));
 
       // Si c'est le premier message (seulement 1 message dans l'historique), mettre à jour le titre
       if (resHist.data.length === 1) {
         const firstMsgTitle = finalPrompt.length > 50 ? finalPrompt.slice(0, 50) + "..." : finalPrompt;
-        await axios.put(`${API_URL}/conversations/${selectedConv}/title`, { title: firstMsgTitle }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        await api.put(`/conversations/${selectedConv}/title`, { title: firstMsgTitle });
         // Recharge la liste sans re-sélectionner
-        await loadConversations(agentId, token, false, false);
+        await loadConversations(agentId, false, false);
       }
 
       // Appel à l'API /ask pour générer la réponse IA
-      const resAsk = await axios.post(`${API_URL}/ask`, {
+      const resAsk = await api.post('/ask', {
         question: finalPrompt,
         agent_id: agentId,
         history: history
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
       });
       const iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
 
       // Ajoute la réponse IA comme message d'agent côté backend
-      const agentMsgRes = await axios.post(`${API_URL}/conversations/${selectedConv}/messages`, {
+      const agentMsgRes = await api.post(`/conversations/${selectedConv}/messages`, {
         conversation_id: selectedConv,
         role: "agent",
         content: iaAnswer
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
 
       // Ajoute la réponse IA aux messages locaux immédiatement
@@ -337,12 +303,10 @@ const handleDeleteConversation = async (convId) => {
             content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(ar)}`;
           }
 
-          const systemMsgRes = await axios.post(`${API_URL}/conversations/${selectedConv}/messages`, {
+          const systemMsgRes = await api.post(`/conversations/${selectedConv}/messages`, {
             conversation_id: selectedConv,
             role: "system",
             content: content
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
           });
 
           // Ajoute le message système aux messages locaux
@@ -355,7 +319,7 @@ const handleDeleteConversation = async (convId) => {
       }
 
       // Recharge juste la liste des conversations pour mettre à jour les titres (sans re-sélectionner)
-      await loadConversations(agentId, token, false, false);
+      await loadConversations(agentId, false, false);
     } catch (e) {
       const errorMsg = { role: "agent", content: t('chat:messages.aiError') };
       setMessages(prev => [...prev, errorMsg]);
@@ -422,7 +386,7 @@ const handleDeleteConversation = async (convId) => {
     setTranscript('');
   };
 
-  if (!agent) return (
+  if (authLoading || !agent) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
       <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
       <p className="text-gray-600 font-medium">{t('chat:loading.text')}</p>
@@ -442,7 +406,7 @@ const handleDeleteConversation = async (convId) => {
             {agent.profile_photo && (
               <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white/30 shadow-elevated mb-3 ring-2 ring-white/20">
                 <img
-                  src={agent.profile_photo.startsWith('http') ? agent.profile_photo : `${API_URL}/profile_photos/${agent.profile_photo.replace(/^.*[\\/]/, '')}`}
+                  src={agent.profile_photo.startsWith('http') ? agent.profile_photo : `${process.env.NEXT_PUBLIC_API_URL}/profile_photos/${agent.profile_photo.replace(/^.*[\\/]/, '')}`}
                   alt={agent.name}
                   width={80}
                   height={80}
@@ -670,7 +634,7 @@ const handleDeleteConversation = async (convId) => {
                               // Optimistic update: retire le bouton localement
                               setMessages(prevMsgs => prevMsgs.map((m, i) => i === idx ? { ...m, feedback: 'like' } : m));
                               try {
-                                await axios.patch(`${API_URL}/messages/${msg.id}/feedback`, { feedback: 'like' }, { headers: { Authorization: `Bearer ${token}` } });
+                                await api.patch(`/messages/${msg.id}/feedback`, { feedback: 'like' });
                               } catch {}
                             }}
                           >
@@ -839,7 +803,7 @@ const handleDeleteConversation = async (convId) => {
 }
 
 export async function getServerSideProps({ locale }) {
-  // Auth check is handled client-side via useEffect + localStorage
+  // Auth check is handled client-side via useAuth hook
   return {
     props: {
       ...(await serverSideTranslations(locale, ['chat', 'common', 'errors'])),

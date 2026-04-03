@@ -1,3 +1,5 @@
+import api from '../lib/api';
+
 /**
  * Navigate to a path while preserving the current locale
  * @param {Object} router - Next.js router instance
@@ -12,7 +14,11 @@ export const navigateWithLocale = (router, path, options = {}) => {
  * Logout and redirect to login page with current locale
  * @param {Object} router - Next.js router instance
  */
-export const logout = (router) => {
-  localStorage.removeItem('token');
+export const logout = async (router) => {
+  try {
+    await api.post('/logout', {});
+  } catch (e) {
+    // Continue with redirect even if logout call fails
+  }
   router.push('/login', '/login', { locale: router.locale });
 };

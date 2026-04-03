@@ -1,33 +1,30 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { Users, UserCircle, Zap, Loader2 } from 'lucide-react';
 import Layout from '../../components/Layout';
-
-const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-const API_URL = getApiUrl();
+import { useAuth } from '../../hooks/useAuth';
+import api from '../../lib/api';
 
 export default function TeamView() {
   const router = useRouter();
   const { id } = router.query;
   const { t } = useTranslation(['teams', 'common', 'errors']);
+  const { user, loading: authLoading, authenticated } = useAuth();
   const [team, setTeam] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
-    const token = localStorage.getItem('token');
-    if (!token) { router.push('/login'); return; }
-    loadTeam(id, token);
+    if (!id || !authenticated) return;
+    loadTeam(id);
     // eslint-disable-next-line
-  }, [id]);
+  }, [id, authenticated]);
 
-  const loadTeam = async (teamId, token) => {
+  const loadTeam = async (teamId) => {
     try {
-      const res = await axios.get(`${API_URL}/teams/${teamId}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api.get(`/teams/${teamId}`);
       setTeam(res.data.team || res.data);
     } catch (e) {
       console.error(e);
@@ -37,7 +34,7 @@ export default function TeamView() {
     }
   };
 
-  if (loading) return (
+  if (authLoading || loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
     </div>
@@ -97,7 +94,6 @@ export default function TeamView() {
 }
 
 export async function getServerSideProps({ locale }) {
-  // Auth check is handled client-side via useEffect + localStorage
   return {
     props: {
       ...(await serverSideTranslations(locale, ['teams', 'common', 'errors'])),

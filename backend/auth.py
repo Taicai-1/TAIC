@@ -1,8 +1,7 @@
 import jwt
 import bcrypt
 from datetime import datetime, timedelta
-from fastapi import HTTPException, Depends, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import HTTPException, Request
 import os
 import logging
 
@@ -23,7 +22,6 @@ ALGORITHM = "HS256"
 # Restricted token types that must NOT access application endpoints
 RESTRICTED_TOKEN_TYPES = {"pre_2fa", "needs_2fa_setup"}
 
-security = HTTPBearer()
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
@@ -65,34 +63,19 @@ def _decode_token(token: str) -> dict:
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Verify JWT token from Authorization header and extract user info.
-    Rejects restricted 2FA tokens.
-    """
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        # Reject restricted tokens
-        token_type = payload.get("type")
-        if token_type in RESTRICTED_TOKEN_TYPES:
-            raise HTTPException(status_code=403, detail="2FA verification required")
-        return user_id
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-def verify_token_from_cookie(request: Request):
+def verify_token(request: Request):
     """Verify JWT token from HttpOnly cookie or Authorization header.
     Rejects restricted 2FA tokens.
     """
     token = _extract_token(request)
     payload = _decode_token(token)
-    # Reject restricted tokens
     token_type = payload.get("type")
     if token_type in RESTRICTED_TOKEN_TYPES:
         raise HTTPException(status_code=403, detail="2FA verification required")
     return payload.get("sub")
+
+# Alias: verify_token now supports cookies, so this is redundant
+verify_token_from_cookie = verify_token
 
 def _extract_token_from_header(request: Request) -> str:
     """Extract token from Authorization header ONLY (not cookies).

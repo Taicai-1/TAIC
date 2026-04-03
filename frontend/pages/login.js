@@ -113,8 +113,7 @@ export default function Login() {
           return;
         }
 
-        // Case 3: Normal login (2FA already completed / full token)
-        localStorage.setItem("token", data.access_token);
+        // Case 3: Normal login - cookie is set by backend
         toast.success(t('auth:login.success'));
         window.location.href = "/agents";
         return;
@@ -167,9 +166,8 @@ export default function Login() {
         withCredentials: true
       });
 
-      // Clean up and store full token
+      // Clean up - cookie is set by backend
       sessionStorage.removeItem("pre_2fa_token");
-      localStorage.setItem("token", response.data.access_token);
 
       toast.success(t('auth:login.success'));
       window.location.href = "/agents";
@@ -209,10 +207,9 @@ export default function Login() {
       if (!isLogin && formData.invite_code.trim()) {
         payload.invite_code = formData.invite_code.trim();
       }
-      const response = await axios.post(`${API_URL}/auth/google`, payload, {
+      await axios.post(`${API_URL}/auth/google`, payload, {
         withCredentials: true
       });
-      localStorage.setItem("token", response.data.access_token);
       toast.success(t('auth:login.success'));
       window.location.href = "/agents";
     } catch (err) {

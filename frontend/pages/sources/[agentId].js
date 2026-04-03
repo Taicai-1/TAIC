@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
 import { useTranslation } from "next-i18next";
 import { serverSideTranslations } from "next-i18next/serverSideTranslations";
 import {
@@ -10,15 +9,8 @@ import {
   File,
 } from "lucide-react";
 import Layout from "../../components/Layout";
-
-const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (typeof window !== "undefined" && window.location.hostname.includes("run.app")) {
-    return window.location.origin.replace("frontend", "backend");
-  }
-  return "http://localhost:8080";
-};
-const API_URL = getApiUrl();
+import { useAuth } from "../../hooks/useAuth";
+import api from "../../lib/api";
 
 function getFileExtension(filename) {
   if (!filename) return "";
@@ -39,34 +31,27 @@ export default function SourcesPage() {
   const router = useRouter();
   const { agentId } = router.query;
   const { t } = useTranslation(["sources", "common", "errors"]);
+  const { user, loading: authLoading, authenticated } = useAuth();
 
-  const [token, setToken] = useState(null);
   const [agentName, setAgentName] = useState("");
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (!savedToken) {
-      router.push("/login");
-      return;
-    }
-    setToken(savedToken);
-    if (agentId) loadSources(agentId, savedToken);
-  }, [agentId]);
+    if (!authenticated || !agentId) return;
+    loadSources(agentId);
+  }, [agentId, authenticated]);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
 
-  const loadSources = async (id, authToken) => {
+  const loadSources = async (id) => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_URL}/api/agents/${id}/sources`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const res = await api.get(`/api/agents/${id}/sources`);
       setAgentName(res.data.agent_name || "");
       setDocuments(res.data.documents || []);
     } catch {
@@ -78,15 +63,11 @@ export default function SourcesPage() {
 
   const handleDownload = async (docId, filename) => {
     try {
-      const res = await axios.get(`${API_URL}/documents/${docId}/download-url`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.get(`/documents/${docId}/download-url`);
       if (res.data.signed_url) {
         window.open(res.data.signed_url, "_blank");
       } else if (res.data.proxy_url) {
-        // Proxy needs auth header, so download via axios then trigger browser download
-        const dlRes = await axios.get(`${API_URL}${res.data.proxy_url}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const dlRes = await api.get(res.data.proxy_url, {
           responseType: "blob",
         });
         const url = window.URL.createObjectURL(dlRes.data);
@@ -103,7 +84,7 @@ export default function SourcesPage() {
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <Layout showBack backHref="/agents" title={t("sources:pageTitle")}>
         <div className="flex items-center justify-center py-24">

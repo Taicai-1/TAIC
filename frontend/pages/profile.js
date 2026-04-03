@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { useAuth } from '../hooks/useAuth';
+import api from '../lib/api';
 
 import toast, { Toaster } from 'react-hot-toast';
 import dynamic from 'next/dynamic';
@@ -42,6 +44,7 @@ import {
 export default function Profile() {
   const router = useRouter();
   const { t } = useTranslation(['profile', 'common', 'errors']);
+  const { user: authUser, loading: authLoading, authenticated } = useAuth();
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -59,36 +62,18 @@ export default function Profile() {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   useEffect(() => {
+    if (!authenticated) return;
     loadUserData();
     loadCompany();
     load2FAStatus();
     loadAnalytics();
-  }, []);
+  }, [authenticated]);
 
   const loadUserData = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const response = await fetch(`${API_URL}/api/user/export-data`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-        setStats(data.statistics);
-      } else if (response.status === 401) {
-        localStorage.removeItem('token');
-        document.cookie = 'token=;path=/;max-age=0';
-        router.push('/login');
-      }
+      const res = await api.get('/api/user/export-data');
+      setUser(res.data.user);
+      setStats(res.data.statistics);
     } catch (error) {
       console.error('Error loading user data:', error);
       toast.error(t('errors:network.unknown'));
@@ -99,16 +84,8 @@ export default function Profile() {
 
   const loadCompany = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const res = await fetch(`${API_URL}/api/companies/mine`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCompany(data.company); // Now includes role, invite_code, etc.
-      }
+      const res = await api.get('/api/companies/mine');
+      setCompany(res.data.company); // Now includes role, invite_code, etc.
     } catch (error) {
       // silent fail - company is optional
     }
@@ -116,16 +93,8 @@ export default function Profile() {
 
   const load2FAStatus = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const res = await fetch(`${API_URL}/auth/2fa/status`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTwoFactorStatus(data);
-      }
+      const res = await api.get('/auth/2fa/status');
+      setTwoFactorStatus(res.data);
     } catch (error) {
       // silent fail
     }
@@ -133,28 +102,21 @@ export default function Profile() {
 
   const loadAnalytics = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const res = await fetch(`${API_URL}/api/user/stats`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        // Fill missing dates for the last 30 days
-        const today = new Date();
-        const dateMap = {};
-        (data.messages_per_day || []).forEach(d => { dateMap[d.date] = d.count; });
-        const filled = [];
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(today);
-          d.setDate(d.getDate() - i);
-          const key = d.toISOString().split('T')[0];
-          filled.push({ date: key, count: dateMap[key] || 0 });
-        }
-        data.messages_per_day = filled;
-        setAnalytics(data);
+      const res = await api.get('/api/user/stats');
+      const data = res.data;
+      // Fill missing dates for the last 30 days
+      const today = new Date();
+      const dateMap = {};
+      (data.messages_per_day || []).forEach(d => { dateMap[d.date] = d.count; });
+      const filled = [];
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        filled.push({ date: key, count: dateMap[key] || 0 });
       }
+      data.messages_per_day = filled;
+      setAnalytics(data);
     } catch (error) {
       // silent fail - analytics is optional
     } finally {
@@ -166,24 +128,12 @@ export default function Profile() {
     if (!companyInput.trim()) return;
     setCompanyLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const res = await fetch(`${API_URL}/api/companies`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: companyInput.trim() })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCompany(data.company);
-        setCompanyInput('');
-        toast.success(t('profile:company.created'));
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('profile:company.error'));
-      }
+      const res = await api.post('/api/companies', { name: companyInput.trim() });
+      setCompany(res.data.company);
+      setCompanyInput('');
+      toast.success(t('profile:company.created'));
     } catch (error) {
-      toast.error(t('profile:company.error'));
+      toast.error(error.response?.data?.detail || t('profile:company.error'));
     } finally {
       setCompanyLoading(false);
     }
@@ -193,24 +143,12 @@ export default function Profile() {
     if (!companyInput.trim()) return;
     setCompanyLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const res = await fetch(`${API_URL}/api/user/company`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_name: companyInput.trim() })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCompany(data.company);
-        setCompanyInput('');
-        toast.success(t('profile:company.joined'));
-      } else {
-        const err = await res.json();
-        toast.error(err.detail || t('profile:company.notFound'));
-      }
+      const res = await api.put('/api/user/company', { company_name: companyInput.trim() });
+      setCompany(res.data.company);
+      setCompanyInput('');
+      toast.success(t('profile:company.joined'));
     } catch (error) {
-      toast.error(t('profile:company.error'));
+      toast.error(error.response?.data?.detail || t('profile:company.notFound'));
     } finally {
       setCompanyLoading(false);
     }
@@ -219,31 +157,18 @@ export default function Profile() {
   const handleExportData = async () => {
     setExportLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+      const res = await api.get('/api/user/export-data');
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `taic-data-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
 
-      const response = await fetch(`${API_URL}/api/user/export-data`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `taic-data-export-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-
-        toast.success(t('profile:alerts.exportSuccess'));
-      } else {
-        toast.error(t('profile:alerts.exportError'));
-      }
+      toast.success(t('profile:alerts.exportSuccess'));
     } catch (error) {
       console.error('Error exporting data:', error);
       toast.error(t('profile:alerts.exportError'));
@@ -255,24 +180,10 @@ export default function Profile() {
   const handleDeleteAccount = async () => {
     setDeleteLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
-      const response = await fetch(`${API_URL}/api/user/delete-account?anonymize=false`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        localStorage.removeItem('token');
-        document.cookie = 'token=;path=/;max-age=0';
-        toast.success(t('profile:alerts.deleteSuccess'));
-        setTimeout(() => router.push('/login'), 2000);
-      } else {
-        toast.error(t('profile:alerts.deleteError'));
-      }
+      await api.delete('/api/user/delete-account?anonymize=false');
+      await api.post('/logout', {});
+      toast.success(t('profile:alerts.deleteSuccess'));
+      setTimeout(() => router.push('/login'), 2000);
     } catch (error) {
       console.error('Error deleting account:', error);
       toast.error(t('profile:alerts.deleteError'));
@@ -299,33 +210,27 @@ export default function Profile() {
     }
     setPasswordLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const res = await fetch(`${API_URL}/api/user/change-password`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ current_password: passwordForm.current, new_password: passwordForm.newPwd })
+      await api.post('/api/user/change-password', {
+        current_password: passwordForm.current,
+        new_password: passwordForm.newPwd
       });
-      if (res.ok) {
-        toast.success(t('profile:changePassword.success'));
-        setPasswordForm({ current: '', newPwd: '', confirm: '' });
-        setShowPasswords({ current: false, newPwd: false, confirm: false });
-      } else if (res.status === 429) {
+      toast.success(t('profile:changePassword.success'));
+      setPasswordForm({ current: '', newPwd: '', confirm: '' });
+      setShowPasswords({ current: false, newPwd: false, confirm: false });
+    } catch (error) {
+      if (error.response?.status === 429) {
         toast.error(t('profile:changePassword.errorRateLimit'));
-      } else if (res.status === 401) {
+      } else if (error.response?.status === 401) {
         toast.error(t('profile:changePassword.errorIncorrect'));
       } else {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err.detail || t('profile:changePassword.errorGeneric'));
+        toast.error(error.response?.data?.detail || t('profile:changePassword.errorGeneric'));
       }
-    } catch (error) {
-      toast.error(t('profile:changePassword.errorGeneric'));
     } finally {
       setPasswordLoading(false);
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center space-y-4">
@@ -972,7 +877,7 @@ export default function Profile() {
 }
 
 export async function getServerSideProps({ locale }) {
-  // Auth check is handled client-side via useEffect + localStorage
+  // Auth check is handled client-side via useAuth hook
   return {
     props: {
       ...(await serverSideTranslations(locale, ['profile', 'common', 'errors'])),
