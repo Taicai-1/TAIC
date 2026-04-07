@@ -196,10 +196,10 @@ def get_person_context_cached(company_id: int, person_name: str, depth: int = 1)
     cache_key = f"neo4j:{company_id}:{person_name}:{depth}"
 
     try:
-        import redis
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True, socket_timeout=2)
+        from redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            raise ConnectionError("Redis unavailable")
 
         cached = r.get(cache_key)
         if cached is not None:

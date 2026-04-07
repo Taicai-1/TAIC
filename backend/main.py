@@ -19,9 +19,8 @@ import requests
 import httpx
 import openai
 import urllib3
-import redis
 import bcrypt
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request, Body, Form, Response
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request, Body, Form, Response, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -36,7 +35,7 @@ from google.auth.transport.requests import AuthorizedSession
 # Local modules
 from auth import create_access_token, verify_token, hash_password, verify_password, hash_reset_token, verify_pre_2fa_token, verify_setup_token
 from email_service import send_password_reset_email, send_invitation_email, send_verification_email, send_feedback_email
-from database import get_db, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare
+from database import get_db, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
 from rag_engine import get_answer, get_answer_with_files, process_document_for_user
 from mistral_embeddings import get_embedding
 from file_generator import FileGenerator
@@ -154,37 +153,11 @@ async def add_security_headers(request: Request, call_next):
 
 
 # ============================================================================
-# REDIS CONNECTION FOR DISTRIBUTED RATE LIMITING
+# REDIS CONNECTION (shared singleton from redis_client.py)
 # ============================================================================
+from redis_client import get_redis, get_cached_user, invalidate_user_cache
 
-def get_redis_client():
-    """Get Redis client for distributed rate limiting (Phase 1 security upgrade)
-
-    Security: Distributed rate limiting prevents bypass via instance restart
-    or multi-instance Cloud Run scaling.
-    """
-    redis_host = os.getenv("REDIS_HOST", "redis")  # "redis" for docker-compose, Cloud Memorystore for production
-    redis_port = int(os.getenv("REDIS_PORT", "6379"))
-    redis_password = os.getenv("REDIS_PASSWORD", None)  # Optional for Cloud Memorystore
-
-    try:
-        client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            password=redis_password,
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=5
-        )
-        # Test connection
-        client.ping()
-        return client
-    except Exception as e:
-        logger.error(f"Redis connection failed: {e}. Falling back to in-memory rate limiting.")
-        return None
-
-# Initialize Redis client
-redis_client = get_redis_client()
+redis_client = get_redis()
 
 # Fallback in-memory storage (only used if Redis unavailable)
 _auth_rate_limit_fallback = {}
@@ -620,6 +593,7 @@ async def register(user: UserCreateValidated, request: Request, db: Session = De
                 )
                 db.add(membership)
                 db.commit()
+                invalidate_user_cache(db_user.id)
                 logger.info(f"User {user.username} joined company {company.name} via invite_code at registration")
 
         logger.info(f"User registered: {user.username}")
@@ -762,7 +736,7 @@ async def submit_feedback(req: FeedbackRequest, request: Request, db: Session = 
     from auth import verify_token_from_cookie
 
     user_id = verify_token_from_cookie(request)
-    db_user = db.query(User).filter(User.id == int(user_id)).first()
+    db_user = get_cached_user(user_id, db)
     if not db_user:
         raise HTTPException(status_code=401, detail="User not found")
 
@@ -814,6 +788,7 @@ async def verify_email(req: VerifyEmailRequest, db: Session = Depends(get_db)):
 
         db_user.email_verified = True
         db.commit()
+        invalidate_user_cache(db_user.id)
         logger.info(f"Email verified for user {db_user.username}")
         return {"message": "Email verified successfully"}
 
@@ -890,6 +865,7 @@ async def google_oauth(req: GoogleOAuthRequest, request: Request, response: Resp
             if not db_user.oauth_provider:
                 db_user.oauth_provider = "google"
             db.commit()
+            invalidate_user_cache(db_user.id)
         else:
             # New user — create account
             username = email.split("@")[0]
@@ -975,7 +951,7 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
         user_id = verify_token_from_cookie(request)
 
         # Get user info
-        db_user = db.query(User).filter(User.id == int(user_id)).first()
+        db_user = get_cached_user(user_id, db)
         if not db_user:
             raise HTTPException(status_code=401, detail="User not found")
 
@@ -1065,6 +1041,7 @@ async def setup_2fa(request: Request, db: Session = Depends(get_db)):
     # Store encrypted secret (not yet enabled)
     db_user.totp_secret = secret
     db.commit()
+    invalidate_user_cache(db_user.id)
 
     # Generate provisioning URI for QR code
     totp = pyotp.TOTP(secret)
@@ -1120,6 +1097,7 @@ async def confirm_2fa_setup(
     db_user.totp_enabled = True
     db_user.totp_setup_completed_at = datetime.utcnow()
     db.commit()
+    invalidate_user_cache(db_user.id)
 
     # Issue full access token
     access_token = create_access_token(data={"sub": str(db_user.id)})
@@ -1161,7 +1139,7 @@ async def verify_2fa(
     if not _check_2fa_rate_limit(user_id):
         raise HTTPException(status_code=429, detail="Too many 2FA attempts. Please try again in 5 minutes.")
 
-    db_user = db.query(User).filter(User.id == int(user_id)).first()
+    db_user = get_cached_user(user_id, db)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1202,7 +1180,7 @@ async def get_2fa_status(request: Request, db: Session = Depends(get_db)):
     from auth import verify_token_from_cookie
 
     user_id = verify_token_from_cookie(request)
-    db_user = db.query(User).filter(User.id == int(user_id)).first()
+    db_user = get_cached_user(user_id, db)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1838,14 +1816,49 @@ async def upload_file(
         logger.error(f"Error uploading document: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+def _process_document_background(task_id: str, filename: str, content: bytes, user_id: int, agent_id: int):
+    """Background worker for async document processing. Uses its own DB session."""
+    db = SessionLocal()
+    try:
+        # Update status to processing
+        r = get_redis()
+        if r:
+            r.setex(f"doc_task:{task_id}", 3600, json.dumps({
+                "task_id": task_id, "status": "processing",
+                "filename": filename, "document_id": None, "error": None,
+            }))
+
+        doc_id = process_document_for_user(filename, content, user_id, db, agent_id)
+
+        logger.info(f"Background processing completed: {filename} -> doc_id={doc_id}")
+        event_tracker.track_document_upload(user_id, filename, len(content))
+
+        if r:
+            r.setex(f"doc_task:{task_id}", 3600, json.dumps({
+                "task_id": task_id, "status": "completed",
+                "filename": filename, "document_id": doc_id, "error": None,
+            }))
+    except Exception as e:
+        logger.error(f"Background document processing failed for {filename}: {e}")
+        r = get_redis()
+        if r:
+            r.setex(f"doc_task:{task_id}", 3600, json.dumps({
+                "task_id": task_id, "status": "failed",
+                "filename": filename, "document_id": None, "error": str(e),
+            }))
+    finally:
+        db.close()
+
+
 @app.post("/upload-agent")
 async def upload_file_for_agent(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db)
 ):
-    """Upload and process document for a specific agent"""
+    """Upload and process document for a specific agent (async when Redis available)"""
     if not _check_api_rate_limit(user_id, "upload", _API_UPLOAD_LIMIT):
         raise HTTPException(status_code=429, detail="Too many uploads. Please try again later.")
     try:
@@ -1859,37 +1872,66 @@ async def upload_file_for_agent(
             data_value = form.get("data")
             if isinstance(data_value, str) and data_value.startswith("agent_id="):
                 agent_id = data_value.split("=", 1)[1]
-        
+
         if not agent_id:
             logger.error(f"agent_id missing in form: {dict(form)}")
             raise HTTPException(status_code=400, detail="agent_id is required")
-        
+
         agent_id = int(agent_id)
         # Check file size (10MB limit)
         if file.size > 10 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="File too large (max 10MB)")
-        
+
         # Check file type
         allowed_types = ['.pdf', '.txt', '.docx', '.ics']
         if not any(file.filename.lower().endswith(ext) for ext in allowed_types):
             raise HTTPException(status_code=400, detail="File type not supported")
-        
+
         # Verify agent belongs to the user or user has edit permission
         agent = _user_can_edit_agent(int(user_id), agent_id, db)
-        
+
         content = await file.read()
+
+        # If Redis is available, process in background
+        r = get_redis()
+        if r is not None:
+            task_id = str(uuid4())
+            r.setex(f"doc_task:{task_id}", 3600, json.dumps({
+                "task_id": task_id, "status": "processing",
+                "filename": file.filename, "document_id": None, "error": None,
+            }))
+            background_tasks.add_task(
+                _process_document_background, task_id, file.filename, content, int(user_id), agent_id
+            )
+            logger.info(f"Document queued for async processing: {file.filename} (task_id={task_id})")
+            return {"filename": file.filename, "task_id": task_id, "agent_id": agent_id, "status": "processing"}
+
+        # Fallback: synchronous processing when Redis is unavailable
         doc_id = process_document_for_user(file.filename, content, int(user_id), db, agent_id)
-        
-        logger.info(f"Document uploaded for user {user_id}, agent {agent_id}: {file.filename}")
+        logger.info(f"Document uploaded (sync) for user {user_id}, agent {agent_id}: {file.filename}")
         event_tracker.track_document_upload(int(user_id), file.filename, len(content))
-        
         return {"filename": file.filename, "document_id": doc_id, "agent_id": agent_id, "status": "uploaded"}
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error uploading document: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/upload-status/{task_id}")
+async def get_upload_status(
+    task_id: str,
+    user_id: str = Depends(verify_token),
+):
+    """Poll the status of an async document upload task."""
+    r = get_redis()
+    if r is None:
+        raise HTTPException(status_code=503, detail="Status tracking unavailable")
+    data = r.get(f"doc_task:{task_id}")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Task not found or expired")
+    return json.loads(data)
 
 # Security: Debug endpoints /test-jwt, /test-auth, /test-openai, /debug/whoami have been removed
 # These endpoints exposed sensitive information (JWT secret length, ADC credentials, API connectivity)
@@ -2766,7 +2808,7 @@ async def add_notion_link(
         raise HTTPException(status_code=400, detail="url is required")
 
     from notion_client import extract_notion_id, fetch_page_title, fetch_database_title, get_notion_token
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = get_cached_user(user_id, db)
     user_company_id = user.company_id if user else None
     if not get_notion_token(user_company_id):
         raise HTTPException(status_code=503, detail="Notion integration is not configured. Ask your organization owner to configure it.")
@@ -2876,7 +2918,7 @@ async def preview_notion_link(
         raise HTTPException(status_code=404, detail="Notion link not found")
 
     from notion_client import fetch_page_content, fetch_database_entries, blocks_to_text, database_entries_to_text
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = get_cached_user(user_id, db)
     user_company_id = user.company_id if user else None
 
     try:
@@ -2972,7 +3014,7 @@ async def ingest_notion_link(
         raise HTTPException(status_code=409, detail="This Notion link has already been ingested")
 
     from notion_client import fetch_page_content, fetch_database_entries, blocks_to_text, database_entries_to_text
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = get_cached_user(user_id, db)
     user_company_id = user.company_id if user else None
 
     try:
@@ -3050,7 +3092,7 @@ async def resync_notion_link(
 
     # Re-fetch content from Notion
     from notion_client import fetch_page_content, fetch_database_entries, blocks_to_text, database_entries_to_text
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = get_cached_user(user_id, db)
     user_company_id = user.company_id if user else None
 
     try:
@@ -3675,6 +3717,7 @@ async def reset_password(req: ResetPasswordRequest, request: Request, db: Sessio
     user.hashed_password = hash_password(req.new_password)
     reset_token.used = True
     db.commit()
+    invalidate_user_cache(user.id)
 
     logger.info(f"Password reset successful for user {user.email}")
     return {"message": "Mot de passe réinitialisé avec succès"}
@@ -4467,6 +4510,7 @@ async def create_company(
         membership = CompanyMembership(user_id=user.id, company_id=company.id, role="owner")
         db.add(membership)
         db.commit()
+        invalidate_user_cache(user.id)
 
     return {"company": {"id": company.id, "name": company.name, "neo4j_enabled": company.neo4j_enabled, "invite_code": company.invite_code}}
 
@@ -4524,6 +4568,7 @@ async def affiliate_user_to_company(
 
     user.company_id = company.id
     db.commit()
+    invalidate_user_cache(user.id)
 
     return {"company": {"id": company.id, "name": company.name, "neo4j_enabled": company.neo4j_enabled}}
 
@@ -4652,6 +4697,7 @@ async def join_company(
     membership = CompanyMembership(user_id=uid, company_id=company_id, role=role)
     db.add(membership)
     db.commit()
+    invalidate_user_cache(uid)
 
     company = db.query(Company).filter(Company.id == company_id).first()
     return {"message": f"You have joined {company.name}", "company": {"id": company.id, "name": company.name, "role": role}}
@@ -4792,6 +4838,7 @@ async def remove_member(
 
     db.delete(target)
     db.commit()
+    invalidate_user_cache(target.user_id)
 
     return {"message": "Member removed"}
 
@@ -4821,6 +4868,7 @@ async def leave_company(
 
     db.delete(membership)
     db.commit()
+    invalidate_user_cache(uid)
 
     return {"message": "You have left the organization"}
 
@@ -5125,7 +5173,7 @@ async def list_neo4j_persons(
     db: Session = Depends(get_db)
 ):
     """List Person nodes from Neo4j for the user's company."""
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = get_cached_user(user_id, db)
     if not user or not user.company_id:
         return {"persons": []}
 
@@ -5198,6 +5246,7 @@ async def change_password(
 
     db_user.hashed_password = hash_password(body.new_password)
     db.commit()
+    invalidate_user_cache(db_user.id)
 
     return {"message": "Password changed successfully"}
 
@@ -5222,7 +5271,7 @@ async def export_user_data(
     - Team memberships
     """
     try:
-        user = db.query(User).filter(User.id == int(user_id)).first()
+        user = get_cached_user(user_id, db)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -5468,6 +5517,7 @@ async def delete_user_account(
                 agent.biographie = "ANONYMIZED"
 
             db.commit()
+            invalidate_user_cache(user.id)
             logger.info(f"User {user_id} account anonymized (GDPR Art. 17)")
             return {
                 "message": "Account anonymized successfully",
@@ -5509,6 +5559,7 @@ async def delete_user_account(
             # Finally delete user
             db.delete(user)
             db.commit()
+            invalidate_user_cache(user_id)
 
             logger.info(f"User {user_id} account completely deleted (GDPR Art. 17)")
             return {

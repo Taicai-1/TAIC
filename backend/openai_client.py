@@ -95,24 +95,68 @@ try:
 except Exception:
     DEFAULT_MAX_TOKENS = 128000
 
+import hashlib
+
+_EMB_CACHE_TTL = 86400  # 24 hours
+
+
+def _emb_cache_key(text: str) -> str:
+    return f"emb:openai:{hashlib.md5(text.encode()).hexdigest()[:16]}"
+
+
+def _get_cached_embedding(text: str) -> list | None:
+    try:
+        from redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return None
+        cached = r.get(_emb_cache_key(text))
+        if cached is not None:
+            return json.loads(cached)
+    except Exception as e:
+        logger.debug(f"OpenAI embedding cache read failed: {e}")
+    return None
+
+
+def _set_cached_embedding(text: str, embedding: list):
+    try:
+        from redis_client import get_redis
+        r = get_redis()
+        if r is None:
+            return
+        r.setex(_emb_cache_key(text), _EMB_CACHE_TTL, json.dumps(embedding))
+    except Exception as e:
+        logger.debug(f"OpenAI embedding cache write failed: {e}")
+
+
 def get_embedding_fast(text: str) -> list:
     """Get embedding for text with fast timeout"""
+    cached = _get_cached_embedding(text)
+    if cached is not None:
+        return cached
+
     try:
         response = client.embeddings.create(
             input=text,
             model="text-embedding-3-small"
         )
-        return response.data[0].embedding
+        result = response.data[0].embedding
+        _set_cached_embedding(text, result)
+        return result
     except Exception as e:
         logger.error(f"Error getting fast embedding: {e}")
-        # Return dummy embedding immediately
+        # Return dummy embedding immediately — do NOT cache dummy vectors
         return [0.0] * 1536  # text-embedding-3-small has 1536 dimensions
 
 def get_embedding(text: str) -> list:
     """Get embedding for text with robust retry logic"""
+    cached = _get_cached_embedding(text)
+    if cached is not None:
+        return cached
+
     import time
     max_retries = 5
-    
+
     for attempt in range(max_retries):
         try:
             logger.info(f"Attempting to get embedding (attempt {attempt + 1}/{max_retries})")
@@ -121,7 +165,9 @@ def get_embedding(text: str) -> list:
                 model="text-embedding-3-small"
             )
             logger.info("Successfully got embedding from OpenAI")
-            return response.data[0].embedding
+            result = response.data[0].embedding
+            _set_cached_embedding(text, result)
+            return result
         except Exception as e:
             logger.error(f"Error getting embedding (attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:

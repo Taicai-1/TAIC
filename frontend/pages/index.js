@@ -271,19 +271,47 @@ export default function CompanionSettings() {
     }
   };
 
+  const pollUploadStatus = async (taskId, agentId) => {
+    const maxAttempts = 60;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const res = await api.get(`/upload-status/${taskId}`);
+        const { status, error } = res.data;
+        if (status === 'completed') {
+          toast.success(t('agents:toast.documentAdded'));
+          const docs = await api.get(`/user/documents?agent_id=${agentId}`);
+          setAgentDocuments(docs.data.documents || []);
+          return;
+        }
+        if (status === 'failed') {
+          toast.error(error || t('agents:toast.documentAddError'));
+          return;
+        }
+      } catch { /* keep polling */ }
+    }
+    toast.error(t('agents:toast.documentAddError'));
+  };
+
   const uploadDocument = async (file) => {
     setUploadingDoc(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("agent_id", currentAgent.id);
-      await api.post(`/upload-agent`, fd, {
+      const response = await api.post(`/upload-agent`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      toast.success(t('agents:toast.documentAdded'));
-      await new Promise(r => setTimeout(r, 500));
-      const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
-      setAgentDocuments(res.data.documents || []);
+      const data = response.data;
+      if (data.status === 'processing' && data.task_id) {
+        toast(t('agents:toast.documentProcessing', 'Document en cours de traitement...'));
+        await pollUploadStatus(data.task_id, currentAgent.id);
+      } else {
+        toast.success(t('agents:toast.documentAdded'));
+        await new Promise(r => setTimeout(r, 500));
+        const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
+        setAgentDocuments(res.data.documents || []);
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || t('agents:toast.documentAddError'));
     } finally { setUploadingDoc(false); }

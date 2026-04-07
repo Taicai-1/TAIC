@@ -1,5 +1,6 @@
 
 # Contient la logique RAG améliorée
+import hashlib
 import json
 import logging
 import time
@@ -16,8 +17,52 @@ from imagen_gcs import upload_generated_image
 
 logger = logging.getLogger(__name__)
 
-# Cache simple pour les réponses récentes
+# In-memory fallback cache (used when Redis is unavailable)
 _answer_cache = {}
+
+_RAG_CACHE_TTL = 300  # 5 minutes
+
+
+def _rag_cache_key(user_id: int, question: str, doc_ids, agent_type: str) -> str:
+    q_hash = hashlib.md5(question.encode()).hexdigest()[:12]
+    d_hash = hashlib.md5(str(doc_ids).encode()).hexdigest()[:12]
+    return f"rag_cache:{user_id}:{q_hash}:{d_hash}:{agent_type}"
+
+
+def _get_rag_cache(key: str):
+    """Try Redis first, fall back to in-memory dict."""
+    try:
+        from redis_client import get_redis
+        r = get_redis()
+        if r is not None:
+            cached = r.get(key)
+            if cached is not None:
+                return json.loads(cached)
+            return None
+    except Exception as e:
+        logger.debug(f"RAG cache Redis read failed: {e}")
+    # Fallback: in-memory
+    if key in _answer_cache:
+        cached_time, cached_result = _answer_cache[key]
+        if datetime.now().timestamp() - cached_time < _RAG_CACHE_TTL:
+            return cached_result
+    return None
+
+
+def _set_rag_cache(key: str, result):
+    """Write to Redis and in-memory fallback."""
+    try:
+        from redis_client import get_redis
+        r = get_redis()
+        if r is not None:
+            r.setex(key, _RAG_CACHE_TTL, json.dumps(result))
+    except Exception as e:
+        logger.debug(f"RAG cache Redis write failed: {e}")
+    # Always keep in-memory fallback
+    _answer_cache[key] = (datetime.now().timestamp(), result)
+    if len(_answer_cache) > 10:
+        oldest_key = min(_answer_cache.keys(), key=lambda k: _answer_cache[k][0])
+        del _answer_cache[oldest_key]
 
 def get_last_message_for_agent(agent_id: int, db: Session) -> str:
     """Retourne le dernier message envoyé à l'agent (mémoire courte par agent)."""
@@ -35,52 +80,42 @@ def get_last_message_for_agent(agent_id: int, db: Session) -> str:
 def get_answer_with_files(question: str, user_id: int, db: Session, selected_doc_ids: List[int] = None, agent_type: str = None) -> Dict[str, Any]:
     """Get answer using RAG with file generation capabilities"""
     try:
-        # Créer une clé de cache
-        cache_key = f"{user_id}_{hash(question)}_{hash(str(selected_doc_ids))}_{agent_type}"
-        
-        # Vérifier le cache (garde en cache pendant 5 minutes)
-        if cache_key in _answer_cache:
-            cached_time, cached_result = _answer_cache[cache_key]
-            if datetime.now().timestamp() - cached_time < 300:  # 5 minutes
-                logger.info("Returning cached answer")
-                return cached_result
-        
+        cache_key = _rag_cache_key(user_id, question, selected_doc_ids, agent_type)
+
+        cached = _get_rag_cache(cache_key)
+        if cached is not None:
+            logger.info("Returning cached answer")
+            return cached
+
         # Get the regular answer first
         answer = get_answer(question, user_id, db, selected_doc_ids, agent_type)
-        
+
         # Initialize file generator
         file_gen = FileGenerator()
-        
+
         # Detect if user wants file generation
         generation_info = file_gen.detect_generation_request(question, answer)
-        
+
         # If no table detected but user asked for structured data, create sample data
         if (generation_info['generate_csv'] or generation_info['generate_pdf']) and not generation_info['table_data']:
             sample_data = file_gen.create_sample_data(agent_type or 'sales')
             generation_info['table_data'] = sample_data
             generation_info['has_table'] = True
-            
+
         # Format answer with table if needed
         if generation_info['has_table'] and generation_info['table_data']:
             generation_info['formatted_answer'] = file_gen._format_answer_with_table(answer, generation_info['table_data'])
         else:
             generation_info['formatted_answer'] = answer
-            
+
         result = {
             'answer': generation_info['formatted_answer'],
             'generation_info': generation_info
         }
-        
-        # Mettre en cache le résultat
-        _answer_cache[cache_key] = (datetime.now().timestamp(), result)
-        
-        # Nettoyer le cache (garder seulement les 10 dernières entrées)
-        if len(_answer_cache) > 10:
-            oldest_key = min(_answer_cache.keys(), key=lambda k: _answer_cache[k][0])
-            del _answer_cache[oldest_key]
-            
+
+        _set_rag_cache(cache_key, result)
         return result
-        
+
     except Exception as e:
         logger.error(f"Error getting answer with files: {e}")
         raise Exception(f"Erreur lors du traitement de votre question : {str(e)}")
