@@ -34,7 +34,7 @@ from google.auth.transport.requests import AuthorizedSession
 
 # Local modules
 from auth import create_access_token, verify_token, hash_password, verify_password, hash_reset_token, verify_pre_2fa_token, verify_setup_token
-from email_service import send_password_reset_email, send_invitation_email, send_verification_email, send_feedback_email
+from email_service import send_password_reset_email, send_invitation_email, send_verification_email, send_feedback_email, send_agent_share_email, send_agent_unshare_email, send_agent_share_updated_email
 from database import get_db, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
 from rag_engine import get_answer, get_answer_with_files, process_document_for_user
 from mistral_embeddings import get_embedding
@@ -5058,6 +5058,24 @@ async def share_agent(
     db.add(share)
     db.commit()
 
+    # Notify the recipient by email (non-blocking: share succeeds even if email fails)
+    try:
+        target_user = db.query(User).filter(User.id == target_user_id).first()
+        sharer_user = db.query(User).filter(User.id == uid).first()
+        if target_user and sharer_user:
+            frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
+            chat_link = f"{frontend_url}/chat/{agent_id}"
+            send_agent_share_email(
+                target_user.email,
+                sharer_user.username,
+                agent.name,
+                can_edit,
+                chat_link
+            )
+            logger.info(f"Share notification email sent to {target_user.email} for agent {agent_id}")
+    except Exception as e:
+        logger.warning(f"Failed to send share notification email for agent {agent_id}: {e}")
+
     return {"message": "Agent shared successfully"}
 
 
@@ -5093,6 +5111,21 @@ async def unshare_agent(
     db.delete(share)
     db.commit()
 
+    # Notify the target user by email, unless they removed themselves
+    if not is_self:
+        try:
+            target_user = db.query(User).filter(User.id == target_user_id).first()
+            sharer_user = db.query(User).filter(User.id == uid).first()
+            if target_user and sharer_user:
+                send_agent_unshare_email(
+                    target_user.email,
+                    sharer_user.username,
+                    agent.name
+                )
+                logger.info(f"Unshare notification email sent to {target_user.email} for agent {agent_id}")
+        except Exception as e:
+            logger.warning(f"Failed to send unshare notification email for agent {agent_id}: {e}")
+
     return {"message": "Share removed"}
 
 
@@ -5125,9 +5158,32 @@ async def update_agent_share(
         raise HTTPException(status_code=404, detail="Share not found")
 
     body = await request.json()
+    permission_changed = False
     if "can_edit" in body:
-        share.can_edit = bool(body["can_edit"])
+        new_can_edit = bool(body["can_edit"])
+        if new_can_edit != share.can_edit:
+            share.can_edit = new_can_edit
+            permission_changed = True
     db.commit()
+
+    # Notify target user only when the permission actually changed
+    if permission_changed:
+        try:
+            target_user = db.query(User).filter(User.id == target_user_id).first()
+            sharer_user = db.query(User).filter(User.id == uid).first()
+            if target_user and sharer_user:
+                frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
+                chat_link = f"{frontend_url}/chat/{agent_id}"
+                send_agent_share_updated_email(
+                    target_user.email,
+                    sharer_user.username,
+                    agent.name,
+                    share.can_edit,
+                    chat_link
+                )
+                logger.info(f"Permission change notification email sent to {target_user.email} for agent {agent_id}")
+        except Exception as e:
+            logger.warning(f"Failed to send permission change notification email for agent {agent_id}: {e}")
 
     return {"message": "Share updated", "can_edit": share.can_edit}
 

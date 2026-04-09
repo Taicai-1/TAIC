@@ -205,6 +205,99 @@ def send_recap_email(to_email: str, agent_name: str, html: str):
     send_email(to_email, f"Recap Hebdomadaire - {agent_name}", html)
 
 
+def send_agent_share_email(to_email: str, sharer_name: str, agent_name: str, can_edit: bool, chat_link: str):
+    """Notify a user that a companion has been shared with them."""
+    access_label = "le consulter et le modifier" if can_edit else "le consulter"
+    content = f"""
+<h2 style="color:#1f2937; margin:0 0 16px 0; font-size:20px;">
+  Un nouveau companion a &eacute;t&eacute; partag&eacute; avec vous
+</h2>
+<p style="color:#4b5563; font-size:15px; line-height:1.6; margin:0 0 24px 0;">
+  <strong>{sharer_name}</strong> vient de partager le companion
+  <strong>{agent_name}</strong> avec vous. Vous pouvez maintenant {access_label}
+  depuis votre tableau de bord.
+</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center" style="padding:8px 0 24px 0;">
+      <a href="{chat_link}"
+         style="display:inline-block; background:linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+                color:#ffffff; text-decoration:none; padding:14px 32px; border-radius:8px;
+                font-size:15px; font-weight:600; letter-spacing:0.3px;">
+        Ouvrir {agent_name}
+      </a>
+    </td>
+  </tr>
+</table>
+<p style="color:#9ca3af; font-size:13px; line-height:1.5; margin:0;">
+  Cet email a &eacute;t&eacute; envoy&eacute; parce qu'un membre de votre organisation
+  a partag&eacute; un companion avec vous.
+</p>"""
+
+    html = _wrap_template(content, preheader=f"{sharer_name} vous a partagé {agent_name}")
+    send_email(to_email, f"{sharer_name} vous a partagé un companion", html)
+
+
+def send_agent_unshare_email(to_email: str, sharer_name: str, agent_name: str):
+    """Notify a user that their access to a companion has been revoked."""
+    content = f"""
+<h2 style="color:#1f2937; margin:0 0 16px 0; font-size:20px;">
+  Acc&egrave;s &agrave; un companion r&eacute;voqu&eacute;
+</h2>
+<p style="color:#4b5563; font-size:15px; line-height:1.6; margin:0 0 24px 0;">
+  <strong>{sharer_name}</strong> a retir&eacute; votre acc&egrave;s au companion
+  <strong>{agent_name}</strong>. Ce companion n'appara&icirc;tra plus dans votre
+  tableau de bord.
+</p>
+<p style="color:#9ca3af; font-size:13px; line-height:1.5; margin:0;">
+  Si vous pensez qu'il s'agit d'une erreur, contactez votre administrateur d'organisation.
+</p>"""
+
+    html = _wrap_template(content, preheader=f"Votre accès à {agent_name} a été révoqué")
+    send_email(to_email, f"Votre accès à {agent_name} a été révoqué", html)
+
+
+def send_agent_share_updated_email(to_email: str, sharer_name: str, agent_name: str, can_edit: bool, chat_link: str):
+    """Notify a user that their permission on a shared companion has changed."""
+    if can_edit:
+        heading = "Permissions d'&eacute;dition accord&eacute;es"
+        message = (
+            f"<strong>{sharer_name}</strong> vous a accord&eacute; la permission de "
+            f"<strong>modifier</strong> le companion <strong>{agent_name}</strong>. "
+            f"Vous pouvez d&eacute;sormais modifier ses r&eacute;glages et ses documents."
+        )
+    else:
+        heading = "Permissions d'&eacute;dition retir&eacute;es"
+        message = (
+            f"<strong>{sharer_name}</strong> a retir&eacute; votre permission de "
+            f"modifier le companion <strong>{agent_name}</strong>. Vous pouvez toujours "
+            f"le consulter mais vous ne pouvez plus le modifier."
+        )
+
+    content = f"""
+<h2 style="color:#1f2937; margin:0 0 16px 0; font-size:20px;">
+  {heading}
+</h2>
+<p style="color:#4b5563; font-size:15px; line-height:1.6; margin:0 0 24px 0;">
+  {message}
+</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center" style="padding:8px 0 24px 0;">
+      <a href="{chat_link}"
+         style="display:inline-block; background:linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+                color:#ffffff; text-decoration:none; padding:14px 32px; border-radius:8px;
+                font-size:15px; font-weight:600; letter-spacing:0.3px;">
+        Ouvrir {agent_name}
+      </a>
+    </td>
+  </tr>
+</table>"""
+
+    html = _wrap_template(content, preheader=f"Vos permissions sur {agent_name} ont été modifiées")
+    send_email(to_email, f"Vos permissions sur {agent_name} ont été modifiées", html)
+
+
 def send_feedback_email(from_user_email: str, username: str, feedback_type: str, message: str):
     """Send user feedback to contact@taic.co with Reply-To set to the user's email."""
     type_labels = {
