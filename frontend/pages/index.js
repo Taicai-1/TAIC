@@ -583,7 +583,6 @@ export default function CompanionSettings() {
               <textarea
                 className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white resize-y"
                 rows="3"
-                placeholder={t('agents:form.biography.placeholder')}
                 value={form.biographie}
                 onChange={e => setForm(f => ({ ...f, biographie: e.target.value }))}
               />
