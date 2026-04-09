@@ -12,7 +12,6 @@ Security considerations:
 """
 
 import re
-import html
 from typing import Optional
 from pydantic import BaseModel, Field, validator
 from fastapi import HTTPException
@@ -73,9 +72,12 @@ SQL_INJECTION_PATTERNS = [
 
 def sanitize_html(text: str) -> str:
     """
-    Remove HTML tags and escape special characters to prevent XSS.
+    Remove HTML/script tags from user input to prevent XSS.
 
-    Security: Prevents stored XSS attacks in user-generated content.
+    Security: Prevents stored XSS attacks by stripping script and HTML tags.
+    Safe characters (quotes, apostrophes, &) are preserved — the frontend
+    (React) auto-escapes all rendered strings, so entity encoding here
+    would only corrupt legitimate content like "C'est quoi ?".
     """
     if not text:
         return text
@@ -85,9 +87,6 @@ def sanitize_html(text: str) -> str:
 
     # Remove all HTML tags
     text = HTML_TAG_PATTERN.sub('', text)
-
-    # Escape remaining HTML entities
-    text = html.escape(text)
 
     return text
 

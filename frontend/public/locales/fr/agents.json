@@ -49,7 +49,7 @@
       "placeholder": "Contexte"
     },
     "biography": {
-      "placeholder": "Biographie"
+      "placeholder": "Description"
     },
     "type": {
       "label": "Type de companion :"
@@ -162,7 +162,7 @@
     "openChat": "Ouvrir le chat",
     "save": "Enregistrer",
     "identity": "Identité & Personnalité",
-    "identityDesc": "Définissez le contexte et la biographie de votre companion",
+    "identityDesc": "Définissez le contexte et la description de votre companion",
     "configuration": "Configuration",
     "configurationDesc": "Type et paramètres avancés",
     "neo4jDesc": "Connectez votre companion à un graphe de connaissances Neo4j",
