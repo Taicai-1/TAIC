@@ -112,6 +112,40 @@ def resolve_llm_provider(agent_type: str) -> str:
     return _AGENT_TYPE_PROVIDER_MAP.get(agent_type, "mistral")
 
 
+# ============================================================================
+# TENANT ISOLATION MIDDLEWARE (sets company_id for RLS)
+# ============================================================================
+@app.middleware("http")
+async def tenant_isolation_middleware(request: Request, call_next):
+    """Extract company_id from JWT and store in request.state for RLS."""
+    request.state.company_id = None
+    try:
+        import jwt as pyjwt
+        token = request.cookies.get("token")
+        if not token:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+        if token:
+            secret = os.getenv("JWT_SECRET_KEY", "").strip()
+            payload = pyjwt.decode(token, secret, algorithms=["HS256"])
+            user_id = payload.get("sub")
+            token_type = payload.get("type")
+            # Skip restricted tokens (pre-2FA)
+            if user_id and token_type not in ("pre_2fa", "needs_2fa_setup"):
+                db = SessionLocal()
+                try:
+                    user = db.query(User).filter(User.id == int(user_id)).first()
+                    if user and user.company_id:
+                        request.state.company_id = user.company_id
+                finally:
+                    db.close()
+    except Exception:
+        pass  # Unauthenticated requests — company_id stays None, RLS returns empty
+    response = await call_next(request)
+    return response
+
+
 # Security headers middleware
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):

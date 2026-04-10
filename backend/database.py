@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import UniqueConstraint
 from pgvector.sqlalchemy import Vector
 from datetime import datetime, timedelta
+from fastapi import Request
 
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
@@ -427,10 +428,17 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-def get_db():
-    """Database dependency for FastAPI"""
+def get_db(request: Request = None):
+    """Database dependency for FastAPI.
+    If a request is provided and has company_id in state (set by tenant middleware),
+    sets SET LOCAL app.company_id for PostgreSQL RLS enforcement."""
     db = SessionLocal()
     try:
+        # Set RLS tenant context if available
+        if request is not None and hasattr(request, 'state') and hasattr(request.state, 'company_id'):
+            cid = request.state.company_id
+            if cid is not None:
+                db.execute(text(f"SET LOCAL app.company_id = '{int(cid)}'"))
         yield db
     finally:
         db.close()
