@@ -1,6 +1,7 @@
 import os
 import logging
 import secrets
+import contextvars
 from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Boolean, text
 from sqlalchemy.ext.declarative import declarative_base
@@ -8,7 +9,9 @@ from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import UniqueConstraint
 from pgvector.sqlalchemy import Vector
 from datetime import datetime, timedelta
-from fastapi import Request
+
+# Tenant context variable — set by middleware, read by get_db
+_current_company_id: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar('company_id', default=None)
 
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
@@ -428,17 +431,23 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-def get_db(request: Request = None):
+def set_current_company_id(company_id: Optional[int]):
+    """Set the tenant company_id for the current async context (called by middleware)."""
+    _current_company_id.set(company_id)
+
+
+def get_db():
     """Database dependency for FastAPI.
-    If a request is provided and has company_id in state (set by tenant middleware),
-    sets SET LOCAL app.company_id for PostgreSQL RLS enforcement."""
+    Reads company_id from contextvars (set by tenant middleware) and
+    executes SET LOCAL app.company_id for PostgreSQL RLS enforcement."""
     db = SessionLocal()
     try:
-        # Set RLS tenant context if available
-        if request is not None and hasattr(request, 'state') and hasattr(request.state, 'company_id'):
-            cid = request.state.company_id
-            if cid is not None:
+        cid = _current_company_id.get()
+        if cid is not None:
+            try:
                 db.execute(text(f"SET LOCAL app.company_id = '{int(cid)}'"))
+            except Exception as e:
+                logger.warning(f"get_db: failed to SET LOCAL app.company_id={cid}: {e}")
         yield db
     finally:
         db.close()

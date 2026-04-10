@@ -35,7 +35,7 @@ from google.auth.transport.requests import AuthorizedSession
 # Local modules
 from auth import create_access_token, verify_token, hash_password, verify_password, hash_reset_token, verify_pre_2fa_token, verify_setup_token
 from email_service import send_password_reset_email, send_invitation_email, send_verification_email, send_feedback_email, send_agent_share_email, send_agent_unshare_email, send_agent_share_updated_email
-from database import get_db, get_db_with_tenant, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
+from database import get_db, get_db_with_tenant, set_current_company_id, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
 from rag_engine import get_answer, get_answer_with_files, process_document_for_user
 from mistral_embeddings import get_embedding
 from file_generator import FileGenerator
@@ -113,12 +113,12 @@ def resolve_llm_provider(agent_type: str) -> str:
 
 
 # ============================================================================
-# TENANT ISOLATION MIDDLEWARE (sets company_id for RLS)
+# TENANT ISOLATION MIDDLEWARE (sets company_id for RLS via contextvars)
 # ============================================================================
 @app.middleware("http")
 async def tenant_isolation_middleware(request: Request, call_next):
-    """Extract company_id from JWT and store in request.state for RLS."""
-    request.state.company_id = None
+    """Extract company_id from JWT and set it in contextvars for RLS."""
+    set_current_company_id(None)
     try:
         import jwt as pyjwt
         token = request.cookies.get("token")
@@ -137,7 +137,7 @@ async def tenant_isolation_middleware(request: Request, call_next):
                 try:
                     user = db.query(User).filter(User.id == int(user_id)).first()
                     if user and user.company_id:
-                        request.state.company_id = user.company_id
+                        set_current_company_id(user.company_id)
                 finally:
                     db.close()
     except Exception:
