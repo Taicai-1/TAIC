@@ -3,7 +3,7 @@ import logging
 import secrets
 import contextvars
 from typing import List, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Boolean, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Boolean, text, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import UniqueConstraint
@@ -430,6 +430,16 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# Re-apply tenant context on every new transaction (including after commit/rollback).
+# This ensures SET LOCAL survives across db.commit() + db.refresh() sequences.
+@event.listens_for(SessionLocal, "after_begin")
+def _set_tenant_on_begin(session, transaction, connection):
+    cid = _current_company_id.get()
+    if cid is not None:
+        connection.execute(text(f"SET LOCAL app.company_id = '{int(cid)}'"))
+
 
 def set_current_company_id(company_id: Optional[int]):
     """Set the tenant company_id for the current async context (called by middleware)."""

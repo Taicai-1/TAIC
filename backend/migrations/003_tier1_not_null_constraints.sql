@@ -11,12 +11,17 @@
 -- This makes it impossible to insert a row without company_id, even if the
 -- application code has a bug. Belt-and-suspenders with RLS.
 --
+-- NOTE: users.company_id stays NULLABLE because:
+--   - New users register before joining an organization
+--   - Removing a member sets user.company_id = NULL
+--   - RLS on the users table is NOT needed (users see only themselves via JWT)
+--
 -- This migration is idempotent: safe to re-run.
 -- ============================================================================
 
 BEGIN;
 
-ALTER TABLE users              ALTER COLUMN company_id SET NOT NULL;
+-- users is intentionally excluded — company_id must remain nullable
 ALTER TABLE agents             ALTER COLUMN company_id SET NOT NULL;
 ALTER TABLE documents          ALTER COLUMN company_id SET NOT NULL;
 ALTER TABLE document_chunks    ALTER COLUMN company_id SET NOT NULL;
@@ -38,5 +43,6 @@ COMMIT;
 --     AND table_schema = 'public'
 --   ORDER BY table_name;
 --
--- All rows should show is_nullable = 'NO'.
+-- users should show is_nullable = 'YES'.
+-- All other tables should show is_nullable = 'NO'.
 -- ============================================================================
