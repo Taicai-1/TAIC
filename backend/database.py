@@ -223,6 +223,7 @@ class Agent(Base):
     llm_provider = Column(String(32), nullable=True, default=None)
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     embedding = Column(Text, nullable=True)  # Embedding du contexte (JSON ou array)
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -273,6 +274,7 @@ class AgentShare(Base):
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     shared_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     can_edit = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -290,6 +292,7 @@ class Document(Base):
     content = Column(Text)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)  # Documents peuvent être liés à un agent spécifique
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     created_at = Column(DateTime, default=datetime.utcnow)
     gcs_url = Column(String(512), nullable=True)  # URL du fichier dans le bucket GCS
     document_type = Column(String(20), nullable=False, default="rag", server_default="rag")  # 'rag' or 'traceability'
@@ -307,6 +310,7 @@ class DocumentChunk(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation (critical for RAG)
     chunk_text = Column(Text, nullable=False)
     embedding = Column(Text, nullable=True)  # Legacy JSON string (kept for backward compat)
     embedding_vec = Column(Vector(1024), nullable=True)  # pgvector native column (Mistral 1024d)
@@ -323,6 +327,7 @@ class AgentAction(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     action_type = Column(String(100), nullable=False)
     params = Column(Text, nullable=True)
     result = Column(Text, nullable=True)
@@ -343,6 +348,7 @@ class Team(Base):
     # Store action agent ids as a JSON array string
     action_agent_ids = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
@@ -355,6 +361,7 @@ class Conversation(Base):
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     title = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -368,6 +375,7 @@ class Message(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     role = Column(String(20), nullable=False)  # 'user' ou 'agent'
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
@@ -382,6 +390,7 @@ class NotionLink(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     notion_resource_id = Column(String(64), nullable=False)
     resource_type = Column(String(20), nullable=False)  # 'page' or 'database'
     label = Column(String(255), nullable=True)
@@ -396,6 +405,7 @@ class WeeklyRecapLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     status = Column(String(20), nullable=False)  # 'success', 'error', 'no_data'
     error_message = Column(Text, nullable=True)
     recap_content = Column(Text, nullable=True)
@@ -424,6 +434,17 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def get_db_with_tenant(user_id: int, db: Session):
+    """Set the RLS session variable for the current tenant.
+    Call this at the start of any request that needs tenant isolation.
+    Returns the user's company_id (or None for legacy users)."""
+    user = db.query(User).filter(User.id == user_id).first()
+    company_id = user.company_id if user else None
+    if company_id is not None:
+        db.execute(text(f"SET LOCAL app.company_id = '{company_id}'"))
+    return company_id
 
 def init_db():
     """Initialize database tables"""
@@ -490,6 +511,17 @@ def ensure_columns():
         # Email verification & OAuth
         ("users", "email_verified", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("users", "oauth_provider", "VARCHAR(20)"),
+        # Tier 1 data sovereignty: company_id tenant isolation on all tenant-scoped tables
+        ("agents", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("agent_shares", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("documents", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("document_chunks", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("agent_actions", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("teams", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("conversations", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("messages", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("notion_links", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("weekly_recap_logs", "company_id", "INTEGER REFERENCES companies(id)"),
     ]
     try:
         with engine.connect() as conn:

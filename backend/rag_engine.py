@@ -204,9 +204,14 @@ def get_answer(
     selected_doc_ids: List[int] = None,
     agent_id: int = None,
     history: list = None,
-    model_id: str = None
+    model_id: str = None,
+    company_id: int = None,
 ) -> str:
-    """Get answer using RAG for specific user with OpenAI - always using embeddings, memory, and custom model if provided"""
+    """Get answer using RAG for specific user with OpenAI - always using embeddings, memory, and custom model if provided.
+
+    Tier 1: company_id is the tenant boundary used by RAG search. If not supplied,
+    it is resolved from agent_id or user_id inside search_similar_texts_for_user.
+    """
     try:
         # Get documents to consider for RAG
         # If selected_doc_ids provided, use those (and respect agent_id if present)
@@ -322,7 +327,15 @@ def get_answer(
         # If a specific document was mentioned, get more chunks from it
         top_k = 20 if mentioned_doc_id else 8
         logger.info(f"Searching similar texts for user {user_id} (top_k={top_k})")
-        context_results = search_similar_texts_for_user(query_embedding, user_id, db, top_k=top_k, selected_doc_ids=selected_doc_ids, agent_id=agent_id)
+        context_results = search_similar_texts_for_user(
+            query_embedding,
+            user_id,
+            db,
+            top_k=top_k,
+            selected_doc_ids=selected_doc_ids,
+            agent_id=agent_id,
+            company_id=company_id,
+        )
 
         # Préparer le contexte RAG
         context_by_document = {}
@@ -396,9 +409,46 @@ def get_answer(
     except Exception as e:
         logger.error(f"Error getting answer: {e}")
         raise Exception(f"Erreur lors du traitement de votre question avec l'API OpenAI : {str(e)}")
-def search_similar_texts_for_user(query_embedding: List[float], user_id: int, db: Session, top_k: int = 3, selected_doc_ids: List[int] = None, agent_id: int = None) -> List[dict]:
-    """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context."""
+def search_similar_texts_for_user(
+    query_embedding: List[float],
+    user_id: int,
+    db: Session,
+    top_k: int = 3,
+    selected_doc_ids: List[int] = None,
+    agent_id: int = None,
+    company_id: int = None,
+) -> List[dict]:
+    """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context.
+
+    Tier 1 tenant isolation:
+      - company_id is the tenant boundary for the RAG search.
+      - If caller supplies company_id, it is used directly (strongest guarantee).
+      - Otherwise it is resolved from agent_id (Agent.company_id) or user_id
+        (User.company_id) — this defends even callers that forgot to pass it.
+      - If no tenant can be resolved, the search returns [] rather than risk
+        a cross-tenant leak.
+    """
+    from database import Agent, User
+
     try:
+        # Resolve tenant boundary (defense in depth: never fall through to no filter)
+        if company_id is None:
+            if agent_id:
+                _agent_row = db.query(Agent.company_id).filter(Agent.id == agent_id).first()
+                if _agent_row is not None:
+                    company_id = _agent_row[0]
+            if company_id is None and user_id is not None:
+                _user_row = db.query(User.company_id).filter(User.id == user_id).first()
+                if _user_row is not None:
+                    company_id = _user_row[0]
+
+        if company_id is None:
+            logger.warning(
+                f"search_similar_texts_for_user: no tenant boundary could be resolved "
+                f"(user_id={user_id}, agent_id={agent_id}) — returning empty to avoid cross-tenant leak"
+            )
+            return []
+
         # Build query using SQLAlchemy ORM with pgvector native operators
         query = db.query(
             DocumentChunk.id,
@@ -410,7 +460,10 @@ def search_similar_texts_for_user(query_embedding: List[float], user_id: int, db
             (1 - DocumentChunk.embedding_vec.cosine_distance(query_embedding)).label('similarity')
         ).join(Document, DocumentChunk.document_id == Document.id).filter(
             DocumentChunk.embedding_vec.isnot(None),
-            Document.document_type != "traceability"
+            Document.document_type != "traceability",
+            # Hard tenant filter — applied on BOTH tables to survive RLS double-check
+            Document.company_id == company_id,
+            DocumentChunk.company_id == company_id,
         )
 
         if agent_id:
@@ -557,10 +610,22 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     
     return dot_product / (norm_vec1 * norm_vec2)
 
-def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id: int, db: Session, gcs_url: str = None, notion_link_id: int = None) -> int:
+def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id: int, db: Session, gcs_url: str = None, notion_link_id: int = None, company_id: int = None) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
     from mistral_embeddings import EMBEDDING_DIM
+
+    # Resolve company_id if not provided (defense in depth)
+    if company_id is None:
+        if agent_id:
+            _agent = db.query(Agent.company_id).filter(Agent.id == agent_id).first()
+            if _agent:
+                company_id = _agent[0]
+        if company_id is None and user_id:
+            _user = db.query(User.company_id).filter(User.id == user_id).first()
+            if _user:
+                company_id = _user[0]
+
     try:
         chunks = chunk_text(text_content)
         logger.info(f"ingest_text_content: {len(chunks)} chunks for '{filename}'")
@@ -570,6 +635,7 @@ def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id
             content=text_content,
             user_id=user_id,
             agent_id=agent_id,
+            company_id=company_id,
             gcs_url=gcs_url,
             notion_link_id=notion_link_id,
         )
@@ -600,6 +666,7 @@ def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id
                 raise
             doc_chunk = DocumentChunk(
                 document_id=document.id,
+                company_id=company_id,
                 chunk_text=chunk,
                 embedding_vec=avg_embedding,
                 chunk_index=i
@@ -614,7 +681,7 @@ def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id
         raise e
 
 
-def process_document_for_user(filename: str, content: bytes, user_id: int, db: Session, agent_id: int = None) -> int:
+def process_document_for_user(filename: str, content: bytes, user_id: int, db: Session, agent_id: int = None, company_id: int = None) -> int:
     import tempfile
     import os
     try:
@@ -654,7 +721,7 @@ def process_document_for_user(filename: str, content: bytes, user_id: int, db: S
             text_content = ''
         logger.info(f"Extracted text length: {len(text_content)} characters")
 
-        return ingest_text_content(text_content, filename, user_id, agent_id, db, gcs_url=gcs_url)
+        return ingest_text_content(text_content, filename, user_id, agent_id, db, gcs_url=gcs_url, company_id=company_id)
     except Exception as e:
         logger.error(f"Error processing document: {e}")
         db.rollback()

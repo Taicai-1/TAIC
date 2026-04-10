@@ -35,7 +35,7 @@ from google.auth.transport.requests import AuthorizedSession
 # Local modules
 from auth import create_access_token, verify_token, hash_password, verify_password, hash_reset_token, verify_pre_2fa_token, verify_setup_token
 from email_service import send_password_reset_email, send_invitation_email, send_verification_email, send_feedback_email, send_agent_share_email, send_agent_unshare_email, send_agent_share_updated_email
-from database import get_db, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
+from database import get_db, get_db_with_tenant, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
 from rag_engine import get_answer, get_answer_with_files, process_document_for_user
 from mistral_embeddings import get_embedding
 from file_generator import FileGenerator
@@ -158,6 +158,16 @@ async def add_security_headers(request: Request, call_next):
 from redis_client import get_redis, get_cached_user, invalidate_user_cache
 
 redis_client = get_redis()
+
+
+# ============================================================================
+# TENANT HELPERS
+# ============================================================================
+
+def _get_caller_company_id(user_id, db: Session) -> Optional[int]:
+    """Resolve the company_id for a user. Returns None for legacy users without an org."""
+    user = get_cached_user(user_id, db)
+    return user.company_id if user else None
 
 # Fallback in-memory storage (only used if Redis unavailable)
 _auth_rate_limit_fallback = {}
@@ -440,7 +450,7 @@ async def upload_url(
             content = content[:max_chars]
 
         # Indexer le document comme pour un upload classique (send cleaned text)
-        doc_id = process_document_for_user(filename, content.encode("utf-8", errors="ignore"), int(user_id), db, agent_id=request.agent_id)
+        doc_id = process_document_for_user(filename, content.encode("utf-8", errors="ignore"), int(user_id), db, agent_id=request.agent_id, company_id=_get_caller_company_id(user_id, db))
 
         logger.info(f"URL ajoutée pour user {user_id}, agent {request.agent_id}: {request.url}")
         event_tracker.track_document_upload(int(user_id), request.url, len(content))
@@ -1243,7 +1253,8 @@ async def ask_question(
                 selected_doc_ids=request.selected_documents,
                 agent_id=request.agent_id,
                 history=history,
-                model_id=model_id
+                model_id=model_id,
+                company_id=agent.company_id,
             )
         # Si team_id fourni, on va chercher le chef d'équipe et les sous-agents
         elif request.team_id:
@@ -1315,7 +1326,8 @@ async def ask_question(
                 selected_doc_ids=request.selected_documents,
                 agent_id=best_agent.id,
                 history=history,
-                model_id=model_id
+                model_id=model_id,
+                company_id=best_agent.company_id,
             )
 
             # Réponse formatée
@@ -1570,7 +1582,7 @@ _ACTIONNABLE_REMOVED = """
                         payload = {"name": None, "arguments": None}
 
                     if payload.get("name"):
-                        result = parse_and_execute_actions(payload, db=db, agent_id=request.agent_id, user_id=int(user_id))
+                        result = parse_and_execute_actions(payload, db=db, agent_id=request.agent_id, user_id=int(user_id), company_id=_get_caller_company_id(user_id, db))
                         action_results.append({"action": payload.get("name"), "result": result})
                     else:
                         action_results.append({"status": "error", "error": "Could not parse function_call from model response"})
@@ -1803,7 +1815,7 @@ async def upload_file(
             raise HTTPException(status_code=400, detail="Aucun texte détecté dans la pièce jointe. Vérifiez que le document contient du texte sélectionnable (pas une image ou un scan).")
 
         # Process document with extracted text
-        doc_id = process_document_for_user(file.filename, text.encode('utf-8', errors='ignore'), int(user_id), db, agent_id=None)
+        doc_id = process_document_for_user(file.filename, text.encode('utf-8', errors='ignore'), int(user_id), db, agent_id=None, company_id=_get_caller_company_id(user_id, db))
 
         logger.info(f"Document uploaded for user {user_id}: {file.filename}")
         event_tracker.track_document_upload(int(user_id), file.filename, len(text))
@@ -1816,7 +1828,7 @@ async def upload_file(
         logger.error(f"Error uploading document: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-def _process_document_background(task_id: str, filename: str, content: bytes, user_id: int, agent_id: int):
+def _process_document_background(task_id: str, filename: str, content: bytes, user_id: int, agent_id: int, company_id: int = None):
     """Background worker for async document processing. Uses its own DB session."""
     db = SessionLocal()
     try:
@@ -1828,7 +1840,7 @@ def _process_document_background(task_id: str, filename: str, content: bytes, us
                 "filename": filename, "document_id": None, "error": None,
             }))
 
-        doc_id = process_document_for_user(filename, content, user_id, db, agent_id)
+        doc_id = process_document_for_user(filename, content, user_id, db, agent_id, company_id=company_id)
 
         logger.info(f"Background processing completed: {filename} -> doc_id={doc_id}")
         event_tracker.track_document_upload(user_id, filename, len(content))
@@ -1900,14 +1912,15 @@ async def upload_file_for_agent(
                 "task_id": task_id, "status": "processing",
                 "filename": file.filename, "document_id": None, "error": None,
             }))
+            caller_cid = _get_caller_company_id(user_id, db)
             background_tasks.add_task(
-                _process_document_background, task_id, file.filename, content, int(user_id), agent_id
+                _process_document_background, task_id, file.filename, content, int(user_id), agent_id, caller_cid
             )
             logger.info(f"Document queued for async processing: {file.filename} (task_id={task_id})")
             return {"filename": file.filename, "task_id": task_id, "agent_id": agent_id, "status": "processing"}
 
         # Fallback: synchronous processing when Redis is unavailable
-        doc_id = process_document_for_user(file.filename, content, int(user_id), db, agent_id)
+        doc_id = process_document_for_user(file.filename, content, int(user_id), db, agent_id, company_id=_get_caller_company_id(user_id, db))
         logger.info(f"Document uploaded (sync) for user {user_id}, agent {agent_id}: {file.filename}")
         event_tracker.track_document_upload(int(user_id), file.filename, len(content))
         return {"filename": file.filename, "document_id": doc_id, "agent_id": agent_id, "status": "uploaded"}
@@ -2127,6 +2140,7 @@ async def create_agent(
 
         # Auto-calculate llm_provider from type
         effective_llm_provider = resolve_llm_provider(type)
+        caller_company_id = _get_caller_company_id(user_id, db)
         db_agent = Agent(
             name=name,
             contexte=contexte,
@@ -2140,7 +2154,8 @@ async def create_agent(
             neo4j_person_name=neo4j_person_name if neo4j_person_name and neo4j_person_name.strip() else None,
             neo4j_depth=int(neo4j_depth) if neo4j_depth else 1,
             weekly_recap_enabled=weekly_recap_enabled.lower() in ("true", "1", "yes"),
-            user_id=int(user_id)
+            user_id=int(user_id),
+            company_id=caller_company_id,
         )
         db.add(db_agent)
         db.commit()
@@ -2422,7 +2437,8 @@ async def create_team(payload: TeamCreateValidated, user_id: str = Depends(verif
             contexte=contexte,
             leader_agent_id=int(leader_agent_id),
             action_agent_ids=json.dumps([int(x) for x in member_agent_ids]),
-            user_id=int(user_id)
+            user_id=int(user_id),
+            company_id=_get_caller_company_id(user_id, db),
         )
         db.add(team)
         db.commit()
@@ -2722,6 +2738,7 @@ async def upload_traceability_doc(
         content=text_content,
         user_id=int(user_id),
         agent_id=agent_id,
+        company_id=_get_caller_company_id(user_id, db),
         gcs_url=gcs_url,
         document_type="traceability"
     )
@@ -2829,6 +2846,7 @@ async def add_notion_link(
 
     link = NotionLink(
         agent_id=agent_id,
+        company_id=_get_caller_company_id(user_id, db),
         notion_resource_id=notion_id,
         resource_type=resource_type,
         label=label,
@@ -3057,6 +3075,7 @@ async def ingest_notion_link(
         db=db,
         gcs_url=gcs_url,
         notion_link_id=link.id,
+        company_id=user_company_id,
     )
 
     doc = db.query(Document).filter(Document.id == doc_id).first()
@@ -3134,6 +3153,7 @@ async def resync_notion_link(
         db=db,
         gcs_url=gcs_url,
         notion_link_id=link.id,
+        company_id=user_company_id,
     )
 
     doc = db.query(Document).filter(Document.id == doc_id).first()
@@ -3216,7 +3236,7 @@ async def create_conversation(conv: ConversationCreate, db: Session = Depends(ge
         team = db.query(Team).filter(Team.id == conv.team_id).first()
         if not team or team.user_id != uid:
             raise HTTPException(status_code=404, detail="Team not found")
-    conversation = Conversation(agent_id=conv.agent_id, team_id=conv.team_id, title=conv.title, user_id=uid)
+    conversation = Conversation(agent_id=conv.agent_id, team_id=conv.team_id, title=conv.title, user_id=uid, company_id=_get_caller_company_id(user_id, db))
     db.add(conversation)
     db.commit()
     db.refresh(conversation)
@@ -3256,7 +3276,7 @@ async def list_conversations(
 @app.post("/conversations/{conversation_id}/messages", response_model=dict)
 async def add_message(conversation_id: int, msg: MessageCreate, db: Session = Depends(get_db), user_id: str = Depends(verify_token)):
     _verify_conversation_owner(conversation_id, user_id, db)
-    message = Message(conversation_id=conversation_id, role=msg.role, content=msg.content)
+    message = Message(conversation_id=conversation_id, role=msg.role, content=msg.content, company_id=_get_caller_company_id(user_id, db))
     db.add(message)
     db.commit()
     db.refresh(message)
@@ -3631,7 +3651,15 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
             else:
                 slack_model_id = os.getenv('MISTRAL_MODEL', 'mistral:mistral-small-latest')
         # Appel direct à la fonction get_answer avec l'historique Slack
-        answer = get_answer(user_message, None, db, agent_id=agent_id, history=history, model_id=slack_model_id)
+        answer = get_answer(
+            user_message,
+            None,
+            db,
+            agent_id=agent_id,
+            history=history,
+            model_id=slack_model_id,
+            company_id=agent.company_id,
+        )
         # 3. Envoie la réponse sur Slack avec le bon token
         resp = requests.post(
             "https://slack.com/api/chat.postMessage",
@@ -3835,7 +3863,15 @@ async def public_agent_chat(agent_id: int, req: PublicChatRequest, request: Requ
     public_model_id = agent.finetuned_model_id or resolve_model_id(agent)
 
     try:
-        answer = get_answer(req.message, None, db, agent_id=agent_id, history=history, model_id=public_model_id)
+        answer = get_answer(
+            req.message,
+            None,
+            db,
+            agent_id=agent_id,
+            history=history,
+            model_id=public_model_id,
+            company_id=agent.company_id,
+        )
     except Exception as e:
         logger.exception(f"Error generating public chat answer for agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail="Error generating answer")
@@ -4321,6 +4357,7 @@ async def ingest_email(
                 content=enriched_content,
                 user_id=agent.user_id,
                 agent_id=agent.id,
+                company_id=agent.company_id,
                 gcs_url=unique_id  # Identifiant unique pour la déduplication
             )
             db.add(document)
@@ -4333,6 +4370,7 @@ async def ingest_email(
             for i, chunk in enumerate(chunks):
                 doc_chunk = DocumentChunk(
                     document_id=document.id,
+                    company_id=agent.company_id,
                     chunk_text=chunk,
                     embedding_vec=chunk_embeddings[i] if chunk_embeddings[i] else None,
                     chunk_index=i
@@ -5053,7 +5091,8 @@ async def share_agent(
         agent_id=agent_id,
         user_id=target_user_id,
         shared_by_user_id=uid,
-        can_edit=can_edit
+        can_edit=can_edit,
+        company_id=agent.company_id,
     )
     db.add(share)
     db.commit()

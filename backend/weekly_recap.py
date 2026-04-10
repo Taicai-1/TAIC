@@ -190,6 +190,7 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
         if not messages and not docs and not notion_pages:
             log = WeeklyRecapLog(
                 agent_id=agent.id, user_id=user.id,
+                company_id=agent.company_id,
                 status="no_data", recap_content=None
             )
             db.add(log)
@@ -210,6 +211,7 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
         # 5. Log success
         log = WeeklyRecapLog(
             agent_id=agent.id, user_id=user.id,
+            company_id=agent.company_id,
             status="success", recap_content=recap_content
         )
         db.add(log)
@@ -228,6 +230,7 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
         try:
             log = WeeklyRecapLog(
                 agent_id=agent.id, user_id=user.id,
+                company_id=agent.company_id,
                 status="error", error_message=str(e)[:500]
             )
             db.add(log)

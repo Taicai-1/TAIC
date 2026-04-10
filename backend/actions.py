@@ -726,7 +726,7 @@ def execute_action_by_name(name: str, arguments: Any, db: Optional[Session] = No
         return {"status": "error", "error": str(e)}
 
 
-def parse_and_execute_actions(payload: Any, db: Optional[Session] = None, agent_id: Optional[int] = None, user_id: Optional[int] = None) -> Dict[str, Any]:
+def parse_and_execute_actions(payload: Any, db: Optional[Session] = None, agent_id: Optional[int] = None, user_id: Optional[int] = None, company_id: Optional[int] = None) -> Dict[str, Any]:
     """Parse a function-call-like payload and execute the corresponding action.
 
     Payload formats supported:
@@ -760,6 +760,7 @@ def parse_and_execute_actions(payload: Any, db: Optional[Session] = None, agent_
                 audit = AgentAction(
                     user_id=int(user_id) if user_id is not None else None,
                     agent_id=int(agent_id) if agent_id is not None else None,
+                    company_id=company_id,
                     action_type=name,
                     params=json.dumps(arguments) if arguments is not None else None,
                     status="pending"
