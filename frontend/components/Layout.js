@@ -1,16 +1,18 @@
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
-import { ArrowLeft, Users, UserCircle, MessageSquarePlus, LogOut } from 'lucide-react';
+import { ArrowLeft, Users, UserCircle, MessageSquarePlus, LogOut, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Layout({ children, showBack, backHref, title, actions, onFeedback, onLogout }) {
   const router = useRouter();
   const { t } = useTranslation(['common', 'agents']);
-  const { logout: authLogout } = useAuth({ required: false });
+  const { user, logout: authLogout } = useAuth({ required: false });
 
   const handleLogout = onLogout || (() => {
     authLogout();
   });
+
+  const hasNoOrg = user && !user.company_id;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -75,6 +77,33 @@ export default function Layout({ children, showBack, backHref, title, actions, o
           </div>
         </div>
       </div>
+
+      {/* No Organization Warning Banner */}
+      {hasNoOrg && (
+        <div className="relative z-40 bg-amber-50 border-b-2 border-amber-300">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="w-8 h-8 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-lg font-bold text-amber-900">
+                  {t('common:noOrg.title')}
+                </p>
+                <p className="text-sm text-amber-700 mt-0.5">
+                  {t('common:noOrg.description')}
+                </p>
+              </div>
+              <button
+                onClick={() => router.push('/organization')}
+                className="flex-shrink-0 px-5 py-2.5 bg-amber-600 text-white font-semibold rounded-button hover:bg-amber-700 transition-colors shadow-sm"
+              >
+                {t('common:noOrg.action')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="relative">

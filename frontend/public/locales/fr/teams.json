@@ -25,7 +25,9 @@
   },
   "emptyState": {
     "title": "Aucune équipe de companions créée",
-    "description": "Créez votre première équipe pour commencer"
+    "description": "Créez votre première équipe pour commencer",
+    "noOrgTitle": "Aucune équipe disponible",
+    "noOrgDescription": "Rejoignez ou créez une organisation pour pouvoir créer des équipes."
   },
   "errors": {
     "loadingTeams": "Erreur lors du chargement des équipes",

@@ -59,11 +59,14 @@ export default function TeamsPage() {
     }
   };
 
+  const hasNoOrg = user && !user.company_id;
+
   useEffect(() => {
     if (!authenticated) return;
+    if (hasNoOrg) { setTeams([]); setAgents([]); setLoading(false); return; }
     loadTeams();
     loadAgents();
-  }, [authenticated]);
+  }, [authenticated, hasNoOrg]);
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -84,7 +87,7 @@ export default function TeamsPage() {
       setTeams(response.data.teams || []);
     } catch (error) {
       console.error("Error loading teams:", error);
-      toast.error(t('teams:errors.loadingTeams'));
+      if (!hasNoOrg) toast.error(t('teams:errors.loadingTeams'));
     } finally {
       setLoading(false);
     }
@@ -96,7 +99,7 @@ export default function TeamsPage() {
       setAgents(response.data.agents || []);
     } catch (error) {
       console.error("Error loading agents:", error);
-      toast.error(t('teams:errors.loadingAgents'));
+      if (!hasNoOrg) toast.error(t('teams:errors.loadingAgents'));
     }
   };
 
@@ -131,6 +134,7 @@ export default function TeamsPage() {
 
       {/* Create New Team Button */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {!hasNoOrg && (
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
           <button
             onClick={() => { setForm({ name: "", contexte: "", leaderId: null, actionIds: [] }); setShowForm(true); }}
@@ -148,6 +152,7 @@ export default function TeamsPage() {
             <span>{t('teams:buttons.backToAgents')}</span>
           </button>
         </div>
+        )}
         {showForm && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-card shadow-floating p-8 w-full max-w-md mx-auto max-h-[85vh] overflow-auto border border-gray-200 animate-fade-in">
@@ -286,12 +291,23 @@ export default function TeamsPage() {
           <div className="text-center py-20">
             <div className="relative inline-block">
               <Users className="w-24 h-24 mx-auto text-gray-300 mb-6" />
-              <div className="absolute -top-2 -right-2 w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center animate-bounce">
-                <Plus className="w-5 h-5 text-white" />
-              </div>
+              {!hasNoOrg && (
+                <div className="absolute -top-2 -right-2 w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center animate-bounce">
+                  <Plus className="w-5 h-5 text-white" />
+                </div>
+              )}
             </div>
-            <h3 className="text-2xl font-bold text-gray-700 mb-2">{t('teams:emptyState.title')}</h3>
-            <p className="text-gray-500">{t('teams:emptyState.description')}</p>
+            {hasNoOrg ? (
+              <>
+                <h3 className="text-2xl font-bold text-gray-700 mb-2">{t('teams:emptyState.noOrgTitle')}</h3>
+                <p className="text-gray-500">{t('teams:emptyState.noOrgDescription')}</p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-2xl font-bold text-gray-700 mb-2">{t('teams:emptyState.title')}</h3>
+                <p className="text-gray-500">{t('teams:emptyState.description')}</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

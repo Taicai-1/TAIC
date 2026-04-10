@@ -181,7 +181,9 @@
   "loading": "Loading your companions...",
   "empty": {
     "title": "No AI companion created",
-    "subtitle": "Create your first companion to get started"
+    "subtitle": "Create your first companion to get started",
+    "noOrgTitle": "No companions available",
+    "noOrgSubtitle": "Join or create an organization to start creating companions."
   },
   "feedback": {
     "button": "Report an issue",

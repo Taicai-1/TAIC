@@ -1005,7 +1005,8 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
                 "id": db_user.id,
                 "username": db_user.username,
                 "email": db_user.email,
-                "totp_enabled": db_user.totp_enabled
+                "totp_enabled": db_user.totp_enabled,
+                "company_id": db_user.company_id
             }
         }
     except HTTPException:

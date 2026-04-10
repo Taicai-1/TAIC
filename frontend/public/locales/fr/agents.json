@@ -181,7 +181,9 @@
   "loading": "Chargement de vos companions...",
   "empty": {
     "title": "Aucun companion IA créé",
-    "subtitle": "Créez votre premier companion pour commencer"
+    "subtitle": "Créez votre premier companion pour commencer",
+    "noOrgTitle": "Aucun companion disponible",
+    "noOrgSubtitle": "Rejoignez ou créez une organisation pour pouvoir créer des companions."
   },
   "feedback": {
     "button": "Signaler un problème",

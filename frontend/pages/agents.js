@@ -99,19 +99,22 @@ export default function AgentsPage() {
     };
   }, [showForm]);
 
+  const hasNoOrg = user && !user.company_id;
+
   const loadAgents = useCallback(async () => {
+    if (hasNoOrg) { setAgents([]); setLoading(false); return; }
     try {
       const response = await api.get('/agents');
       setAgents(response.data.agents || []);
     } catch (error) {
-      toast.error(t('agents:toast.loadError'));
+      if (!hasNoOrg) toast.error(t('agents:toast.loadError'));
       if (error.response?.status === 401) {
         router.push("/login");
       }
     } finally {
       setLoading(false);
     }
-  }, [t, router]);
+  }, [t, router, hasNoOrg]);
 
   const loadNeo4jData = async () => {
     try {
@@ -208,6 +211,7 @@ export default function AgentsPage() {
 
       {/* Create New Agent Button + Switch to Teams */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {!hasNoOrg && (
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
           <button
             onClick={() => {
@@ -229,6 +233,7 @@ export default function AgentsPage() {
             <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
+        )}
         {showForm && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-card shadow-floating p-8 w-full max-w-md mx-auto max-h-[85vh] overflow-auto border border-gray-200 animate-fade-in">
@@ -522,12 +527,23 @@ export default function AgentsPage() {
           <div className="text-center py-20">
             <div className="relative inline-block">
               <Bot className="w-24 h-24 mx-auto text-gray-300 mb-6" />
-              <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center animate-bounce">
-                <Plus className="w-5 h-5 text-white" />
-              </div>
+              {!hasNoOrg && (
+                <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center animate-bounce">
+                  <Plus className="w-5 h-5 text-white" />
+                </div>
+              )}
             </div>
-            <h3 className="text-2xl font-heading font-bold text-gray-700 mb-2">{t('agents:empty.title')}</h3>
-            <p className="text-gray-500">{t('agents:empty.subtitle')}</p>
+            {hasNoOrg ? (
+              <>
+                <h3 className="text-2xl font-heading font-bold text-gray-700 mb-2">{t('agents:empty.noOrgTitle')}</h3>
+                <p className="text-gray-500">{t('agents:empty.noOrgSubtitle')}</p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-2xl font-heading font-bold text-gray-700 mb-2">{t('agents:empty.title')}</h3>
+                <p className="text-gray-500">{t('agents:empty.subtitle')}</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

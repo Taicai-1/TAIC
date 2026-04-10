@@ -25,7 +25,9 @@
   },
   "emptyState": {
     "title": "No companion teams created",
-    "description": "Create your first team to get started"
+    "description": "Create your first team to get started",
+    "noOrgTitle": "No teams available",
+    "noOrgDescription": "Join or create an organization to start creating teams."
   },
   "errors": {
     "loadingTeams": "Error loading teams",

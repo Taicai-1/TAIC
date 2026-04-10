@@ -56,5 +56,10 @@
     "message": "Ce site utilise des cookies analytiques pour améliorer votre expérience. Acceptez-vous l'utilisation de cookies de mesure d'audience ?",
     "accept": "Accepter",
     "refuse": "Refuser"
+  },
+  "noOrg": {
+    "title": "Créez ou rejoignez une organisation pour activer votre compte",
+    "description": "Vous devez appartenir à une organisation pour créer des companions et accéder à toutes les fonctionnalités.",
+    "action": "Gérer mon organisation"
   }
 }
