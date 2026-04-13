@@ -4963,28 +4963,27 @@ async def delete_company(
     # Collect member user IDs for cache invalidation
     member_ids = [m.user_id for m in db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).all()]
 
-    # Temporarily disable RLS context so we can nullify company_id (WITH CHECK blocks NULL)
+    # Disable RLS: clear both the PG session variable and the Python contextvar
+    # so the _set_tenant_on_begin listener won't re-apply it on sub-transactions
+    set_current_company_id(None)
     db.execute(text("RESET app.company_id"))
 
-    # Remove related data (no RLS on these tables)
-    db.query(AgentShare).filter(AgentShare.company_id == company_id).delete()
-    db.query(CompanyInvitation).filter(CompanyInvitation.company_id == company_id).delete()
-    db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).delete()
+    # All deletions/updates via raw SQL to avoid ORM triggering new transactions
+    db.execute(text("DELETE FROM agent_shares WHERE company_id = :cid"), {"cid": company_id})
+    db.execute(text("DELETE FROM company_invitations WHERE company_id = :cid"), {"cid": company_id})
+    db.execute(text("DELETE FROM company_memberships WHERE company_id = :cid"), {"cid": company_id})
 
-    # Nullify company_id on all RLS-protected tenant-scoped tables via raw SQL
-    rls_tables = [
+    # Nullify company_id on all tenant-scoped tables
+    for table in [
         "agents", "documents", "document_chunks", "conversations",
         "messages", "teams", "notion_links", "weekly_recap_logs",
-        "agent_actions", "agent_shares",
-    ]
-    for table in rls_tables:
+        "agent_actions",
+    ]:
         db.execute(text(f"UPDATE {table} SET company_id = NULL WHERE company_id = :cid"), {"cid": company_id})
 
-    # Dissociate users
+    # Dissociate users and delete the company
     db.execute(text("UPDATE users SET company_id = NULL WHERE company_id = :cid"), {"cid": company_id})
-
-    # Delete the company
-    db.delete(company)
+    db.execute(text("DELETE FROM companies WHERE id = :cid"), {"cid": company_id})
     db.commit()
 
     # Invalidate cache for all former members
