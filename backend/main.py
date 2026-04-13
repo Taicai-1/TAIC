@@ -35,7 +35,7 @@ from google.auth.transport.requests import AuthorizedSession
 # Local modules
 from auth import create_access_token, verify_token, hash_password, verify_password, hash_reset_token, verify_pre_2fa_token, verify_setup_token
 from email_service import send_password_reset_email, send_invitation_email, send_verification_email, send_feedback_email, send_agent_share_email, send_agent_unshare_email, send_agent_share_updated_email
-from database import get_db, get_db_with_tenant, set_current_company_id, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, Agent, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
+from database import get_db, get_db_with_tenant, set_current_company_id, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, DocumentChunk, Agent, AgentAction, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
 from rag_engine import get_answer, get_answer_with_files, process_document_for_user
 from mistral_embeddings import get_embedding
 from file_generator import FileGenerator
@@ -4967,6 +4967,17 @@ async def delete_company(
     db.query(AgentShare).filter(AgentShare.company_id == company_id).delete()
     db.query(CompanyInvitation).filter(CompanyInvitation.company_id == company_id).delete()
     db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).delete()
+
+    # Nullify company_id on all tenant-scoped tables to release FK constraints
+    db.query(Agent).filter(Agent.company_id == company_id).update({Agent.company_id: None})
+    db.query(Document).filter(Document.company_id == company_id).update({Document.company_id: None})
+    db.query(DocumentChunk).filter(DocumentChunk.company_id == company_id).update({DocumentChunk.company_id: None})
+    db.query(Conversation).filter(Conversation.company_id == company_id).update({Conversation.company_id: None})
+    db.query(Message).filter(Message.company_id == company_id).update({Message.company_id: None})
+    db.query(Team).filter(Team.company_id == company_id).update({Team.company_id: None})
+    db.query(NotionLink).filter(NotionLink.company_id == company_id).update({NotionLink.company_id: None})
+    db.query(WeeklyRecapLog).filter(WeeklyRecapLog.company_id == company_id).update({WeeklyRecapLog.company_id: None})
+    db.query(AgentAction).filter(AgentAction.company_id == company_id).update({AgentAction.company_id: None})
 
     # Dissociate users
     db.query(User).filter(User.company_id == company_id).update({User.company_id: None})
