@@ -4963,27 +4963,40 @@ async def delete_company(
     # Collect member user IDs for cache invalidation
     member_ids = [m.user_id for m in db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).all()]
 
-    # Disable RLS: clear both the PG session variable and the Python contextvar
-    # so the _set_tenant_on_begin listener won't re-apply it on sub-transactions
-    set_current_company_id(None)
-    db.execute(text("RESET app.company_id"))
+    # RLS WITH CHECK blocks writing company_id = NULL.
+    # Temporarily relax WITH CHECK on all RLS-protected tables to allow NULL.
+    # USING stays intact so we can still see/match our tenant's rows.
+    # DDL is transactional in PostgreSQL — rolls back if anything fails.
+    rls_tables = [
+        "agents", "agent_shares", "documents", "document_chunks", "conversations",
+        "messages", "teams", "notion_links", "weekly_recap_logs", "agent_actions",
+    ]
+    for table in rls_tables:
+        db.execute(text(
+            f"ALTER POLICY tenant_isolation ON {table} "
+            f"WITH CHECK (company_id IS NULL OR company_id = current_setting('app.company_id', true)::int)"
+        ))
 
-    # All deletions/updates via raw SQL to avoid ORM triggering new transactions
+    # Delete org-specific junction data (DELETE only needs USING, not WITH CHECK)
     db.execute(text("DELETE FROM agent_shares WHERE company_id = :cid"), {"cid": company_id})
     db.execute(text("DELETE FROM company_invitations WHERE company_id = :cid"), {"cid": company_id})
     db.execute(text("DELETE FROM company_memberships WHERE company_id = :cid"), {"cid": company_id})
 
-    # Nullify company_id on all tenant-scoped tables
-    for table in [
-        "agents", "documents", "document_chunks", "conversations",
-        "messages", "teams", "notion_links", "weekly_recap_logs",
-        "agent_actions",
-    ]:
+    # Nullify company_id on all tenant-scoped tables (now allowed by relaxed WITH CHECK)
+    for table in rls_tables:
         db.execute(text(f"UPDATE {table} SET company_id = NULL WHERE company_id = :cid"), {"cid": company_id})
 
-    # Dissociate users and delete the company
+    # Dissociate users and delete the company (no RLS on these tables)
     db.execute(text("UPDATE users SET company_id = NULL WHERE company_id = :cid"), {"cid": company_id})
     db.execute(text("DELETE FROM companies WHERE id = :cid"), {"cid": company_id})
+
+    # Restore strict WITH CHECK
+    for table in rls_tables:
+        db.execute(text(
+            f"ALTER POLICY tenant_isolation ON {table} "
+            f"WITH CHECK (company_id = current_setting('app.company_id', true)::int)"
+        ))
+
     db.commit()
 
     # Invalidate cache for all former members
