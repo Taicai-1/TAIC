@@ -4965,7 +4965,6 @@ async def delete_company(
 
     # RLS WITH CHECK blocks writing company_id = NULL.
     # Use a raw connection to temporarily DISABLE RLS, do all cleanup, then re-enable.
-    # Everything is in one transaction — if anything fails, it all rolls back (including DISABLE).
     rls_tables = [
         "agents", "agent_shares", "documents", "document_chunks", "conversations",
         "messages", "teams", "notion_links", "weekly_recap_logs", "agent_actions",
@@ -4975,22 +4974,39 @@ async def delete_company(
     try:
         cur = raw.cursor()
 
+        # Diagnostic: log DB user, table owner, and policies
+        cur.execute("SELECT current_user, session_user")
+        logger.info(f"[DELETE_ORG] db_users={cur.fetchone()}")
+        cur.execute("SELECT tableowner FROM pg_tables WHERE tablename = 'agents'")
+        logger.info(f"[DELETE_ORG] agents_owner={cur.fetchone()}")
+        cur.execute("SELECT policyname, permissive, cmd FROM pg_policies WHERE tablename = 'agents'")
+        logger.info(f"[DELETE_ORG] agents_policies={cur.fetchall()}")
+
         # Disable RLS on all tenant-scoped tables
         for table in rls_tables:
             cur.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
+            logger.info(f"[DELETE_ORG] DISABLE RLS OK: {table}")
+
+        # Verify RLS is actually disabled
+        cur.execute("SELECT relrowsecurity FROM pg_class WHERE relname = 'agents'")
+        rls_status = cur.fetchone()
+        logger.info(f"[DELETE_ORG] agents relrowsecurity after disable={rls_status}")
 
         # Delete org-specific junction data
         cur.execute("DELETE FROM agent_shares WHERE company_id = %s", (company_id,))
         cur.execute("DELETE FROM company_invitations WHERE company_id = %s", (company_id,))
         cur.execute("DELETE FROM company_memberships WHERE company_id = %s", (company_id,))
+        logger.info("[DELETE_ORG] junction deletes OK")
 
         # Nullify company_id on all tenant-scoped tables
         for table in rls_tables:
             cur.execute(f"UPDATE {table} SET company_id = NULL WHERE company_id = %s", (company_id,))
+            logger.info(f"[DELETE_ORG] UPDATE {table} OK")
 
         # Dissociate users and delete the company
         cur.execute("UPDATE users SET company_id = NULL WHERE company_id = %s", (company_id,))
         cur.execute("DELETE FROM companies WHERE id = %s", (company_id,))
+        logger.info("[DELETE_ORG] company deleted")
 
         # Re-enable RLS
         for table in rls_tables:
@@ -4998,7 +5014,9 @@ async def delete_company(
             cur.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
 
         raw.commit()
-    except Exception:
+        logger.info("[DELETE_ORG] commit OK")
+    except Exception as e:
+        logger.error(f"[DELETE_ORG] FAILED: {type(e).__name__}: {e}")
         raw.rollback()
         raise
     finally:
