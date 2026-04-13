@@ -32,10 +32,10 @@ ALTER TABLE weekly_recap_logs ADD COLUMN IF NOT EXISTS company_id INTEGER REFERE
 -- STEP 2: ASSIGN ORPHAN USERS TO TAIC COMPANY
 --
 -- Users without a company_id would lose access after RLS activation.
--- Assign them to the TAIC company (id=3) so their data stays accessible.
+-- Assign them to the default company (id=1) so their data stays accessible.
 -- ============================================================================
 
-UPDATE users SET company_id = 3 WHERE company_id IS NULL;
+UPDATE users SET company_id = 1 WHERE company_id IS NULL;
 
 -- ============================================================================
 -- STEP 3: BACKFILL company_id ON ALL TENANT-SCOPED TABLES
@@ -91,19 +91,19 @@ FROM users u WHERE t.user_id = u.id AND t.company_id IS NULL;
 UPDATE weekly_recap_logs wrl SET company_id = u.company_id
 FROM users u WHERE wrl.user_id = u.id AND wrl.company_id IS NULL;
 
--- --- Pass B: Force remaining NULLs to TAIC (company_id = 3) ---
+-- --- Pass B: Force remaining NULLs to default company (company_id = 1) ---
 -- Catches rows that weren't resolved via relationships (orphaned data).
 
-UPDATE agents            SET company_id = 3 WHERE company_id IS NULL;
-UPDATE documents         SET company_id = 3 WHERE company_id IS NULL;
-UPDATE document_chunks   SET company_id = 3 WHERE company_id IS NULL;
-UPDATE conversations     SET company_id = 3 WHERE company_id IS NULL;
-UPDATE messages          SET company_id = 3 WHERE company_id IS NULL;
-UPDATE agent_shares      SET company_id = 3 WHERE company_id IS NULL;
-UPDATE notion_links      SET company_id = 3 WHERE company_id IS NULL;
-UPDATE agent_actions     SET company_id = 3 WHERE company_id IS NULL;
-UPDATE teams             SET company_id = 3 WHERE company_id IS NULL;
-UPDATE weekly_recap_logs SET company_id = 3 WHERE company_id IS NULL;
+UPDATE agents            SET company_id = 1 WHERE company_id IS NULL;
+UPDATE documents         SET company_id = 1 WHERE company_id IS NULL;
+UPDATE document_chunks   SET company_id = 1 WHERE company_id IS NULL;
+UPDATE conversations     SET company_id = 1 WHERE company_id IS NULL;
+UPDATE messages          SET company_id = 1 WHERE company_id IS NULL;
+UPDATE agent_shares      SET company_id = 1 WHERE company_id IS NULL;
+UPDATE notion_links      SET company_id = 1 WHERE company_id IS NULL;
+UPDATE agent_actions     SET company_id = 1 WHERE company_id IS NULL;
+UPDATE teams             SET company_id = 1 WHERE company_id IS NULL;
+UPDATE weekly_recap_logs SET company_id = 1 WHERE company_id IS NULL;
 
 -- ============================================================================
 -- STEP 4: INDEXES on company_id (fast tenant filtering + required for RLS perf)
