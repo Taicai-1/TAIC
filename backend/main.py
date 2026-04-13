@@ -4963,24 +4963,25 @@ async def delete_company(
     # Collect member user IDs for cache invalidation
     member_ids = [m.user_id for m in db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).all()]
 
-    # Remove related data
+    # Temporarily disable RLS context so we can nullify company_id (WITH CHECK blocks NULL)
+    db.execute(text("RESET app.company_id"))
+
+    # Remove related data (no RLS on these tables)
     db.query(AgentShare).filter(AgentShare.company_id == company_id).delete()
     db.query(CompanyInvitation).filter(CompanyInvitation.company_id == company_id).delete()
     db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).delete()
 
-    # Nullify company_id on all tenant-scoped tables to release FK constraints
-    db.query(Agent).filter(Agent.company_id == company_id).update({Agent.company_id: None})
-    db.query(Document).filter(Document.company_id == company_id).update({Document.company_id: None})
-    db.query(DocumentChunk).filter(DocumentChunk.company_id == company_id).update({DocumentChunk.company_id: None})
-    db.query(Conversation).filter(Conversation.company_id == company_id).update({Conversation.company_id: None})
-    db.query(Message).filter(Message.company_id == company_id).update({Message.company_id: None})
-    db.query(Team).filter(Team.company_id == company_id).update({Team.company_id: None})
-    db.query(NotionLink).filter(NotionLink.company_id == company_id).update({NotionLink.company_id: None})
-    db.query(WeeklyRecapLog).filter(WeeklyRecapLog.company_id == company_id).update({WeeklyRecapLog.company_id: None})
-    db.query(AgentAction).filter(AgentAction.company_id == company_id).update({AgentAction.company_id: None})
+    # Nullify company_id on all RLS-protected tenant-scoped tables via raw SQL
+    rls_tables = [
+        "agents", "documents", "document_chunks", "conversations",
+        "messages", "teams", "notion_links", "weekly_recap_logs",
+        "agent_actions", "agent_shares",
+    ]
+    for table in rls_tables:
+        db.execute(text(f"UPDATE {table} SET company_id = NULL WHERE company_id = :cid"), {"cid": company_id})
 
     # Dissociate users
-    db.query(User).filter(User.company_id == company_id).update({User.company_id: None})
+    db.execute(text("UPDATE users SET company_id = NULL WHERE company_id = :cid"), {"cid": company_id})
 
     # Delete the company
     db.delete(company)
