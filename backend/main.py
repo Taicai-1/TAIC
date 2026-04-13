@@ -4946,6 +4946,42 @@ async def leave_company(
     return {"message": "You have left the organization"}
 
 
+@app.delete("/api/companies")
+async def delete_company(
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    """Delete the organization. Owner only. Does not delete user accounts."""
+    from permissions import require_role
+
+    membership = require_role(int(user_id), db, "owner")
+    company_id = membership.company_id
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Collect member user IDs for cache invalidation
+    member_ids = [m.user_id for m in db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).all()]
+
+    # Remove related data
+    db.query(AgentShare).filter(AgentShare.company_id == company_id).delete()
+    db.query(CompanyInvitation).filter(CompanyInvitation.company_id == company_id).delete()
+    db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).delete()
+
+    # Dissociate users
+    db.query(User).filter(User.company_id == company_id).update({User.company_id: None})
+
+    # Delete the company
+    db.delete(company)
+    db.commit()
+
+    # Invalidate cache for all former members
+    for uid in member_ids:
+        invalidate_user_cache(uid)
+
+    return {"message": "Organization deleted"}
+
+
 @app.put("/api/companies/integrations")
 async def update_company_integrations(
     request: Request,

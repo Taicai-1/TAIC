@@ -169,6 +169,20 @@ export default function Organization() {
     }
   };
 
+  // ---- Delete org (owner) ----
+  const handleDeleteOrg = async () => {
+    if (!confirm(t('organization:info.deleteConfirm'))) return;
+    try {
+      await api.delete('/api/companies');
+      toast.success('OK');
+      setCompany(null);
+      setMembers([]);
+      setOrgAgents([]);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    }
+  };
+
   // ---- Invitations ----
   const handleSendInvite = async () => {
     if (!inviteEmail.trim()) return;
@@ -428,6 +442,13 @@ export default function Organization() {
                       className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-xl transition-colors">
                       <LogOut className="w-4 h-4" />
                       <span className="text-sm font-medium">{t('organization:info.leaveButton')}</span>
+                    </button>
+                  )}
+                  {company.role === 'owner' && (
+                    <button onClick={handleDeleteOrg}
+                      className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-xl transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                      <span className="text-sm font-medium">{t('organization:info.deleteButton')}</span>
                     </button>
                   )}
                 </div>

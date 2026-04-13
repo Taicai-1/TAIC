@@ -17,7 +17,9 @@
     "role": "Votre role",
     "memberSince": "Membre depuis",
     "leaveButton": "Quitter l'organisation",
-    "leaveConfirm": "Etes-vous sur de vouloir quitter cette organisation ?"
+    "leaveConfirm": "Etes-vous sur de vouloir quitter cette organisation ?",
+    "deleteButton": "Supprimer l'organisation",
+    "deleteConfirm": "Etes-vous sur de vouloir supprimer cette organisation ? Les comptes des membres ne seront pas supprimes."
   },
   "members": {
     "title": "Membres",
