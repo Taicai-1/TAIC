@@ -4687,7 +4687,11 @@ async def invite_to_company(
         CompanyInvitation.status == "pending"
     ).first()
     if pending:
-        raise HTTPException(status_code=409, detail="An invitation is already pending for this email")
+        if pending.expires_at < datetime.utcnow():
+            db.delete(pending)
+            db.flush()
+        else:
+            raise HTTPException(status_code=409, detail="An invitation is already pending for this email")
 
     token = _secrets.token_urlsafe(48)
     invitation = CompanyInvitation(
@@ -4696,7 +4700,7 @@ async def invite_to_company(
         role=role,
         token=token,
         invited_by_user_id=int(user_id),
-        expires_at=datetime.utcnow() + timedelta(days=7)
+        expires_at=datetime.utcnow() + timedelta(hours=24)
     )
     db.add(invitation)
     db.commit()

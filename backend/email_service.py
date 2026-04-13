@@ -176,7 +176,7 @@ def send_invitation_email(to_email: str, company_name: str, join_link: str):
   </tr>
 </table>
 <p style="color:#9ca3af; font-size:13px; line-height:1.5; margin:0;">
-  Ce lien expire dans 7 jours. Si vous n'attendiez pas cette invitation, ignorez cet email.
+  Ce lien expire dans 24 heures. Si vous n'attendiez pas cette invitation, ignorez cet email.
 </p>"""
 
     html = _wrap_template(content, preheader=f"Rejoignez {company_name} sur TAIC Companion")
