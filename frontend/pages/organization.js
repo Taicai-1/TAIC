@@ -200,9 +200,7 @@ export default function Organization() {
 
   const handleCopyInviteLink = () => {
     if (!company?.invite_code) return;
-    const frontendUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    const link = `${frontendUrl}/join?code=${company.invite_code}`;
-    navigator.clipboard.writeText(link);
+    navigator.clipboard.writeText(company.invite_code);
     toast.success(t('organization:invitations.copied'));
   };
 
