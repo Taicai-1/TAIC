@@ -75,7 +75,10 @@
     },
     "weeklyRecap": {
       "label": "Recap Hebdomadaire",
-      "helpText": "Recevez chaque lundi par email un résumé IA basé sur les conversations et documents de traçabilité."
+      "helpText": "Recevez chaque lundi par email un résumé IA basé sur les conversations et documents de traçabilité.",
+      "promptLabel": "Prompt personnalisé",
+      "promptPlaceholder": "Ex: Génère un recap avec les sections : Avancement des projets, Risques identifiés, Actions à mener...",
+      "promptHelpText": "Laissez vide pour utiliser le prompt par défaut (3 sections : Projets réalisés, Deadlines, Enjeux clés)."
     }
   },
   "slack": {

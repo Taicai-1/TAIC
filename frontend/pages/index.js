@@ -58,7 +58,7 @@ export default function CompanionSettings() {
     name: "", contexte: "", biographie: "", profile_photo: null,
     type: 'conversationnel',
     email_tags: [], neo4j_enabled: false, neo4j_person_name: "",
-    neo4j_depth: 1, weekly_recap_enabled: false
+    neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: ""
   });
   const [emailTagInput, setEmailTagInput] = useState("");
 
@@ -123,7 +123,8 @@ export default function CompanionSettings() {
         type: agent.type || 'conversationnel',
         email_tags: parsedEmailTags, neo4j_enabled: agent.neo4j_enabled || false,
         neo4j_person_name: agent.neo4j_person_name || "", neo4j_depth: agent.neo4j_depth || 1,
-        weekly_recap_enabled: agent.weekly_recap_enabled || false
+        weekly_recap_enabled: agent.weekly_recap_enabled || false,
+        weekly_recap_prompt: agent.weekly_recap_prompt || ""
       });
     } catch (error) {
       toast.error(t('agents:toast.loadError'));
@@ -250,6 +251,7 @@ export default function CompanionSettings() {
       if (form.neo4j_person_name) formData.append("neo4j_person_name", form.neo4j_person_name);
       formData.append("neo4j_depth", String(form.neo4j_depth || 1));
       formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
+      if (form.weekly_recap_prompt) formData.append("weekly_recap_prompt", form.weekly_recap_prompt);
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -616,34 +618,6 @@ export default function CompanionSettings() {
               </select>
             </div>
 
-            {/* Weekly Recap Toggle */}
-            <div className="flex items-center justify-between p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
-              <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center">
-                  <Mail className="w-4 h-4 mr-2 text-amber-600" />
-                  {t('agents:form.weeklyRecap.label')}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">{t('agents:form.weeklyRecap.helpText')}</p>
-              </div>
-              <button
-                type="button"
-                className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border-2 flex-shrink-0 ml-4 ${form.weekly_recap_enabled ? 'bg-amber-500 border-amber-500' : 'bg-gray-200 border-gray-300'}`}
-                onClick={() => setForm(f => ({ ...f, weekly_recap_enabled: !f.weekly_recap_enabled }))}
-              >
-                <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.weekly_recap_enabled ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
-              </button>
-            </div>
-            {form.weekly_recap_enabled && currentAgent && (
-              <button
-                type="button"
-                onClick={sendRecapNow}
-                disabled={sendingRecap}
-                className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                {sendingRecap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                {sendingRecap ? t('agents:buttons.sendingRecap') : t('agents:buttons.sendRecapNow')}
-              </button>
-            )}
           </div>
 
           {/* Email Tags */}
@@ -868,6 +842,54 @@ export default function CompanionSettings() {
                 </button>
               </div>
             ))}
+          </div>
+
+          {/* Weekly Recap */}
+          <div className="mt-6 p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-700 flex items-center">
+                  <Mail className="w-4 h-4 mr-2 text-amber-600" />
+                  {t('agents:form.weeklyRecap.label')}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">{t('agents:form.weeklyRecap.helpText')}</p>
+              </div>
+              <button
+                type="button"
+                className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border-2 flex-shrink-0 ml-4 ${form.weekly_recap_enabled ? 'bg-amber-500 border-amber-500' : 'bg-gray-200 border-gray-300'}`}
+                onClick={() => setForm(f => ({ ...f, weekly_recap_enabled: !f.weekly_recap_enabled }))}
+              >
+                <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.weekly_recap_enabled ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
+              </button>
+            </div>
+            {form.weekly_recap_enabled && (
+              <>
+                <div className="mt-3">
+                  <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                    {t('agents:form.weeklyRecap.promptLabel')}
+                  </label>
+                  <textarea
+                    className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm resize-y"
+                    rows={4}
+                    placeholder={t('agents:form.weeklyRecap.promptPlaceholder')}
+                    value={form.weekly_recap_prompt}
+                    onChange={e => setForm(f => ({ ...f, weekly_recap_prompt: e.target.value }))}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">{t('agents:form.weeklyRecap.promptHelpText')}</p>
+                </div>
+                {currentAgent && (
+                  <button
+                    type="button"
+                    onClick={sendRecapNow}
+                    disabled={sendingRecap}
+                    className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    {sendingRecap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {sendingRecap ? t('agents:buttons.sendingRecap') : t('agents:buttons.sendRecapNow')}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </Section>
 
