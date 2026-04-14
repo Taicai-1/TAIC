@@ -6,17 +6,29 @@ from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 logger = logging.getLogger(__name__)
 
+
 def _get_project_and_location():
     # Allow overriding via env. Prefer GEMINI_LOCATION, then cloud-run region if available,
     # otherwise fall back to a sensible regional default (us-central1). Using 'global' is
     # incorrect for many publisher models which are regional-only and caused 404s.
     project = os.getenv("GOOGLE_CLOUD_PROJECT")
     # Try explicit GEMINI_LOCATION, then CLOUD_RUN_REGION, then GOOGLE_CLOUD_REGION, then default
-    location = os.getenv("GEMINI_LOCATION") or os.getenv("CLOUD_RUN_REGION") or os.getenv("GOOGLE_CLOUD_REGION") or "europe-west1"
+    location = (
+        os.getenv("GEMINI_LOCATION")
+        or os.getenv("CLOUD_RUN_REGION")
+        or os.getenv("GOOGLE_CLOUD_REGION")
+        or "europe-west1"
+    )
     return project, location
 
 
-def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature: float = 0.0, max_tokens: int = 16000, timeout: int = 30) -> str:
+def generate_text(
+    prompt: str,
+    model_name: str = "gemini-2.0-flash",
+    temperature: float = 0.0,
+    max_tokens: int = 16000,
+    timeout: int = 30,
+) -> str:
     """
     Minimal wrapper to call Vertex AI Generative Models (Gemini) REST API.
 
@@ -60,12 +72,12 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
         try:
             p = urlparse(u)
             qs = dict(parse_qsl(p.query, keep_blank_values=True))
-            if 'key' in qs:
-                qs['key'] = '<REDACTED>'
+            if "key" in qs:
+                qs["key"] = "<REDACTED>"
             new_q = urlencode(qs, doseq=True)
             return urlunparse(p._replace(query=new_q))
         except Exception:
-            return '<redacted_url>'
+            return "<redacted_url>"
 
     # Try Application Default Credentials flow (google-auth)
     try:
@@ -81,7 +93,12 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
         def _running_on_gcp_metadata() -> bool:
             try:
                 import requests as _req
-                resp = _req.get("http://169.254.169.254/computeMetadata/v1/instance/service-accounts/", headers={"Metadata-Flavor": "Google"}, timeout=1)
+
+                resp = _req.get(
+                    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/",
+                    headers={"Metadata-Flavor": "Google"},
+                    timeout=1,
+                )
                 return resp.status_code == 200
             except Exception:
                 return False
@@ -90,12 +107,18 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
             # No ADC available — provide richer diagnostic info in the logs
             on_gcp = _running_on_gcp_metadata()
             gac_env = bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
-            logger.error("No application default credentials available for Gemini/Vertex ADC. on_gcp=%s GOOGLE_APPLICATION_CREDENTIALS_set=%s", on_gcp, gac_env)
+            logger.error(
+                "No application default credentials available for Gemini/Vertex ADC. on_gcp=%s GOOGLE_APPLICATION_CREDENTIALS_set=%s",
+                on_gcp,
+                gac_env,
+            )
             raise Exception("No application default credentials available")
 
         # Log which service account/email we're using if available
         try:
-            sa_email = getattr(credentials, "service_account_email", None) or getattr(credentials, "_service_account_email", None)
+            sa_email = getattr(credentials, "service_account_email", None) or getattr(
+                credentials, "_service_account_email", None
+            )
             if sa_email:
                 logger.info(f"Using ADC service account/email: {sa_email}")
         except Exception:
@@ -110,7 +133,9 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
 
         predict_project = project or proj or os.getenv("GOOGLE_CLOUD_PROJECT")
         if not predict_project:
-            raise RuntimeError("Unable to determine GCP project for Vertex generateContent URL (set GOOGLE_CLOUD_PROJECT or ensure ADC provides a project id).")
+            raise RuntimeError(
+                "Unable to determine GCP project for Vertex generateContent URL (set GOOGLE_CLOUD_PROJECT or ensure ADC provides a project id)."
+            )
 
         # Alias mapping (keep minimal mapping here; extend if needed)
         ALIAS_MAP = {
@@ -124,7 +149,12 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
         # Resolve model id
         resolved_model = ALIAS_MAP.get(model_short, model_short)
         # If still a plain gemini id without version, append @001 as a sensible default
-        if resolved_model and resolved_model.lower().startswith("gemini") and "@" not in resolved_model and "-" not in resolved_model:
+        if (
+            resolved_model
+            and resolved_model.lower().startswith("gemini")
+            and "@" not in resolved_model
+            and "-" not in resolved_model
+        ):
             resolved_model = f"{resolved_model}@001"
 
         # Build the generateContent URL (single region - already in 'location')
@@ -133,10 +163,8 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
         logger.info(f"Calling Vertex generateContent: model={resolved_model} url={safe_url}")
 
         body = {
-            "contents": [
-                {"role": "user", "parts": [{"text": prompt}]}
-            ],
-            "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
         }
 
         resp = session.post(url, json=body, timeout=timeout)
@@ -190,6 +218,7 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
         # coerce string->json and re-run extraction.
         try:
             import json as _json
+
             if isinstance(data, str) and data.strip().startswith("{"):
                 parsed = _json.loads(data)
                 # Try to extract from parsed dict using same logic
@@ -214,7 +243,7 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
             if isinstance(first, dict):
                 # try several keys
                 for key in ("content", "candidates", "text", "output"):
-                    if key in first: 
+                    if key in first:
                         val = first[key]
                         if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict) and "content" in val[0]:
                             return val[0]["content"]
@@ -239,7 +268,15 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
         on_gcp = False
         try:
             import requests as _req
-            on_gcp = _req.get("http://169.254.169.254/computeMetadata/v1/instance/service-accounts/", headers={"Metadata-Flavor": "Google"}, timeout=1).status_code == 200
+
+            on_gcp = (
+                _req.get(
+                    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/",
+                    headers={"Metadata-Flavor": "Google"},
+                    timeout=1,
+                ).status_code
+                == 200
+            )
         except Exception:
             on_gcp = False
 
@@ -252,12 +289,17 @@ def generate_text(prompt: str, model_name: str = "gemini-2.0-flash", temperature
         raise RuntimeError(
             "No application default credentials found for Gemini/Vertex AI. "
             "Ensure the Cloud Run service account has ADC available (if running on GCP, attach the correct service account to the Cloud Run service) or set GOOGLE_APPLICATION_CREDENTIALS for local testing. "
-            "Also ensure the service account has the roles/aiplatform.user role. "
-            + "Debug: " + hint_text
+            "Also ensure the service account has the roles/aiplatform.user role. " + "Debug: " + hint_text
         ) from e
 
 
-def generate_raw(prompt: str, model_name: str = "gemini-2.0-flash", temperature: float = 0.0, max_tokens: int = 16000, timeout: int = 30) -> dict:
+def generate_raw(
+    prompt: str,
+    model_name: str = "gemini-2.0-flash",
+    temperature: float = 0.0,
+    max_tokens: int = 16000,
+    timeout: int = 30,
+) -> dict:
     """Call Vertex generateContent and return the raw JSON response (dict).
 
     Use this when the caller needs structured data (e.g., to detect function_call objects)
@@ -292,7 +334,12 @@ def generate_raw(prompt: str, model_name: str = "gemini-2.0-flash", temperature:
         }
 
         resolved_model = ALIAS_MAP.get(model_short, model_short)
-        if resolved_model and resolved_model.lower().startswith("gemini") and "@" not in resolved_model and "-" not in resolved_model:
+        if (
+            resolved_model
+            and resolved_model.lower().startswith("gemini")
+            and "@" not in resolved_model
+            and "-" not in resolved_model
+        ):
             resolved_model = f"{resolved_model}@001"
 
         predict_project = project or proj or os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -301,10 +348,8 @@ def generate_raw(prompt: str, model_name: str = "gemini-2.0-flash", temperature:
 
         url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{predict_project}/locations/{location}/publishers/google/models/{resolved_model}:generateContent"
         body = {
-            "contents": [
-                {"role": "user", "parts": [{"text": prompt}]}
-            ],
-            "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
         }
         resp = session.post(url, json=body, timeout=timeout)
         resp.raise_for_status()

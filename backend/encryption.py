@@ -6,6 +6,7 @@ Requires ENCRYPTION_KEY env var (base64-encoded 32-byte key).
 Generate a key with:
     python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 """
+
 import os
 import logging
 from cryptography.fernet import Fernet, InvalidToken
@@ -24,7 +25,7 @@ def _get_fernet():
         if os.getenv("GOOGLE_CLOUD_PROJECT"):
             raise RuntimeError(
                 "ENCRYPTION_KEY is required in production. "
-                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             )
         logger.warning("ENCRYPTION_KEY not set - sensitive fields will be stored in plaintext (dev only)")
         return None

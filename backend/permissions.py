@@ -18,11 +18,7 @@ ROLE_HIERARCHY = {"owner": 3, "admin": 2, "member": 1}
 
 def get_user_membership(user_id: int, db: Session) -> Optional[CompanyMembership]:
     """Return the user's CompanyMembership or None."""
-    return (
-        db.query(CompanyMembership)
-        .filter(CompanyMembership.user_id == user_id)
-        .first()
-    )
+    return db.query(CompanyMembership).filter(CompanyMembership.user_id == user_id).first()
 
 
 def require_role(user_id: int, db: Session, min_role: str = "member") -> CompanyMembership:

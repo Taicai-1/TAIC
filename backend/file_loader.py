@@ -11,22 +11,27 @@ logger = logging.getLogger("file_loader")
 
 # Patch NLTK pour rediriger 'punkt_tab' vers 'punkt'
 import nltk.data
+
 _original_find = nltk.data.find
+
+
 def patched_find(resource_name, paths=None):
-    if 'punkt_tab' in resource_name:
-        resource_name = resource_name.replace('punkt_tab', 'punkt')
+    if "punkt_tab" in resource_name:
+        resource_name = resource_name.replace("punkt_tab", "punkt")
     return _original_find(resource_name, paths)
+
+
 nltk.data.find = patched_find
 
 # Setup robust NLTK punkt for Cloud Run
-NLTK_DATA_PATH = '/tmp/nltk_data'
+NLTK_DATA_PATH = "/tmp/nltk_data"
 os.makedirs(NLTK_DATA_PATH, exist_ok=True)
 if NLTK_DATA_PATH not in nltk.data.path:
     nltk.data.path.append(NLTK_DATA_PATH)
 try:
-    nltk.data.find('tokenizers/punkt')
+    nltk.data.find("tokenizers/punkt")
 except LookupError:
-    nltk.download('punkt', download_dir=NLTK_DATA_PATH)
+    nltk.download("punkt", download_dir=NLTK_DATA_PATH)
 
 # Token encoder for chunk sizing (cl100k_base is a good general approximation)
 _enc = tiktoken.get_encoding("cl100k_base")
@@ -48,23 +53,24 @@ def load_text_from_pdf(path: str) -> str:
                     text += page_text + "\n"
     except Exception as e:
         logger.error(f"Error loading PDF: {e}")
-        return text.replace('\x00', '')
+        return text.replace("\x00", "")
     if not text.strip():
         logger.warning(f"No text extracted from PDF {path}")
-    return text.replace('\x00', '')
+    return text.replace("\x00", "")
 
 
 # ---------------------------------------------------------------------------
 # Hybrid chunking: clean → recursive split → sentence-boundary overlap
 # ---------------------------------------------------------------------------
 
+
 def _clean_text(text: str) -> str:
     """Clean raw text before chunking: remove artifacts, normalize whitespace."""
-    text = text.replace('\x00', '')
-    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace("\x00", "")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
 
     # Detect and remove repeated headers/footers (lines appearing 3+ times)
-    lines = text.split('\n')
+    lines = text.split("\n")
     line_counts: dict = {}
     for line in lines:
         stripped = line.strip()
@@ -73,12 +79,12 @@ def _clean_text(text: str) -> str:
     repeated = {line for line, count in line_counts.items() if count >= 3}
     if repeated:
         lines = [l for l in lines if l.strip() not in repeated]
-        text = '\n'.join(lines)
+        text = "\n".join(lines)
 
     # Collapse 3+ consecutive newlines into 2
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     # Collapse multiple spaces into one
-    text = re.sub(r' {2,}', ' ', text)
+    text = re.sub(r" {2,}", " ", text)
     return text.strip()
 
 
@@ -97,7 +103,7 @@ def _recursive_split(text: str, max_tokens: int, separators: List[str]) -> List[
         tokens = _enc.encode(text)
         chunks = []
         for i in range(0, len(tokens), max_tokens):
-            chunks.append(_enc.decode(tokens[i:i + max_tokens]))
+            chunks.append(_enc.decode(tokens[i : i + max_tokens]))
         return chunks
 
     sep = separators[0]
@@ -134,10 +140,10 @@ def _sentence_overlap(chunk: str, max_overlap_tokens: int) -> str:
         sentences = sent_tokenize(chunk)
     except Exception:
         # Fallback: take last N characters roughly equal to max_overlap_tokens * 4
-        tail = chunk[-(max_overlap_tokens * 4):]
+        tail = chunk[-(max_overlap_tokens * 4) :]
         # Try to start at a word boundary
-        space_idx = tail.find(' ')
-        return tail[space_idx + 1:] if space_idx != -1 else tail
+        space_idx = tail.find(" ")
+        return tail[space_idx + 1 :] if space_idx != -1 else tail
 
     overlap_sentences: List[str] = []
     token_count = 0
@@ -148,7 +154,7 @@ def _sentence_overlap(chunk: str, max_overlap_tokens: int) -> str:
         overlap_sentences.insert(0, s)
         token_count += s_tokens
 
-    return ' '.join(overlap_sentences) if overlap_sentences else ''
+    return " ".join(overlap_sentences) if overlap_sentences else ""
 
 
 def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50, **kwargs) -> List[str]:
@@ -172,7 +178,7 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50, **kwargs) ->
 
     # Step 2: Recursive split with separator hierarchy
     # \n\n = paragraphs, \n = lines, ". " = sentences, " " = words
-    separators = ['\n\n', '\n', '. ', ' ']
+    separators = ["\n\n", "\n", ". ", " "]
     raw_chunks = _recursive_split(text, chunk_size, separators)
 
     # Step 3: Add sentence-boundary overlap (complete sentences, not cut characters)

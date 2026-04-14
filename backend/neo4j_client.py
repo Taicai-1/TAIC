@@ -41,6 +41,7 @@ def _get_org_driver(company_id: int):
 
     try:
         from database import SessionLocal, Company
+
         db = SessionLocal()
         company = db.query(Company).filter(Company.id == company_id).first()
         db.close()
@@ -56,6 +57,7 @@ def _get_org_driver(company_id: int):
             return None
 
         from neo4j import GraphDatabase
+
         driver = GraphDatabase.driver(uri, auth=(user, password))
         driver.verify_connectivity()
         _org_drivers[company_id] = driver
@@ -118,7 +120,8 @@ def get_person_context(company_id: int, person_name: str, depth: int = 1) -> str
     try:
         with driver.session() as session:
             # Depth 1: direct relations
-            result_d1 = session.run("""
+            result_d1 = session.run(
+                """
                 MATCH (p:Person {name: $name, company_id: $cid})-[r]-(connected)
                 RETURN p.name AS source_name,
                        p.role AS source_role,
@@ -126,7 +129,10 @@ def get_person_context(company_id: int, person_name: str, depth: int = 1) -> str
                        properties(r) AS rel_props,
                        connected.name AS target_name,
                        labels(connected)[0] AS target_label
-            """, name=person_name, cid=company_id)
+            """,
+                name=person_name,
+                cid=company_id,
+            )
 
             records_d1 = [dict(record) for record in result_d1]
 
@@ -135,10 +141,14 @@ def get_person_context(company_id: int, person_name: str, depth: int = 1) -> str
                 return ""
 
             # Also get person description
-            desc_result = session.run("""
+            desc_result = session.run(
+                """
                 MATCH (p:Person {name: $name, company_id: $cid})
                 RETURN p.description AS description, p.role AS role, p.skills AS skills
-            """, name=person_name, cid=company_id)
+            """,
+                name=person_name,
+                cid=company_id,
+            )
             desc_record = desc_result.single()
 
             sections = []
@@ -159,12 +169,13 @@ def get_person_context(company_id: int, person_name: str, depth: int = 1) -> str
                 sections.append(header)
 
             # Direct relations
-            sections.append(f"\nRelations directes :")
+            sections.append("\nRelations directes :")
             sections.append(_format_results(records_d1))
 
             # Depth 2: second-degree
             if depth >= 2:
-                result_d2 = session.run("""
+                result_d2 = session.run(
+                    """
                     MATCH (p:Person {name: $name, company_id: $cid})-[r1]-(mid)-[r2]-(far)
                     WHERE far <> p AND NOT (p)-[]-(far)
                     RETURN mid.name AS source_name,
@@ -174,11 +185,14 @@ def get_person_context(company_id: int, person_name: str, depth: int = 1) -> str
                            far.name AS target_name,
                            labels(far)[0] AS target_label
                     LIMIT 30
-                """, name=person_name, cid=company_id)
+                """,
+                    name=person_name,
+                    cid=company_id,
+                )
 
                 records_d2 = [dict(record) for record in result_d2]
                 if records_d2:
-                    sections.append(f"\nRelations de second degre :")
+                    sections.append("\nRelations de second degre :")
                     sections.append(_format_results(records_d2))
 
             return "\n".join(sections)
@@ -197,6 +211,7 @@ def get_person_context_cached(company_id: int, person_name: str, depth: int = 1)
 
     try:
         from redis_client import get_redis
+
         r = get_redis()
         if r is None:
             raise ConnectionError("Redis unavailable")
@@ -225,11 +240,14 @@ def get_persons_for_company(company_id: int) -> list:
 
     try:
         with driver.session() as session:
-            result = session.run("""
+            result = session.run(
+                """
                 MATCH (p:Person {company_id: $cid})
                 RETURN p.name AS name, p.role AS role
                 ORDER BY p.name
-            """, cid=company_id)
+            """,
+                cid=company_id,
+            )
             return [{"name": record["name"], "role": record["role"]} for record in result]
     except Exception as e:
         logger.error(f"Failed to list Neo4j persons for company {company_id}: {e}")

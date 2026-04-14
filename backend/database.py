@@ -11,11 +11,12 @@ from pgvector.sqlalchemy import Vector
 from datetime import datetime, timedelta
 
 # Tenant context variable — set by middleware, read by get_db
-_current_company_id: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar('company_id', default=None)
+_current_company_id: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar("company_id", default=None)
 
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 # Database configuration
 def get_database_url():
@@ -46,9 +47,11 @@ def get_database_url():
         logger.warning("DATABASE_URL not set — using local dev default. Do NOT use in production.")
         return "postgresql://raguser:ragpassword@localhost:5432/ragdb"
 
+
 DATABASE_URL = get_database_url()
 
 Base = declarative_base()
+
 
 class Company(Base):
     __tablename__ = "companies"
@@ -75,65 +78,78 @@ class Company(Base):
     @property
     def org_neo4j_uri(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._neo4j_uri)
 
     @org_neo4j_uri.setter
     def org_neo4j_uri(self, value):
         from encryption import encrypt_value
+
         self._neo4j_uri = encrypt_value(value)
 
     @property
     def org_neo4j_user(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._neo4j_user)
 
     @org_neo4j_user.setter
     def org_neo4j_user(self, value):
         from encryption import encrypt_value
+
         self._neo4j_user = encrypt_value(value)
 
     @property
     def org_neo4j_password(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._neo4j_password)
 
     @org_neo4j_password.setter
     def org_neo4j_password(self, value):
         from encryption import encrypt_value
+
         self._neo4j_password = encrypt_value(value)
 
     @property
     def org_notion_api_key(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._notion_api_key)
 
     @org_notion_api_key.setter
     def org_notion_api_key(self, value):
         from encryption import encrypt_value
+
         self._notion_api_key = encrypt_value(value)
 
     @property
     def org_slack_bot_token(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._slack_bot_token)
 
     @org_slack_bot_token.setter
     def org_slack_bot_token(self, value):
         from encryption import encrypt_value
+
         self._slack_bot_token = encrypt_value(value)
 
     @property
     def org_slack_signing_secret(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._slack_signing_secret)
 
     @org_slack_signing_secret.setter
     def org_slack_signing_secret(self, value):
         from encryption import encrypt_value
+
         self._slack_signing_secret = encrypt_value(value)
 
     users = relationship("User", back_populates="company")
     memberships = relationship("CompanyMembership", back_populates="company", cascade="all, delete-orphan")
+
 
 class User(Base):
     __tablename__ = "users"
@@ -158,11 +174,13 @@ class User(Base):
     @property
     def totp_secret(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._totp_secret)
 
     @totp_secret.setter
     def totp_secret(self, value):
         from encryption import encrypt_value
+
         self._totp_secret = encrypt_value(value)
 
     # Relations avec les documents et les agents
@@ -170,6 +188,7 @@ class User(Base):
     agents = relationship("Agent", back_populates="owner", cascade="all, delete-orphan")
     company = relationship("Company", back_populates="users")
     memberships = relationship("CompanyMembership", back_populates="user", cascade="all, delete-orphan")
+
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
@@ -180,6 +199,7 @@ class PasswordResetToken(Base):
     used = Column(Boolean, default=False, nullable=False)
 
     user = relationship("User")
+
 
 class CompanyMembership(Base):
     __tablename__ = "company_memberships"
@@ -214,7 +234,7 @@ class CompanyInvitation(Base):
 
 class Agent(Base):
     __tablename__ = "agents"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     contexte = Column(Text, nullable=True)  # contexte pour ChatGPT
@@ -234,28 +254,35 @@ class Agent(Base):
     finetuned_model_id = Column(String(255), nullable=True)  # ID du modèle OpenAI fine-tuné
     _slack_bot_token = Column("slack_bot_token", Text, nullable=True)  # Encrypted token du bot Slack
     slack_team_id = Column(String(64), nullable=True)  # ID du workspace Slack associé à l'agent
-    slack_bot_user_id = Column(String(64), nullable=True)  # Bot user ID (ex: U123ABC) pour identifier le bot dans une team
+    slack_bot_user_id = Column(
+        String(64), nullable=True
+    )  # Bot user ID (ex: U123ABC) pour identifier le bot dans une team
     _slack_signing_secret = Column("slack_signing_secret", Text, nullable=True)  # Encrypted Signing Secret
 
     @property
     def slack_bot_token(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._slack_bot_token)
 
     @slack_bot_token.setter
     def slack_bot_token(self, value):
         from encryption import encrypt_value
+
         self._slack_bot_token = encrypt_value(value)
 
     @property
     def slack_signing_secret(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._slack_signing_secret)
 
     @slack_signing_secret.setter
     def slack_signing_secret(self, value):
         from encryption import encrypt_value
+
         self._slack_signing_secret = encrypt_value(value)
+
     email_tags = Column(Text, nullable=True)  # JSON array de tags email ex: ["@finance", "@rh"]
 
     # Neo4j Knowledge Graph fields
@@ -290,12 +317,14 @@ class AgentShare(Base):
 
 class Document(Base):
     __tablename__ = "documents"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String(255), nullable=False)
     content = Column(Text)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)  # Documents peuvent être liés à un agent spécifique
+    agent_id = Column(
+        Integer, ForeignKey("agents.id"), nullable=True, index=True
+    )  # Documents peuvent être liés à un agent spécifique
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     created_at = Column(DateTime, default=datetime.utcnow)
     gcs_url = Column(String(512), nullable=True)  # URL du fichier dans le bucket GCS
@@ -309,12 +338,15 @@ class Document(Base):
     # Relation avec les chunks
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
 
+
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
 
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation (critical for RAG)
+    company_id = Column(
+        Integer, ForeignKey("companies.id"), nullable=True, index=True
+    )  # Tenant isolation (critical for RAG)
     chunk_text = Column(Text, nullable=False)
     embedding = Column(Text, nullable=True)  # Legacy JSON string (kept for backward compat)
     embedding_vec = Column(Vector(1024), nullable=True)  # pgvector native column (Mistral 1024d)
@@ -426,7 +458,7 @@ engine = create_engine(
     max_overflow=10,
     pool_pre_ping=True,
     pool_recycle=300,
-    echo=False  # Set to True for SQL debugging
+    echo=False,  # Set to True for SQL debugging
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -473,6 +505,7 @@ def get_db_with_tenant(user_id: int, db: Session):
         db.execute(text(f"SET LOCAL app.company_id = '{company_id}'"))
     return company_id
 
+
 def init_db():
     """Initialize database tables"""
     try:
@@ -482,6 +515,7 @@ def init_db():
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise e
+
 
 def ensure_pgvector():
     """Enable the pgvector extension and add the embedding_vec column + HNSW index."""
@@ -493,9 +527,7 @@ def ensure_pgvector():
 
             # Add embedding_vec column if missing
             try:
-                conn.execute(text(
-                    "ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)"
-                ))
+                conn.execute(text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)"))
                 conn.commit()
                 logger.info("ensure_pgvector: embedding_vec column OK")
             except Exception as e:
@@ -504,10 +536,12 @@ def ensure_pgvector():
 
             # Create HNSW index for cosine distance if it doesn't exist
             try:
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS idx_chunks_embedding_vec_hnsw "
-                    "ON document_chunks USING hnsw (embedding_vec vector_cosine_ops)"
-                ))
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_chunks_embedding_vec_hnsw "
+                        "ON document_chunks USING hnsw (embedding_vec vector_cosine_ops)"
+                    )
+                )
                 conn.commit()
                 logger.info("ensure_pgvector: HNSW index OK")
             except Exception as e:
@@ -554,9 +588,7 @@ def ensure_columns():
         with engine.connect() as conn:
             for table, column, col_def in migrations:
                 try:
-                    conn.execute(text(
-                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_def}"
-                    ))
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_def}"))
                     conn.commit()
                     logger.info(f"ensure_columns: {table}.{column} OK")
                 except Exception as e:
@@ -564,9 +596,7 @@ def ensure_columns():
                     conn.rollback()
             # Make hashed_password nullable for OAuth users
             try:
-                conn.execute(text(
-                    "ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"
-                ))
+                conn.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
                 conn.commit()
                 logger.info("ensure_columns: users.hashed_password DROP NOT NULL OK")
             except Exception as e:
@@ -590,12 +620,7 @@ def migrate_existing_company_memberships():
             return
 
         # Get all users with a company_id, ordered by created_at
-        users_with_company = (
-            db.query(User)
-            .filter(User.company_id.isnot(None))
-            .order_by(User.created_at.asc())
-            .all()
-        )
+        users_with_company = db.query(User).filter(User.company_id.isnot(None)).order_by(User.created_at.asc()).all()
 
         if not users_with_company:
             logger.info("migrate_existing_company_memberships: no users with company, skipping")
@@ -612,10 +637,7 @@ def migrate_existing_company_memberships():
                 company_owners.add(user.company_id)
 
             membership = CompanyMembership(
-                user_id=user.id,
-                company_id=user.company_id,
-                role=role,
-                joined_at=user.created_at or datetime.utcnow()
+                user_id=user.id, company_id=user.company_id, role=role, joined_at=user.created_at or datetime.utcnow()
             )
             db.add(membership)
 
@@ -625,7 +647,9 @@ def migrate_existing_company_memberships():
             company.invite_code = secrets.token_urlsafe(16)
 
         db.commit()
-        logger.info(f"migrate_existing_company_memberships: created {len(users_with_company)} memberships, updated {len(companies)} invite codes")
+        logger.info(
+            f"migrate_existing_company_memberships: created {len(users_with_company)} memberships, updated {len(companies)} invite codes"
+        )
         db.close()
     except Exception as e:
         logger.error(f"migrate_existing_company_memberships failed: {e}")

@@ -1,6 +1,7 @@
 """
 AI/ML utility functions for model output normalization and JSON extraction.
 """
+
 import json
 import re
 from typing import Any, Optional
@@ -97,12 +98,12 @@ def extract_json_object_from_text(text: str) -> Optional[dict]:
             depth = 0
             for i in range(s, len(text)):
                 ch = text[i]
-                if ch == '{':
+                if ch == "{":
                     depth += 1
-                elif ch == '}':
+                elif ch == "}":
                     depth -= 1
                     if depth == 0:
-                        candidate = text[s:i+1]
+                        candidate = text[s : i + 1]
                         try:
                             return json.loads(candidate)
                         except Exception:

@@ -1,4 +1,3 @@
-
 # Contient la logique RAG améliorée
 import hashlib
 import json
@@ -33,6 +32,7 @@ def _get_rag_cache(key: str):
     """Try Redis first, fall back to in-memory dict."""
     try:
         from redis_client import get_redis
+
         r = get_redis()
         if r is not None:
             cached = r.get(key)
@@ -53,6 +53,7 @@ def _set_rag_cache(key: str, result):
     """Write to Redis and in-memory fallback."""
     try:
         from redis_client import get_redis
+
         r = get_redis()
         if r is not None:
             r.setex(key, _RAG_CACHE_TTL, json.dumps(result))
@@ -64,11 +65,18 @@ def _set_rag_cache(key: str, result):
         oldest_key = min(_answer_cache.keys(), key=lambda k: _answer_cache[k][0])
         del _answer_cache[oldest_key]
 
+
 def get_last_message_for_agent(agent_id: int, db: Session) -> str:
     """Retourne le dernier message envoyé à l'agent (mémoire courte par agent)."""
     from database import Message, Conversation
+
     # Récupère la dernière conversation de l'agent
-    conv = db.query(Conversation).filter(Conversation.agent_id == agent_id).order_by(Conversation.created_at.desc()).first()
+    conv = (
+        db.query(Conversation)
+        .filter(Conversation.agent_id == agent_id)
+        .order_by(Conversation.created_at.desc())
+        .first()
+    )
     if not conv:
         return ""
     # Récupère le dernier message de la conversation
@@ -77,7 +85,10 @@ def get_last_message_for_agent(agent_id: int, db: Session) -> str:
         return ""
     return msg.content
 
-def get_answer_with_files(question: str, user_id: int, db: Session, selected_doc_ids: List[int] = None, agent_type: str = None) -> Dict[str, Any]:
+
+def get_answer_with_files(
+    question: str, user_id: int, db: Session, selected_doc_ids: List[int] = None, agent_type: str = None
+) -> Dict[str, Any]:
     """Get answer using RAG with file generation capabilities"""
     try:
         cache_key = _rag_cache_key(user_id, question, selected_doc_ids, agent_type)
@@ -97,21 +108,20 @@ def get_answer_with_files(question: str, user_id: int, db: Session, selected_doc
         generation_info = file_gen.detect_generation_request(question, answer)
 
         # If no table detected but user asked for structured data, create sample data
-        if (generation_info['generate_csv'] or generation_info['generate_pdf']) and not generation_info['table_data']:
-            sample_data = file_gen.create_sample_data(agent_type or 'sales')
-            generation_info['table_data'] = sample_data
-            generation_info['has_table'] = True
+        if (generation_info["generate_csv"] or generation_info["generate_pdf"]) and not generation_info["table_data"]:
+            sample_data = file_gen.create_sample_data(agent_type or "sales")
+            generation_info["table_data"] = sample_data
+            generation_info["has_table"] = True
 
         # Format answer with table if needed
-        if generation_info['has_table'] and generation_info['table_data']:
-            generation_info['formatted_answer'] = file_gen._format_answer_with_table(answer, generation_info['table_data'])
+        if generation_info["has_table"] and generation_info["table_data"]:
+            generation_info["formatted_answer"] = file_gen._format_answer_with_table(
+                answer, generation_info["table_data"]
+            )
         else:
-            generation_info['formatted_answer'] = answer
+            generation_info["formatted_answer"] = answer
 
-        result = {
-            'answer': generation_info['formatted_answer'],
-            'generation_info': generation_info
-        }
+        result = {"answer": generation_info["formatted_answer"], "generation_info": generation_info}
 
         _set_rag_cache(cache_key, result)
         return result
@@ -125,6 +135,7 @@ def get_direct_gpt_response(question: str, db: Session, agent_id: int = None) ->
     """Get direct response from GPT without RAG when no documents are available, using agent_id for context"""
     try:
         from database import Agent
+
         agent = None
         contexte_agent = ""
         if agent_id:
@@ -149,12 +160,13 @@ def detect_document_mention(question: str, available_docs: List[Document]) -> Op
 
     # Normalize question: remove accents, extra spaces, punctuation
     import unicodedata
+
     def normalize_text(text):
         # Remove accents
-        text = ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
+        text = "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
         # Remove punctuation and extra spaces
-        text = text.replace('-', ' ').replace('_', ' ')
-        return ' '.join(text.split())
+        text = text.replace("-", " ").replace("_", " ")
+        return " ".join(text.split())
 
     question_normalized = normalize_text(question_lower)
 
@@ -165,7 +177,7 @@ def detect_document_mention(question: str, available_docs: List[Document]) -> Op
     for doc in available_docs:
         doc_name_lower = doc.filename.lower()
         # Remove file extensions for better matching
-        doc_name_base = doc_name_lower.replace('.pdf', '').replace('.txt', '').replace('.doc', '').replace('.docx', '')
+        doc_name_base = doc_name_lower.replace(".pdf", "").replace(".txt", "").replace(".doc", "").replace(".docx", "")
         doc_name_normalized = normalize_text(doc_name_base)
 
         score = 0
@@ -227,10 +239,18 @@ def get_answer(
         else:
             # If we're in an agent context, prefer documents attached to that agent only
             if agent_id:
-                user_docs = db.query(Document).filter(Document.agent_id == agent_id, Document.document_type != "traceability").all()
+                user_docs = (
+                    db.query(Document)
+                    .filter(Document.agent_id == agent_id, Document.document_type != "traceability")
+                    .all()
+                )
                 logger.info(f"Using {len(user_docs)} documents attached to agent {agent_id}")
             else:
-                user_docs = db.query(Document).filter(Document.user_id == user_id, Document.document_type != "traceability").all()
+                user_docs = (
+                    db.query(Document)
+                    .filter(Document.user_id == user_id, Document.document_type != "traceability")
+                    .all()
+                )
                 logger.info(f"Using all {len(user_docs)} user documents")
 
         # Detect if user mentions a specific document
@@ -253,22 +273,21 @@ def get_answer(
         contexte_agent = agent.contexte if agent and agent.contexte else ""
 
         # Visuel agent: bypass RAG, generate image via Imagen 3
-        if agent and getattr(agent, 'type', '') == 'visuel':
+        if agent and getattr(agent, "type", "") == "visuel":
             style_prefix = f"{agent.contexte.strip()}. " if (agent.contexte or "").strip() else ""
             image_bytes = generate_image(style_prefix + question)
             image_url = upload_generated_image(image_bytes, agent.id)
             return f"![Image générée]({image_url})"
 
         # Neo4j Knowledge Graph context injection
-        if agent and getattr(agent, 'neo4j_enabled', False) and getattr(agent, 'neo4j_person_name', None):
+        if agent and getattr(agent, "neo4j_enabled", False) and getattr(agent, "neo4j_person_name", None):
             try:
                 from neo4j_client import get_person_context_cached
+
                 owner = db.query(User).filter(User.id == agent.user_id).first()
                 if owner and owner.company_id:
                     neo4j_context = get_person_context_cached(
-                        owner.company_id,
-                        agent.neo4j_person_name,
-                        agent.neo4j_depth or 1
+                        owner.company_id, agent.neo4j_person_name, agent.neo4j_depth or 1
                     )
                     if neo4j_context:
                         contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
@@ -281,7 +300,7 @@ def get_answer(
         if user_docs:
             available_docs_list = "\n\nDocuments disponibles dans ma base de connaissances:\n"
             for doc in user_docs:
-                doc_name = doc.filename.replace('.pdf', '').replace('.txt', '').replace('.doc', '').replace('.docx', '')
+                doc_name = doc.filename.replace(".pdf", "").replace(".txt", "").replace(".doc", "").replace(".docx", "")
                 available_docs_list += f"- {doc_name}\n"
 
         # Si pas de documents, fallback sur le contexte + mémoire
@@ -300,17 +319,17 @@ def get_answer(
                 if history:
                     for msg in history[-10:]:
                         # Convertit les rôles pour OpenAI API format
-                        role = msg.get('role', 'user')
-                        if role == 'agent':
-                            role = 'assistant'
-                        elif role == 'system':
+                        role = msg.get("role", "user")
+                        if role == "agent":
+                            role = "assistant"
+                        elif role == "system":
                             # Skip system messages from history, or add as user context
                             continue
-                        messages.append({"role": role, "content": msg.get('content', '')})
+                        messages.append({"role": role, "content": msg.get("content", "")})
 
                 # Ajoute la question actuelle si elle n'est pas déjà dans l'historique
                 # (vérifie si le dernier message de l'historique est différent de la question)
-                if not history or history[-1].get('content', '') != question:
+                if not history or history[-1].get("content", "") != question:
                     messages.append({"role": "user", "content": question})
 
                 logger.info("[PROMPT OPENAI] %s", json.dumps(messages, ensure_ascii=False, indent=2))
@@ -340,10 +359,10 @@ def get_answer(
         # Préparer le contexte RAG
         context_by_document = {}
         for result in context_results:
-            doc_name = result['document_name']
+            doc_name = result["document_name"]
             if doc_name not in context_by_document:
                 context_by_document[doc_name] = []
-            context_by_document[doc_name].append(result['text'])
+            context_by_document[doc_name].append(result["text"])
 
         # Build enhanced context string (limited to prevent memory exhaustion)
         MAX_CONTEXT_CHARS = 50000
@@ -384,23 +403,25 @@ def get_answer(
         if history:
             for msg in history[-10:]:
                 # Convertit les rôles pour OpenAI API format
-                role = msg.get('role', 'user')
-                if role == 'agent':
-                    role = 'assistant'
-                elif role == 'system':
+                role = msg.get("role", "user")
+                if role == "agent":
+                    role = "assistant"
+                elif role == "system":
                     # Skip system messages from history
                     continue
-                messages.append({"role": role, "content": msg.get('content', '')})
+                messages.append({"role": role, "content": msg.get("content", "")})
 
         # Ajoute la question actuelle si elle n'est pas déjà dans l'historique
-        if not history or history[-1].get('content', '') != question:
+        if not history or history[-1].get("content", "") != question:
             messages.append({"role": "user", "content": question})
 
         logger.info("[PROMPT OPENAI] %s", json.dumps(messages, ensure_ascii=False, indent=2))
-        logger.info("Getting response from OpenAI with structured messages (system + RAG context, full history, current question)")
+        logger.info(
+            "Getting response from OpenAI with structured messages (system + RAG context, full history, current question)"
+        )
         gemini_only_flag = False
         try:
-            gemini_only_flag = bool(agent and getattr(agent, 'type', '') == 'actionnable')
+            gemini_only_flag = bool(agent and getattr(agent, "type", "") == "actionnable")
         except Exception:
             gemini_only_flag = False
         response = get_chat_response(messages, model_id=model_id, gemini_only=gemini_only_flag)
@@ -409,6 +430,8 @@ def get_answer(
     except Exception as e:
         logger.error(f"Error getting answer: {e}")
         raise Exception(f"Erreur lors du traitement de votre question avec l'API OpenAI : {str(e)}")
+
+
 def search_similar_texts_for_user(
     query_embedding: List[float],
     user_id: int,
@@ -450,20 +473,24 @@ def search_similar_texts_for_user(
             return []
 
         # Build query using SQLAlchemy ORM with pgvector native operators
-        query = db.query(
-            DocumentChunk.id,
-            DocumentChunk.chunk_text,
-            DocumentChunk.chunk_index,
-            DocumentChunk.document_id,
-            Document.filename,
-            Document.created_at,
-            (1 - DocumentChunk.embedding_vec.cosine_distance(query_embedding)).label('similarity')
-        ).join(Document, DocumentChunk.document_id == Document.id).filter(
-            DocumentChunk.embedding_vec.isnot(None),
-            Document.document_type != "traceability",
-            # Hard tenant filter — applied on BOTH tables to survive RLS double-check
-            Document.company_id == company_id,
-            DocumentChunk.company_id == company_id,
+        query = (
+            db.query(
+                DocumentChunk.id,
+                DocumentChunk.chunk_text,
+                DocumentChunk.chunk_index,
+                DocumentChunk.document_id,
+                Document.filename,
+                Document.created_at,
+                (1 - DocumentChunk.embedding_vec.cosine_distance(query_embedding)).label("similarity"),
+            )
+            .join(Document, DocumentChunk.document_id == Document.id)
+            .filter(
+                DocumentChunk.embedding_vec.isnot(None),
+                Document.document_type != "traceability",
+                # Hard tenant filter — applied on BOTH tables to survive RLS double-check
+                Document.company_id == company_id,
+                DocumentChunk.company_id == company_id,
+            )
         )
 
         if agent_id:
@@ -474,9 +501,7 @@ def search_similar_texts_for_user(
         if selected_doc_ids:
             query = query.filter(Document.id.in_(selected_doc_ids))
 
-        query = query.order_by(
-            DocumentChunk.embedding_vec.cosine_distance(query_embedding)
-        ).limit(top_k)
+        query = query.order_by(DocumentChunk.embedding_vec.cosine_distance(query_embedding)).limit(top_k)
 
         rows = query.all()
 
@@ -485,16 +510,12 @@ def search_similar_texts_for_user(
 
         # Fetch neighbor chunks for context
         doc_ids = list({r.document_id for r in rows})
-        neighbor_rows = db.query(
-            DocumentChunk.document_id,
-            DocumentChunk.chunk_index,
-            DocumentChunk.chunk_text
-        ).filter(
-            DocumentChunk.document_id.in_(doc_ids)
-        ).order_by(
-            DocumentChunk.document_id,
-            DocumentChunk.chunk_index
-        ).all()
+        neighbor_rows = (
+            db.query(DocumentChunk.document_id, DocumentChunk.chunk_index, DocumentChunk.chunk_text)
+            .filter(DocumentChunk.document_id.in_(doc_ids))
+            .order_by(DocumentChunk.document_id, DocumentChunk.chunk_index)
+            .all()
+        )
 
         # Build chunk map: document_id -> [(chunk_index, chunk_text), ...]
         chunk_map: Dict[int, List] = {}
@@ -515,102 +536,114 @@ def search_similar_texts_for_user(
                         neighbors.append(ordered[i + 1][1])
                     break
 
-            context_results.append({
-                'similarity': float(row.similarity),
-                'text': "\n".join(neighbors) if neighbors else row.chunk_text,
-                'document_id': row.document_id,
-                'document_name': row.filename,
-                'created_at': row.created_at.isoformat()
-            })
+            context_results.append(
+                {
+                    "similarity": float(row.similarity),
+                    "text": "\n".join(neighbors) if neighbors else row.chunk_text,
+                    "document_id": row.document_id,
+                    "document_name": row.filename,
+                    "created_at": row.created_at.isoformat(),
+                }
+            )
 
         return context_results
     except Exception as e:
         logger.error(f"Error searching similar texts: {e}")
         return []
 
+
 def get_documents_summary(user_id: int, db: Session, selected_doc_ids: List[int] = None) -> List[dict]:
     """Get complete information about user's documents"""
     try:
         if selected_doc_ids:
-            documents = db.query(Document).filter(
-                Document.user_id == user_id,
-                Document.id.in_(selected_doc_ids)
-            ).all()
+            documents = db.query(Document).filter(Document.user_id == user_id, Document.id.in_(selected_doc_ids)).all()
         else:
             documents = db.query(Document).filter(Document.user_id == user_id).all()
-        
+
         doc_info = []
         for doc in documents:
             # Get all chunks for this document
             chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
             content = " ".join([chunk.chunk_text for chunk in chunks])
-            
-            doc_info.append({
-                'id': doc.id,
-                'filename': doc.filename,
-                'created_at': doc.created_at.isoformat(),
-                'content': content[:2000] + "..." if len(content) > 2000 else content,  # Limit content
-                'chunk_count': len(chunks)
-            })
-        
+
+            doc_info.append(
+                {
+                    "id": doc.id,
+                    "filename": doc.filename,
+                    "created_at": doc.created_at.isoformat(),
+                    "content": content[:2000] + "..." if len(content) > 2000 else content,  # Limit content
+                    "chunk_count": len(chunks),
+                }
+            )
+
         return doc_info
-    
+
     except Exception as e:
         logger.error(f"Error getting documents summary: {e}")
         return []
+
 
 def search_text_fallback(question: str, user_id: int, db: Session, top_k: int = 3) -> List[str]:
     """Fallback text search when embeddings are not available"""
     try:
         # Get all chunks for user's documents
-        chunks = db.query(DocumentChunk).join(Document).filter(
-            Document.user_id == user_id
-        ).all()
-        
+        chunks = db.query(DocumentChunk).join(Document).filter(Document.user_id == user_id).all()
+
         if not chunks:
             return []
-        
+
         # Simple keyword matching
         question_words = question.lower().split()
         scored_chunks = []
-        
+
         for chunk in chunks:
             chunk_text = chunk.chunk_text.lower()
             score = 0
-            
+
             # Count word matches
             for word in question_words:
                 if len(word) > 2:  # Skip very short words
                     score += chunk_text.count(word)
-            
+
             if score > 0:
                 scored_chunks.append((score, chunk.chunk_text))
-        
+
         # Sort by score and return top results
         scored_chunks.sort(reverse=True, key=lambda x: x[0])
         return [text for _, text in scored_chunks[:top_k]]
-    
+
     except Exception as e:
         logger.error(f"Error in text fallback search: {e}")
         return []
 
+
 def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     """Calculate cosine similarity between two vectors"""
     import numpy as np
-    
+
     vec1 = np.array(vec1)
     vec2 = np.array(vec2)
-    
+
     dot_product = np.dot(vec1, vec2)
     norm_vec1 = np.linalg.norm(vec1)
     norm_vec2 = np.linalg.norm(vec2)
-    
+
     if norm_vec1 == 0 or norm_vec2 == 0:
         return 0
-    
+
     return dot_product / (norm_vec1 * norm_vec2)
 
-def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id: int, db: Session, gcs_url: str = None, notion_link_id: int = None, company_id: int = None) -> int:
+
+def ingest_text_content(
+    text_content: str,
+    filename: str,
+    user_id: int,
+    agent_id: int,
+    db: Session,
+    gcs_url: str = None,
+    notion_link_id: int = None,
+    company_id: int = None,
+) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
     from mistral_embeddings import EMBEDDING_DIM
@@ -645,12 +678,12 @@ def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id
         logger.info(f"Document saved with ID: {document.id}")
 
         def split_for_embedding(chunk, max_tokens=8192):
-            chunk = chunk.replace('\x00', '')
+            chunk = chunk.replace("\x00", "")
             max_chars = max_tokens * 4
-            return [chunk[i:i+max_chars] for i in range(0, len(chunk), max_chars)]
+            return [chunk[i : i + max_chars] for i in range(0, len(chunk), max_chars)]
 
         for i, chunk in enumerate(chunks):
-            logger.info(f"Processing chunk {i+1}/{len(chunks)} with Mistral embedding")
+            logger.info(f"Processing chunk {i + 1}/{len(chunks)} with Mistral embedding")
             try:
                 sub_chunks = split_for_embedding(chunk, 8192)
                 embeddings = []
@@ -669,7 +702,7 @@ def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id
                 company_id=company_id,
                 chunk_text=chunk,
                 embedding_vec=avg_embedding,
-                chunk_index=i
+                chunk_index=i,
             )
             db.add(doc_chunk)
         db.commit()
@@ -681,15 +714,19 @@ def ingest_text_content(text_content: str, filename: str, user_id: int, agent_id
         raise e
 
 
-def process_document_for_user(filename: str, content: bytes, user_id: int, db: Session, agent_id: int = None, company_id: int = None) -> int:
+def process_document_for_user(
+    filename: str, content: bytes, user_id: int, db: Session, agent_id: int = None, company_id: int = None
+) -> int:
     import tempfile
     import os
+
     try:
         logger.info(f"Starting to process document: {filename} for user {user_id}, agent {agent_id}")
 
         # Upload file to GCS
         from google.cloud import storage
         import time
+
         bucket_name = os.getenv("GCS_BUCKET_NAME", "applydi-documents")
         client = storage.Client()
         bucket = client.bucket(bucket_name)
@@ -700,10 +737,10 @@ def process_document_for_user(filename: str, content: bytes, user_id: int, db: S
         logger.info(f"Document uploaded to GCS: {gcs_url}")
 
         # Extraction du texte
-        if filename.endswith('.pdf'):
+        if filename.endswith(".pdf"):
             tmp_file = None
             try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                     tmp_file = tmp.name
                     tmp.write(content)
                 logger.info(f"Processing PDF file: {tmp_file}")
@@ -713,15 +750,17 @@ def process_document_for_user(filename: str, content: bytes, user_id: int, db: S
                     os.unlink(tmp_file)
         else:
             try:
-                text_content = content.decode('utf-8')
+                text_content = content.decode("utf-8")
             except Exception as e:
                 logger.warning(f"Could not decode content as utf-8: {e}")
-                text_content = ''
+                text_content = ""
         if text_content is None:
-            text_content = ''
+            text_content = ""
         logger.info(f"Extracted text length: {len(text_content)} characters")
 
-        return ingest_text_content(text_content, filename, user_id, agent_id, db, gcs_url=gcs_url, company_id=company_id)
+        return ingest_text_content(
+            text_content, filename, user_id, agent_id, db, gcs_url=gcs_url, company_id=company_id
+        )
     except Exception as e:
         logger.error(f"Error processing document: {e}")
         db.rollback()

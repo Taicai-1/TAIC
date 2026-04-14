@@ -19,6 +19,7 @@ def _get_api_key() -> Optional[str]:
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         if project_id:
             from google.cloud import secretmanager
+
             sm_client = secretmanager.SecretManagerServiceClient()
             name = f"projects/{project_id}/secrets/PERPLEXITY_API_KEY/versions/latest"
             response = sm_client.access_secret_version(request={"name": name})
@@ -45,6 +46,7 @@ def _get_client():
         )
 
     from openai import OpenAI
+
     _client = OpenAI(api_key=api_key, base_url="https://api.perplexity.ai")
     logger.info("Perplexity client initialized successfully")
     return _client
@@ -97,7 +99,7 @@ def generate_text(
         content = response.choices[0].message.content
 
         # Perplexity returns source URLs in a 'citations' field on the response
-        citations = getattr(response, 'citations', None)
+        citations = getattr(response, "citations", None)
         if citations and isinstance(citations, list):
             sources = "\n\n**Sources :**\n"
             for i, url in enumerate(citations, 1):

@@ -19,6 +19,7 @@ def _get_api_key() -> Optional[str]:
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         if project_id:
             from google.cloud import secretmanager
+
             sm_client = secretmanager.SecretManagerServiceClient()
             name = f"projects/{project_id}/secrets/MISTRAL_API_KEY/versions/latest"
             response = sm_client.access_secret_version(request={"name": name})

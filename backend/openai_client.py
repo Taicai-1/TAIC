@@ -32,12 +32,14 @@ def _messages_to_prompt(messages: list) -> str:
     """
     parts = []
     for m in messages:
-        role = m.get('role', 'user') if isinstance(m, dict) else 'user'
-        content = m.get('content') if isinstance(m, dict) else str(m)
+        role = m.get("role", "user") if isinstance(m, dict) else "user"
+        content = m.get("content") if isinstance(m, dict) else str(m)
         parts.append(f"[{role}] {content}")
     return "\n\n".join(parts)
 
+
 logger = logging.getLogger(__name__)
+
 
 def get_secret(secret_name: str, project_id: str = None) -> str:
     """Get secret from Google Secret Manager"""
@@ -49,9 +51,10 @@ def get_secret(secret_name: str, project_id: str = None) -> str:
             return response.payload.data.decode("UTF-8")
     except Exception as e:
         logger.warning(f"Could not get secret {secret_name}: {e}")
-    
+
     # Fallback to environment variable
     return os.getenv(secret_name)
+
 
 # Initialize OpenAI client
 project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -76,6 +79,7 @@ logger.info(f"OpenAI API key found: {'Yes' if api_key else 'No'}")
 
 # Initialize OpenAI client with custom configuration for Cloud Run
 import httpx
+
 client = OpenAI(
     api_key=api_key,
     timeout=120.0,
@@ -83,8 +87,8 @@ client = OpenAI(
     http_client=httpx.Client(
         timeout=120.0,
         limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
-        http2=False  # Force HTTP/1.1 for better Cloud Run compatibility
-    )
+        http2=False,  # Force HTTP/1.1 for better Cloud Run compatibility
+    ),
 )
 
 # Allow overriding the model and the response token limit via environment variables.
@@ -107,6 +111,7 @@ def _emb_cache_key(text: str) -> str:
 def _get_cached_embedding(text: str) -> list | None:
     try:
         from redis_client import get_redis
+
         r = get_redis()
         if r is None:
             return None
@@ -121,6 +126,7 @@ def _get_cached_embedding(text: str) -> list | None:
 def _set_cached_embedding(text: str, embedding: list):
     try:
         from redis_client import get_redis
+
         r = get_redis()
         if r is None:
             return
@@ -136,10 +142,7 @@ def get_embedding_fast(text: str) -> list:
         return cached
 
     try:
-        response = client.embeddings.create(
-            input=text,
-            model="text-embedding-3-small"
-        )
+        response = client.embeddings.create(input=text, model="text-embedding-3-small")
         result = response.data[0].embedding
         _set_cached_embedding(text, result)
         return result
@@ -148,6 +151,7 @@ def get_embedding_fast(text: str) -> list:
         # Return dummy embedding immediately — do NOT cache dummy vectors
         return [0.0] * 1536  # text-embedding-3-small has 1536 dimensions
 
+
 def get_embedding(text: str) -> list:
     """Get embedding for text with robust retry logic"""
     cached = _get_cached_embedding(text)
@@ -155,15 +159,13 @@ def get_embedding(text: str) -> list:
         return cached
 
     import time
+
     max_retries = 5
 
     for attempt in range(max_retries):
         try:
             logger.info(f"Attempting to get embedding (attempt {attempt + 1}/{max_retries})")
-            response = client.embeddings.create(
-                input=text,
-                model="text-embedding-3-small"
-            )
+            response = client.embeddings.create(input=text, model="text-embedding-3-small")
             logger.info("Successfully got embedding from OpenAI")
             result = response.data[0].embedding
             _set_cached_embedding(text, result)
@@ -171,7 +173,7 @@ def get_embedding(text: str) -> list:
         except Exception as e:
             logger.error(f"Error getting embedding (attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
-                wait_time = 2 ** attempt  # Exponential backoff
+                wait_time = 2**attempt  # Exponential backoff
                 logger.info(f"Waiting {wait_time} seconds before retry...")
                 time.sleep(wait_time)
             else:
@@ -179,19 +181,19 @@ def get_embedding(text: str) -> list:
                 raise e
 
 
-
 def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = False) -> str:
     """Get chat response from OpenAI with robust retry logic, custom model, and structured messages"""
     import time
+
     max_retries = 5
     # Prefer explicit model_id passed in, otherwise use environment/default.
     model = model_id if model_id else DEFAULT_MODEL
     # choose max tokens early so it's available to provider-specific branches
     max_tokens = DEFAULT_MAX_TOKENS
     # If the requested model references Gemini/Perplexity providers, try to route accordingly.
-    if isinstance(model, str) and model.startswith('gemini:'):
+    if isinstance(model, str) and model.startswith("gemini:"):
         if gemini_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
                 return gemini_generate_text(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
@@ -206,9 +208,9 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
         else:
             logger.warning(f"Gemini client not available; falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
             model = DEFAULT_MODEL
-    if isinstance(model, str) and model.startswith('mistral:'):
+    if isinstance(model, str) and model.startswith("mistral:"):
         if mistral_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
                 result = mistral_generate_text(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
@@ -220,14 +222,18 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
                     raise
                 model = DEFAULT_MODEL
         else:
-            logger.error(f"[LLM USED] Mistral client NOT AVAILABLE (mistralai package not loaded), falling back to OpenAI ({DEFAULT_MODEL})")
+            logger.error(
+                f"[LLM USED] Mistral client NOT AVAILABLE (mistralai package not loaded), falling back to OpenAI ({DEFAULT_MODEL})"
+            )
             model = DEFAULT_MODEL
-    if isinstance(model, str) and model.startswith('perplexity:'):
+    if isinstance(model, str) and model.startswith("perplexity:"):
         if perplexity_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                result = perplexity_generate_text(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
+                result = perplexity_generate_text(
+                    prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens
+                )
                 logger.info(f"[LLM USED] Perplexity ({model_short}) - SUCCESS")
                 return result
             except Exception as e:
@@ -243,17 +249,14 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
         try:
             logger.info(f"Attempting to get chat response (attempt {attempt + 1}/{max_retries}) with model {model}")
             response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=0.7
+                model=model, messages=messages, max_tokens=max_tokens, temperature=0.7
             )
             logger.info("Successfully got response from OpenAI")
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"Error getting chat response (attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
-                wait_time = 2 ** attempt  # Exponential backoff
+                wait_time = 2**attempt  # Exponential backoff
                 logger.info(f"Waiting {wait_time} seconds before retry...")
                 time.sleep(wait_time)
             else:
@@ -261,7 +264,13 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
                 raise e
 
 
-def get_chat_response_structured(messages: list, functions: list | None = None, function_call: Optional[dict | str] = None, model_id: str = None, gemini_only: bool = False) -> Any:
+def get_chat_response_structured(
+    messages: list,
+    functions: list | None = None,
+    function_call: Optional[dict | str] = None,
+    model_id: str = None,
+    gemini_only: bool = False,
+) -> Any:
     """Call OpenAI chat completions with optional function-calling and return the full message (may include function_call).
 
     - messages: list of message dicts
@@ -270,17 +279,20 @@ def get_chat_response_structured(messages: list, functions: list | None = None, 
     Returns the choice message (object with .content and possibly .function_call)
     """
     import time
+
     max_retries = 3
     model = model_id if model_id else DEFAULT_MODEL
-    if isinstance(model, str) and model.startswith('gemini:'):
+    if isinstance(model, str) and model.startswith("gemini:"):
         if gemini_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             # For structured/function-calling we can't fully emulate OpenAI functions with Gemini yet.
             # Attempt to emulate function-calling by calling Gemini with concatenated messages
             # and trying to parse a JSON function_call object from its textual response.
             prompt = _messages_to_prompt(messages)
             try:
-                text = gemini_generate_text(prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS)
+                text = gemini_generate_text(
+                    prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS
+                )
             except Exception as e:
                 env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
                 strict = bool(gemini_only) or env_gemini_only
@@ -303,15 +315,15 @@ def get_chat_response_structured(messages: list, functions: list | None = None, 
                 # Look for common shapes: {"function_call": {...}} or {"name":..., "arguments": ...}
                 fc = None
                 if isinstance(parsed, dict):
-                    if 'function_call' in parsed and isinstance(parsed['function_call'], dict):
-                        fc = parsed['function_call']
-                    elif 'name' in parsed and ('arguments' in parsed or 'params' in parsed):
-                        fc = {
-                            'name': parsed.get('name'),
-                            'arguments': parsed.get('arguments') or parsed.get('params')
-                        }
+                    if "function_call" in parsed and isinstance(parsed["function_call"], dict):
+                        fc = parsed["function_call"]
+                    elif "name" in parsed and ("arguments" in parsed or "params" in parsed):
+                        fc = {"name": parsed.get("name"), "arguments": parsed.get("arguments") or parsed.get("params")}
                 if fc:
-                    return SimpleMsg(content=(parsed.get('content') if isinstance(parsed, dict) and 'content' in parsed else text), function_call=fc)
+                    return SimpleMsg(
+                        content=(parsed.get("content") if isinstance(parsed, dict) and "content" in parsed else text),
+                        function_call=fc,
+                    )
             except Exception:
                 # Not JSON or not structured as function_call; fall back to plain text
                 pass
@@ -320,12 +332,14 @@ def get_chat_response_structured(messages: list, functions: list | None = None, 
         else:
             logger.warning(f"Gemini client not available; falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
             model = DEFAULT_MODEL
-    if isinstance(model, str) and model.startswith('mistral:'):
+    if isinstance(model, str) and model.startswith("mistral:"):
         if mistral_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                text = mistral_generate_text(prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS)
+                text = mistral_generate_text(
+                    prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS
+                )
             except Exception as e:
                 env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
                 strict = bool(gemini_only) or env_gemini_only
@@ -336,32 +350,44 @@ def get_chat_response_structured(messages: list, functions: list | None = None, 
                 text = None
 
             if text is not None:
+
                 class SimpleMsg:
                     def __init__(self, content, function_call=None):
                         self.content = content
                         self.function_call = function_call
+
                 try:
                     parsed = json.loads(text)
                     fc = None
                     if isinstance(parsed, dict):
-                        if 'function_call' in parsed and isinstance(parsed['function_call'], dict):
-                            fc = parsed['function_call']
-                        elif 'name' in parsed and ('arguments' in parsed or 'params' in parsed):
-                            fc = {'name': parsed.get('name'), 'arguments': parsed.get('arguments') or parsed.get('params')}
+                        if "function_call" in parsed and isinstance(parsed["function_call"], dict):
+                            fc = parsed["function_call"]
+                        elif "name" in parsed and ("arguments" in parsed or "params" in parsed):
+                            fc = {
+                                "name": parsed.get("name"),
+                                "arguments": parsed.get("arguments") or parsed.get("params"),
+                            }
                     if fc:
-                        return SimpleMsg(content=(parsed.get('content') if isinstance(parsed, dict) and 'content' in parsed else text), function_call=fc)
+                        return SimpleMsg(
+                            content=(
+                                parsed.get("content") if isinstance(parsed, dict) and "content" in parsed else text
+                            ),
+                            function_call=fc,
+                        )
                 except Exception:
                     pass
                 return SimpleMsg(text)
         else:
             logger.warning(f"Mistral client not available; falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
             model = DEFAULT_MODEL
-    if isinstance(model, str) and model.startswith('perplexity:'):
+    if isinstance(model, str) and model.startswith("perplexity:"):
         if perplexity_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                text = perplexity_generate_text(prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS)
+                text = perplexity_generate_text(
+                    prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS
+                )
             except Exception as e:
                 env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
                 strict = bool(gemini_only) or env_gemini_only
@@ -372,20 +398,30 @@ def get_chat_response_structured(messages: list, functions: list | None = None, 
                 text = None
 
             if text is not None:
+
                 class SimpleMsg:
                     def __init__(self, content, function_call=None):
                         self.content = content
                         self.function_call = function_call
+
                 try:
                     parsed = json.loads(text)
                     fc = None
                     if isinstance(parsed, dict):
-                        if 'function_call' in parsed and isinstance(parsed['function_call'], dict):
-                            fc = parsed['function_call']
-                        elif 'name' in parsed and ('arguments' in parsed or 'params' in parsed):
-                            fc = {'name': parsed.get('name'), 'arguments': parsed.get('arguments') or parsed.get('params')}
+                        if "function_call" in parsed and isinstance(parsed["function_call"], dict):
+                            fc = parsed["function_call"]
+                        elif "name" in parsed and ("arguments" in parsed or "params" in parsed):
+                            fc = {
+                                "name": parsed.get("name"),
+                                "arguments": parsed.get("arguments") or parsed.get("params"),
+                            }
                     if fc:
-                        return SimpleMsg(content=(parsed.get('content') if isinstance(parsed, dict) and 'content' in parsed else text), function_call=fc)
+                        return SimpleMsg(
+                            content=(
+                                parsed.get("content") if isinstance(parsed, dict) and "content" in parsed else text
+                            ),
+                            function_call=fc,
+                        )
                 except Exception:
                     pass
                 return SimpleMsg(text)
@@ -405,32 +441,41 @@ def get_chat_response_structured(messages: list, functions: list | None = None, 
             if function_call is not None:
                 kwargs["function_call"] = function_call
 
-            logger.info(f"Calling structured chat (attempt {attempt+1}) model={model} functions={bool(functions)}")
+            logger.info(f"Calling structured chat (attempt {attempt + 1}) model={model} functions={bool(functions)}")
             response = client.chat.completions.create(**kwargs)
             message = response.choices[0].message
             return message
         except Exception as e:
-            logger.error(f"Error in structured chat (attempt {attempt+1}): {e}")
+            logger.error(f"Error in structured chat (attempt {attempt + 1}): {e}")
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
             else:
                 raise e
 
 
-def get_chat_response_deterministic(messages: list, model_id: str | None = None, temperature: float = 0.0, max_tokens: Optional[int] = None, gemini_only: bool = False) -> str:
+def get_chat_response_deterministic(
+    messages: list,
+    model_id: str | None = None,
+    temperature: float = 0.0,
+    max_tokens: Optional[int] = None,
+    gemini_only: bool = False,
+) -> str:
     """Call the chat completion with deterministic settings (low temperature) and return the string content.
 
     Use this helper when the response must be reliably parseable (JSON-only outputs etc.).
     """
     import time
+
     max_retries = 3
     model = model_id if model_id else DEFAULT_MODEL
-    if isinstance(model, str) and model.startswith('gemini:'):
+    if isinstance(model, str) and model.startswith("gemini:"):
         if gemini_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                return gemini_generate_text(prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS)
+                return gemini_generate_text(
+                    prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS
+                )
             except Exception as e:
                 env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
                 strict = bool(gemini_only) or env_gemini_only
@@ -442,12 +487,14 @@ def get_chat_response_deterministic(messages: list, model_id: str | None = None,
         else:
             logger.warning(f"Gemini client not available; falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
             model = DEFAULT_MODEL
-    if isinstance(model, str) and model.startswith('mistral:'):
+    if isinstance(model, str) and model.startswith("mistral:"):
         if mistral_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                return mistral_generate_text(prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS)
+                return mistral_generate_text(
+                    prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS
+                )
             except Exception as e:
                 env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
                 strict = bool(gemini_only) or env_gemini_only
@@ -458,12 +505,14 @@ def get_chat_response_deterministic(messages: list, model_id: str | None = None,
         else:
             logger.warning(f"Mistral client not available; falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
             model = DEFAULT_MODEL
-    if isinstance(model, str) and model.startswith('perplexity:'):
+    if isinstance(model, str) and model.startswith("perplexity:"):
         if perplexity_generate_text:
-            model_short = model.split(':', 1)[1]
+            model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                return perplexity_generate_text(prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS)
+                return perplexity_generate_text(
+                    prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS
+                )
             except Exception as e:
                 env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
                 strict = bool(gemini_only) or env_gemini_only
@@ -485,19 +534,21 @@ def get_chat_response_deterministic(messages: list, model_id: str | None = None,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             }
-            logger.info(f"Calling deterministic chat (attempt {attempt+1}) model={model} temperature={temperature}")
+            logger.info(f"Calling deterministic chat (attempt {attempt + 1}) model={model} temperature={temperature}")
             response = client.chat.completions.create(**kwargs)
             logger.info("Successfully got deterministic response from OpenAI")
             return response.choices[0].message.content
         except Exception as e:
-            logger.error(f"Error in deterministic chat (attempt {attempt+1}): {e}")
+            logger.error(f"Error in deterministic chat (attempt {attempt + 1}): {e}")
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
             else:
                 raise e
 
 
-def get_chat_response_json(messages: list, schema: dict | None = None, model_id: str | None = None, retries: int = 2, gemini_only: bool = False) -> dict:
+def get_chat_response_json(
+    messages: list, schema: dict | None = None, model_id: str | None = None, retries: int = 2, gemini_only: bool = False
+) -> dict:
     """Call the deterministic chat wrapper and parse its output as JSON.
 
     If parsing fails and a schema is provided, retry with a clarifying prompt asking the model
@@ -505,12 +556,15 @@ def get_chat_response_json(messages: list, schema: dict | None = None, model_id:
     Raises ValueError if parsing fails after retries.
     """
     import time
+
     attempt = 0
     last_err = None
     while attempt <= retries:
         try:
             # Use very low temperature for deterministic output
-            text = get_chat_response_deterministic(messages, model_id=model_id, temperature=0.0, max_tokens=16000, gemini_only=gemini_only)
+            text = get_chat_response_deterministic(
+                messages, model_id=model_id, temperature=0.0, max_tokens=16000, gemini_only=gemini_only
+            )
             # Try to parse JSON directly
             try:
                 parsed = json.loads(text)
@@ -518,6 +572,7 @@ def get_chat_response_json(messages: list, schema: dict | None = None, model_id:
             except Exception:
                 # fallback: try to extract the first JSON object in the text
                 import re
+
                 m = re.search(r"\{[\s\S]*\}", text)
                 if m:
                     try:
@@ -532,12 +587,22 @@ def get_chat_response_json(messages: list, schema: dict | None = None, model_id:
             if schema is not None:
                 schema_text = json.dumps(schema, ensure_ascii=False)
                 clarification = [
-                    {"role": "system", "content": "You must reply with a single JSON object that exactly matches the provided schema. Do not include any explanation or text."},
-                    {"role": "user", "content": "The required schema is: " + schema_text + "\nPlease return only the JSON object that conforms to it for the request described previously."}
+                    {
+                        "role": "system",
+                        "content": "You must reply with a single JSON object that exactly matches the provided schema. Do not include any explanation or text.",
+                    },
+                    {
+                        "role": "user",
+                        "content": "The required schema is: "
+                        + schema_text
+                        + "\nPlease return only the JSON object that conforms to it for the request described previously.",
+                    },
                 ]
                 # Prepend original messages for context, if any
                 clar_msgs = (messages if messages else []) + clarification
-                text = get_chat_response_deterministic(clar_msgs, model_id=model_id, temperature=0.0, max_tokens=16000, gemini_only=gemini_only)
+                text = get_chat_response_deterministic(
+                    clar_msgs, model_id=model_id, temperature=0.0, max_tokens=16000, gemini_only=gemini_only
+                )
                 try:
                     parsed = json.loads(text)
                     return parsed
@@ -549,4 +614,4 @@ def get_chat_response_json(messages: list, schema: dict | None = None, model_id:
         attempt += 1
         time.sleep(1)
 
-    raise ValueError(f"Could not parse JSON from model after {retries+1} attempts: {last_err}")
+    raise ValueError(f"Could not parse JSON from model after {retries + 1} attempts: {last_err}")

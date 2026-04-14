@@ -15,6 +15,7 @@ _EMB_CACHE_TTL = 86400  # 24 hours
 def _get_client():
     """Reuse the lazy-initialized Mistral client from mistral_client."""
     from mistral_client import _get_client as _mc
+
     return _mc()
 
 
@@ -25,6 +26,7 @@ def _cache_key(text: str) -> str:
 def _get_cached_embedding(text: str) -> List[float] | None:
     try:
         from redis_client import get_redis
+
         r = get_redis()
         if r is None:
             return None
@@ -39,6 +41,7 @@ def _get_cached_embedding(text: str) -> List[float] | None:
 def _set_cached_embedding(text: str, embedding: List[float]):
     try:
         from redis_client import get_redis
+
         r = get_redis()
         if r is None:
             return
@@ -70,7 +73,7 @@ def get_embedding(text: str) -> List[float]:
         except Exception as e:
             logger.error(f"Mistral embedding error (attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
             else:
                 raise
 

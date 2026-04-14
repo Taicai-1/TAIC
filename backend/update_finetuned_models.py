@@ -23,10 +23,7 @@ for agent_id, job_id in rows:
         job = openai.fine_tuning.jobs.retrieve(job_id)
         if job.status == "succeeded" and job.fine_tuned_model:
             # Met à jour la colonne avec l'ID du modèle fine-tuné
-            cur.execute(
-                "UPDATE agents SET finetuned_model_id = %s WHERE id = %s",
-                (job.fine_tuned_model, agent_id)
-            )
+            cur.execute("UPDATE agents SET finetuned_model_id = %s WHERE id = %s", (job.fine_tuned_model, agent_id))
             conn.commit()
             print(f"Agent {agent_id}: Job terminé, colonne mise à jour avec le modèle : {job.fine_tuned_model}")
         else:
@@ -36,4 +33,3 @@ for agent_id, job_id in rows:
 
 cur.close()
 conn.close()
-

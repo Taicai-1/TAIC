@@ -7,6 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def get_jwt_secret():
     """Get JWT secret from environment (injected by GCP Secret Manager)"""
     secret = os.getenv("JWT_SECRET_KEY")
@@ -15,6 +16,7 @@ def get_jwt_secret():
         raise RuntimeError("JWT secret missing. Set JWT_SECRET_KEY in environment for production.")
     logger.info("JWT secret loaded from environment")
     return secret.strip()
+
 
 SECRET_KEY = get_jwt_secret()
 ALGORITHM = "HS256"
@@ -25,11 +27,13 @@ RESTRICTED_TOKEN_TYPES = {"pre_2fa", "needs_2fa_setup"}
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
 
 def verify_password(password: str, hashed: str) -> bool:
     """Verify password against hash"""
-    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     """Create JWT token"""
@@ -42,6 +46,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
 def _extract_token(request: Request) -> str:
     """Extract token from cookie or Authorization header."""
     token = request.cookies.get("token")
@@ -53,6 +58,7 @@ def _extract_token(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return token
 
+
 def _decode_token(token: str) -> dict:
     """Decode and validate a JWT token. Returns the payload."""
     try:
@@ -62,6 +68,7 @@ def _decode_token(token: str) -> dict:
         return payload
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
 
 def verify_token(request: Request):
     """Verify JWT token from HttpOnly cookie or Authorization header.
@@ -74,8 +81,10 @@ def verify_token(request: Request):
         raise HTTPException(status_code=403, detail="2FA verification required")
     return payload.get("sub")
 
+
 # Alias: verify_token now supports cookies, so this is redundant
 verify_token_from_cookie = verify_token
+
 
 def _extract_token_from_header(request: Request) -> str:
     """Extract token from Authorization header ONLY (not cookies).
@@ -85,6 +94,7 @@ def _extract_token_from_header(request: Request) -> str:
     if auth_header and auth_header.startswith("Bearer "):
         return auth_header.split(" ")[1]
     raise HTTPException(status_code=401, detail="Not authenticated")
+
 
 def verify_pre_2fa_token(request: Request) -> str:
     """Verify a pre-2FA token (issued after password check, before TOTP verification).
@@ -96,6 +106,7 @@ def verify_pre_2fa_token(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Invalid pre-2FA token")
     return payload.get("sub")
 
+
 def verify_setup_token(request: Request) -> str:
     """Verify a 2FA setup token (issued for users who need to configure 2FA).
     Only accepts tokens with type='needs_2fa_setup'. Reads from Authorization header only.
@@ -106,6 +117,7 @@ def verify_setup_token(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Invalid setup token")
     return payload.get("sub")
 
+
 def hash_reset_token(token: str) -> str:
     """Hash a password reset token using SHA-256.
     Uses deterministic hashing to allow database lookups.
@@ -115,4 +127,5 @@ def hash_reset_token(token: str) -> str:
     we need to look up tokens in the database by hash.
     """
     import hashlib
-    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

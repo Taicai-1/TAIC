@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 def get_model_id_for_agent(agent: Agent) -> str:
     """Resolve the model_id string based on the agent's type."""
-    atype = getattr(agent, 'type', 'conversationnel')
-    if atype == 'recherche_live':
+    atype = getattr(agent, "type", "conversationnel")
+    if atype == "recherche_live":
         return "perplexity:sonar"
     else:
         return "mistral:mistral-large-latest"
@@ -27,36 +27,27 @@ def get_model_id_for_agent(agent: Agent) -> str:
 def fetch_weekly_messages(agent_id: int, db: Session) -> list[dict]:
     """Fetch all messages from the last 7 days for a given agent."""
     cutoff = datetime.utcnow() - timedelta(days=7)
-    conversations = db.query(Conversation).filter(
-        Conversation.agent_id == agent_id
-    ).all()
+    conversations = db.query(Conversation).filter(Conversation.agent_id == agent_id).all()
 
     if not conversations:
         return []
 
     conv_ids = [c.id for c in conversations]
-    messages = db.query(Message).filter(
-        Message.conversation_id.in_(conv_ids),
-        Message.timestamp >= cutoff
-    ).order_by(Message.timestamp.asc()).all()
+    messages = (
+        db.query(Message)
+        .filter(Message.conversation_id.in_(conv_ids), Message.timestamp >= cutoff)
+        .order_by(Message.timestamp.asc())
+        .all()
+    )
 
-    return [
-        {"role": m.role, "content": m.content, "timestamp": m.timestamp.isoformat()}
-        for m in messages
-    ]
+    return [{"role": m.role, "content": m.content, "timestamp": m.timestamp.isoformat()} for m in messages]
 
 
 def fetch_traceability_documents(agent_id: int, db: Session) -> list[dict]:
     """Fetch content of traceability documents attached to the agent."""
-    docs = db.query(Document).filter(
-        Document.agent_id == agent_id,
-        Document.document_type == "traceability"
-    ).all()
+    docs = db.query(Document).filter(Document.agent_id == agent_id, Document.document_type == "traceability").all()
 
-    return [
-        {"filename": d.filename, "content": (d.content or "")[:10000]}
-        for d in docs
-    ]
+    return [{"filename": d.filename, "content": (d.content or "")[:10000]} for d in docs]
 
 
 def fetch_notion_content(agent_id: int, db: Session) -> list[dict]:
@@ -102,7 +93,9 @@ def fetch_notion_content(agent_id: int, db: Session) -> list[dict]:
     return results
 
 
-def build_recap_prompt(agent: Agent, messages: list[dict], docs: list[dict], notion_pages: list[dict] | None = None) -> list[dict]:
+def build_recap_prompt(
+    agent: Agent, messages: list[dict], docs: list[dict], notion_pages: list[dict] | None = None
+) -> list[dict]:
     """Build the structured prompt for the LLM to generate the weekly recap."""
     # Build messages summary
     messages_text = ""
@@ -168,11 +161,7 @@ Voici le contenu des pages Notion liées:
 
 Génère le recap hebdomadaire HTML maintenant."""
 
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
-    ]
-
+    return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
 
 def process_agent_recap(agent: Agent, db: Session) -> dict:
@@ -189,9 +178,7 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
 
         if not messages and not docs and not notion_pages:
             log = WeeklyRecapLog(
-                agent_id=agent.id, user_id=user.id,
-                company_id=agent.company_id,
-                status="no_data", recap_content=None
+                agent_id=agent.id, user_id=user.id, company_id=agent.company_id, status="no_data", recap_content=None
             )
             db.add(log)
             db.commit()
@@ -210,9 +197,11 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
 
         # 5. Log success
         log = WeeklyRecapLog(
-            agent_id=agent.id, user_id=user.id,
+            agent_id=agent.id,
+            user_id=user.id,
             company_id=agent.company_id,
-            status="success", recap_content=recap_content
+            status="success",
+            recap_content=recap_content,
         )
         db.add(log)
         db.commit()
@@ -222,16 +211,18 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
             "agent_name": agent.name,
             "email": user.email,
             "message_count": len(messages),
-            "doc_count": len(docs)
+            "doc_count": len(docs),
         }
 
     except Exception as e:
         logger.error(f"Recap failed for agent {agent.id}: {e}")
         try:
             log = WeeklyRecapLog(
-                agent_id=agent.id, user_id=user.id,
+                agent_id=agent.id,
+                user_id=user.id,
                 company_id=agent.company_id,
-                status="error", error_message=str(e)[:500]
+                status="error",
+                error_message=str(e)[:500],
             )
             db.add(log)
             db.commit()

@@ -24,6 +24,7 @@ def get_notion_token(company_id: int = None) -> str | None:
 
     try:
         from database import SessionLocal, Company
+
         db = SessionLocal()
         company = db.query(Company).filter(Company.id == company_id).first()
         db.close()

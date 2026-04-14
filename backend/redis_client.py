@@ -64,8 +64,13 @@ import json
 
 _USER_CACHE_TTL = 600  # 10 minutes
 _USER_CACHE_FIELDS = (
-    "id", "username", "email", "company_id",
-    "email_verified", "oauth_provider", "totp_enabled",
+    "id",
+    "username",
+    "email",
+    "company_id",
+    "email_verified",
+    "oauth_provider",
+    "totp_enabled",
 )
 
 

@@ -33,9 +33,51 @@ import google.auth
 from google.auth.transport.requests import AuthorizedSession
 
 # Local modules
-from auth import create_access_token, verify_token, hash_password, verify_password, hash_reset_token, verify_pre_2fa_token, verify_setup_token
-from email_service import send_password_reset_email, send_invitation_email, send_verification_email, send_feedback_email, send_agent_share_email, send_agent_unshare_email, send_agent_share_updated_email
-from database import get_db, get_db_with_tenant, set_current_company_id, init_db, ensure_columns, ensure_pgvector, migrate_existing_company_memberships, User, Document, DocumentChunk, Agent, AgentAction, Team, Base, engine, Conversation, Message, PasswordResetToken, Company, CompanyMembership, CompanyInvitation, WeeklyRecapLog, NotionLink, AgentShare, SessionLocal
+from auth import (
+    create_access_token,
+    verify_token,
+    hash_password,
+    verify_password,
+    hash_reset_token,
+    verify_pre_2fa_token,
+    verify_setup_token,
+)
+from email_service import (
+    send_password_reset_email,
+    send_invitation_email,
+    send_verification_email,
+    send_feedback_email,
+    send_agent_share_email,
+    send_agent_unshare_email,
+    send_agent_share_updated_email,
+)
+from database import (
+    get_db,
+    get_db_with_tenant,
+    set_current_company_id,
+    init_db,
+    ensure_columns,
+    ensure_pgvector,
+    migrate_existing_company_memberships,
+    User,
+    Document,
+    DocumentChunk,
+    Agent,
+    AgentAction,
+    Team,
+    Base,
+    engine,
+    Conversation,
+    Message,
+    PasswordResetToken,
+    Company,
+    CompanyMembership,
+    CompanyInvitation,
+    WeeklyRecapLog,
+    NotionLink,
+    AgentShare,
+    SessionLocal,
+)
 from rag_engine import get_answer, get_answer_with_files, process_document_for_user
 from mistral_embeddings import get_embedding
 from file_generator import FileGenerator
@@ -57,7 +99,7 @@ from validation import (
     sanitize_filename,
     sanitize_text,
     MAX_FILE_SIZE,
-    ALLOWED_FILE_EXTENSIONS
+    ALLOWED_FILE_EXTENSIONS,
 )
 
 # Configuration du logger
@@ -66,6 +108,7 @@ from validation import (
 if os.getenv("GOOGLE_CLOUD_PROJECT"):
     try:
         from google.cloud import logging as cloud_logging
+
         client = cloud_logging.Client()
         client.setup_logging()
         logger = logging.getLogger("app")
@@ -73,14 +116,14 @@ if os.getenv("GOOGLE_CLOUD_PROJECT"):
         # Fallback to basic logging if Google Cloud Logging not available
         logging.basicConfig(
             level=logging.INFO,
-            format='%(asctime)s %(levelname)s %(name)s %(message)s',
+            format="%(asctime)s %(levelname)s %(name)s %(message)s",
         )
         logger = logging.getLogger("app")
 else:
     # Development: use basic logging
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s %(levelname)s %(name)s %(message)s',
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     logger = logging.getLogger("app")
 
@@ -121,6 +164,7 @@ async def tenant_isolation_middleware(request: Request, call_next):
     set_current_company_id(None)
     try:
         import jwt as pyjwt
+
         token = request.cookies.get("token")
         if not token:
             auth_header = request.headers.get("Authorization", "")
@@ -153,7 +197,7 @@ async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
 
     # HSTS: Force HTTPS for 1 year (only in production)
-    if not request.url.hostname in ["localhost", "127.0.0.1"]:
+    if request.url.hostname not in ["localhost", "127.0.0.1"]:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
     # CSP: Prevent XSS attacks
@@ -198,10 +242,12 @@ redis_client = get_redis()
 # TENANT HELPERS
 # ============================================================================
 
+
 def _get_caller_company_id(user_id, db: Session) -> Optional[int]:
     """Resolve the company_id for a user. Returns None for legacy users without an org."""
     user = get_cached_user(user_id, db)
     return user.company_id if user else None
+
 
 # Fallback in-memory storage (only used if Redis unavailable)
 _auth_rate_limit_fallback = {}
@@ -308,30 +354,28 @@ def _record_auth_failure(ip: str):
 # Expose le dossier profile_photos en statique après la création de l'app
 from fastapi.staticfiles import StaticFiles
 import os
+
 if not os.path.exists("profile_photos"):
     os.makedirs("profile_photos")
 app.mount("/profile_photos", StaticFiles(directory="profile_photos"), name="profile_photos")
 
+
 @app.post("/upload-url")
-async def upload_url(
-    request: UrlUploadValidated,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def upload_url(request: UrlUploadValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Ajoute une URL comme document/source pour le RAG"""
     try:
         # Headers to mimic a real browser and avoid being blocked
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Cache-Control': 'max-age=0'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Cache-Control": "max-age=0",
         }
 
         # Télécharger le contenu de l'URL avec retry logic
@@ -343,24 +387,40 @@ async def upload_url(
         def _is_safe_redirect(url: str) -> bool:
             """Check that a redirect URL doesn't point to internal/private networks."""
             from urllib.parse import urlparse
+
             blocked_patterns = [
-                'localhost', '127.0.0.1', '0.0.0.0',
-                '192.168.', '10.', '172.16.', '172.17.', '172.18.', '172.19.',
-                '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
-                '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.',
-                '169.254.', '[::1]', '[fc', '[fd', 'metadata.google.internal',
+                "localhost",
+                "127.0.0.1",
+                "0.0.0.0",
+                "192.168.",
+                "10.",
+                "172.16.",
+                "172.17.",
+                "172.18.",
+                "172.19.",
+                "172.20.",
+                "172.21.",
+                "172.22.",
+                "172.23.",
+                "172.24.",
+                "172.25.",
+                "172.26.",
+                "172.27.",
+                "172.28.",
+                "172.29.",
+                "172.30.",
+                "172.31.",
+                "169.254.",
+                "[::1]",
+                "[fc",
+                "[fd",
+                "metadata.google.internal",
             ]
             return not any(pattern in url.lower() for pattern in blocked_patterns)
 
         for attempt in range(max_retries):
             try:
-                response = requests.get(
-                    request.url,
-                    headers=headers,
-                    timeout=20,
-                    allow_redirects=False,
-                    verify=True
-                )
+                response = requests.get(request.url, headers=headers, timeout=20, allow_redirects=False, verify=True)
                 # Manually follow redirects with SSRF validation (max 5 hops)
                 redirect_count = 0
                 while response.is_redirect and redirect_count < 5:
@@ -368,11 +428,7 @@ async def upload_url(
                     if not redirect_url or not _is_safe_redirect(redirect_url):
                         raise requests.exceptions.ConnectionError("Redirect to blocked destination")
                     response = requests.get(
-                        redirect_url,
-                        headers=headers,
-                        timeout=20,
-                        allow_redirects=False,
-                        verify=True
+                        redirect_url, headers=headers, timeout=20, allow_redirects=False, verify=True
                     )
                     redirect_count += 1
                 response.raise_for_status()
@@ -411,12 +467,16 @@ async def upload_url(
             if last_error:
                 error_msg += f": {str(last_error)}"
             logger.error(error_msg)
-            raise HTTPException(status_code=400, detail="Unable to fetch the provided URL. Please check the URL and try again.")
+            raise HTTPException(
+                status_code=400, detail="Unable to fetch the provided URL. Please check the URL and try again."
+            )
 
         # Extraire uniquement les informations utiles : titre, meta description et contenu principal
         from bs4 import BeautifulSoup
+
         try:
             from readability import Document as ReadabilityDocument
+
             use_readability = True
         except Exception:
             use_readability = False
@@ -442,7 +502,9 @@ async def upload_url(
                     main_html = doc.summary()
                     main_soup = BeautifulSoup(main_html, "lxml")
                     # Get visible text
-                    main_text = "\n".join([p.get_text(separator=" ", strip=True) for p in main_soup.find_all(["p", "h1", "h2", "h3"])])
+                    main_text = "\n".join(
+                        [p.get_text(separator=" ", strip=True) for p in main_soup.find_all(["p", "h1", "h2", "h3"])]
+                    )
                 except Exception:
                     use_readability = False
 
@@ -451,10 +513,16 @@ async def upload_url(
                 body = soup.body
                 if body:
                     # Remove scripts, styles, nav, footer, aside
-                    for tag in body.find_all(["script", "style", "nav", "footer", "aside", "header", "form", "noscript"]):
+                    for tag in body.find_all(
+                        ["script", "style", "nav", "footer", "aside", "header", "form", "noscript"]
+                    ):
                         tag.decompose()
                     # Collect paragraphs and headings
-                    paragraphs = [p.get_text(separator=" ", strip=True) for p in body.find_all(["p", "h1", "h2", "h3"]) if p.get_text(strip=True)]
+                    paragraphs = [
+                        p.get_text(separator=" ", strip=True)
+                        for p in body.find_all(["p", "h1", "h2", "h3"])
+                        if p.get_text(strip=True)
+                    ]
                     main_text = "\n".join(paragraphs)
 
             # Build a cleaned text that contains only useful metadata + main content (limit length)
@@ -484,7 +552,14 @@ async def upload_url(
             content = content[:max_chars]
 
         # Indexer le document comme pour un upload classique (send cleaned text)
-        doc_id = process_document_for_user(filename, content.encode("utf-8", errors="ignore"), int(user_id), db, agent_id=request.agent_id, company_id=_get_caller_company_id(user_id, db))
+        doc_id = process_document_for_user(
+            filename,
+            content.encode("utf-8", errors="ignore"),
+            int(user_id),
+            db,
+            agent_id=request.agent_id,
+            company_id=_get_caller_company_id(user_id, db),
+        )
 
         logger.info(f"URL ajoutée pour user {user_id}, agent {request.agent_id}: {request.url}")
         event_tracker.track_document_upload(int(user_id), request.url, len(content))
@@ -493,7 +568,6 @@ async def upload_url(
     except Exception as e:
         logger.error(f"Erreur lors de l'ajout d'URL: {e}")
         raise HTTPException(status_code=500, detail="Erreur lors de l'ajout de l'URL")
-    
 
 
 # CORS configuration - SÉCURISÉ
@@ -511,10 +585,7 @@ allowed_origins = [
 
 # Add localhost only in development (CRITICAL: prevents CSRF in production)
 if ENVIRONMENT == "development":
-    allowed_origins.extend([
-        "http://localhost:3000",
-        "http://localhost:8080"
-    ])
+    allowed_origins.extend(["http://localhost:3000", "http://localhost:8080"])
     logger.info("CORS: Development mode - localhost origins enabled")
 else:
     logger.info("CORS: Production mode - localhost origins disabled")
@@ -522,13 +593,16 @@ else:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"^https://([\w-]+\.taic\.ai|[\w-]+-817946451913\.europe-west1\.run\.app)$" if ENVIRONMENT == "production" else None,
+    allow_origin_regex=r"^https://([\w-]+\.taic\.ai|[\w-]+-817946451913\.europe-west1\.run\.app)$"
+    if ENVIRONMENT == "production"
+    else None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
     expose_headers=["Content-Length", "Content-Type"],
     max_age=600,  # Cache preflight requests for 10 minutes
 )
+
 
 # Initialize database on startup
 @app.on_event("startup")
@@ -551,27 +625,33 @@ async def startup_event():
         logger.error(f"Database initialization failed: {e}")
         # Don't raise exception to allow the app to start, but log the error
 
+
 # Health check endpoints
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {"message": "TAIC Companion API is running", "status": "ok"}
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "TAIC Companion API"}
 
+
 # Pydantic models
 # Use validated model from validation.py
 # class UserCreate is now UserCreateValidated
+
 
 class UserLogin(BaseModel):
     username: str
     password: str
 
+
 # Use validated model from validation.py
 # class QuestionRequest is now QuestionRequestValidated
+
 
 class AgentCreate(BaseModel):
     name: str
@@ -580,6 +660,7 @@ class AgentCreate(BaseModel):
     profile_photo: str = None  # URL or filename
     email: str
     password: str
+
 
 class AgentResponse(BaseModel):
     id: int
@@ -590,15 +671,17 @@ class AgentResponse(BaseModel):
     email: str
     user_id: int
     created_at: datetime
+
     class Config:
         from_attributes = True
+
 
 # Routes
 @app.post("/register")
 async def register(user: UserCreateValidated, request: Request, db: Session = Depends(get_db)):
     """Register new user"""
     # Rate limiting: prevent brute force account creation
-    ip = request.client.host if hasattr(request, 'client') and request.client else 'unknown'
+    ip = request.client.host if hasattr(request, "client") and request.client else "unknown"
     if not _check_auth_rate_limit(ip):
         logger.warning(f"Rate limit exceeded for registration from IP: {ip}")
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again in 1 hour.")
@@ -613,28 +696,21 @@ async def register(user: UserCreateValidated, request: Request, db: Session = De
 
         # Create new user
         hashed_password = hash_password(user.password)
-        db_user = User(
-            username=user.username,
-            email=user.email,
-            hashed_password=hashed_password
-        )
+        db_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
 
         # Handle invite_code: join org on registration
         if user.invite_code:
-            company = db.query(Company).filter(
-                Company.invite_code == user.invite_code,
-                Company.invite_code_enabled == True
-            ).first()
+            company = (
+                db.query(Company)
+                .filter(Company.invite_code == user.invite_code, Company.invite_code_enabled == True)
+                .first()
+            )
             if company:
                 db_user.company_id = company.id
-                membership = CompanyMembership(
-                    user_id=db_user.id,
-                    company_id=company.id,
-                    role="member"
-                )
+                membership = CompanyMembership(user_id=db_user.id, company_id=company.id, role="member")
                 db.add(membership)
                 db.commit()
                 invalidate_user_cache(db_user.id)
@@ -646,8 +722,7 @@ async def register(user: UserCreateValidated, request: Request, db: Session = De
         # Send verification email
         try:
             verify_token = create_access_token(
-                data={"sub": str(db_user.id), "type": "email_verify"},
-                expires_delta=timedelta(hours=24)
+                data={"sub": str(db_user.id), "type": "email_verify"}, expires_delta=timedelta(hours=24)
             )
             frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
             verify_link = f"{frontend_url}/verify-email?token={verify_token}"
@@ -664,27 +739,28 @@ async def register(user: UserCreateValidated, request: Request, db: Session = De
         logger.error(f"Registration error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 @app.post("/login")
 async def login(user: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)):
     """Login user with HttpOnly secure cookie"""
     # Rate limiting: prevent brute force password attacks
-    ip = request.client.host if hasattr(request, 'client') and request.client else 'unknown'
+    ip = request.client.host if hasattr(request, "client") and request.client else "unknown"
     if not _check_auth_rate_limit(ip):
         logger.warning(f"Rate limit exceeded for login from IP: {ip}")
         raise HTTPException(status_code=429, detail="Too many failed attempts. Please try again in 1 hour.")
 
     try:
         # Permet la connexion avec username OU email
-        db_user = db.query(User).filter(
-            (User.username == user.username) | (User.email == user.username)
-        ).first()
+        db_user = db.query(User).filter((User.username == user.username) | (User.email == user.username)).first()
         if not db_user:
             _record_auth_failure(ip)
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         # OAuth-only user (no password) trying to login with password
         if not db_user.hashed_password:
-            raise HTTPException(status_code=400, detail="This account uses Google sign-in. Please use the Google button.")
+            raise HTTPException(
+                status_code=400, detail="This account uses Google sign-in. Please use the Google button."
+            )
 
         if not verify_password(user.password, db_user.hashed_password):
             _record_auth_failure(ip)
@@ -695,8 +771,7 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
             # Auto-send verification email
             try:
                 verify_token = create_access_token(
-                    data={"sub": str(db_user.id), "type": "email_verify"},
-                    expires_delta=timedelta(hours=24)
+                    data={"sub": str(db_user.id), "type": "email_verify"}, expires_delta=timedelta(hours=24)
                 )
                 frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
                 verify_link = f"{frontend_url}/verify-email?token={verify_token}"
@@ -709,50 +784,31 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
             email = db_user.email
             at_idx = email.index("@")
             masked = email[0] + "***" + email[at_idx:]
-            return {
-                "requires_email_verification": True,
-                "email": masked
-            }
+            return {"requires_email_verification": True, "email": masked}
 
         # 2FA flow: check user's TOTP state
         if db_user.totp_enabled:
             # User has 2FA enabled → issue restricted pre_2fa token (5 min)
             pre_2fa_token = create_access_token(
-                data={"sub": str(db_user.id), "type": "pre_2fa"},
-                expires_delta=timedelta(minutes=5)
+                data={"sub": str(db_user.id), "type": "pre_2fa"}, expires_delta=timedelta(minutes=5)
             )
             logger.info(f"User {user.username} requires 2FA verification")
-            return {
-                "requires_2fa": True,
-                "pre_2fa_token": pre_2fa_token,
-                "token_type": "bearer"
-            }
+            return {"requires_2fa": True, "pre_2fa_token": pre_2fa_token, "token_type": "bearer"}
 
-        if not getattr(db_user, 'totp_setup_completed_at', None):
+        if not getattr(db_user, "totp_setup_completed_at", None):
             # User has NOT set up 2FA yet → issue restricted setup token (30 min)
             setup_token = create_access_token(
-                data={"sub": str(db_user.id), "type": "needs_2fa_setup"},
-                expires_delta=timedelta(minutes=30)
+                data={"sub": str(db_user.id), "type": "needs_2fa_setup"}, expires_delta=timedelta(minutes=30)
             )
             logger.info(f"User {user.username} needs 2FA setup")
-            return {
-                "requires_2fa_setup": True,
-                "setup_token": setup_token,
-                "token_type": "bearer"
-            }
+            return {"requires_2fa_setup": True, "setup_token": setup_token, "token_type": "bearer"}
 
         # 2FA completed → issue full access token
         access_token = create_access_token(data={"sub": str(db_user.id)})
 
         # Security: Set HttpOnly secure cookie to prevent XSS token theft
         response.set_cookie(
-            key="token",
-            value=access_token,
-            httponly=True,
-            secure=True,
-            samesite="none",
-            max_age=28800,
-            path="/"
+            key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
         )
 
         logger.info(f"User logged in: {user.username}")
@@ -770,9 +826,11 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
 # Feedback Endpoint
 ############################
 
+
 class FeedbackRequest(BaseModel):
     type: str  # "bug", "feature", "feedback", "other"
     message: str
+
 
 @app.post("/feedback")
 async def submit_feedback(req: FeedbackRequest, request: Request, db: Session = Depends(get_db)):
@@ -802,11 +860,14 @@ async def submit_feedback(req: FeedbackRequest, request: Request, db: Session = 
 # Email Verification Endpoints
 ############################
 
+
 class VerifyEmailRequest(BaseModel):
     token: str
 
+
 class ResendVerificationRequest(BaseModel):
     email: str
+
 
 @app.post("/auth/verify-email")
 async def verify_email(req: VerifyEmailRequest, db: Session = Depends(get_db)):
@@ -841,10 +902,11 @@ async def verify_email(req: VerifyEmailRequest, db: Session = Depends(get_db)):
     except pyjwt.PyJWTError:
         raise HTTPException(status_code=400, detail="Invalid verification token")
 
+
 @app.post("/auth/resend-verification")
 async def resend_verification(req: ResendVerificationRequest, request: Request, db: Session = Depends(get_db)):
     """Resend email verification link. Rate limited."""
-    ip = request.client.host if hasattr(request, 'client') and request.client else 'unknown'
+    ip = request.client.host if hasattr(request, "client") and request.client else "unknown"
     if not _check_auth_rate_limit(ip):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
 
@@ -855,8 +917,7 @@ async def resend_verification(req: ResendVerificationRequest, request: Request, 
 
     try:
         verify_token = create_access_token(
-            data={"sub": str(db_user.id), "type": "email_verify"},
-            expires_delta=timedelta(hours=24)
+            data={"sub": str(db_user.id), "type": "email_verify"}, expires_delta=timedelta(hours=24)
         )
         frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
         verify_link = f"{frontend_url}/verify-email?token={verify_token}"
@@ -872,9 +933,11 @@ async def resend_verification(req: ResendVerificationRequest, request: Request, 
 # Google OAuth2 Endpoint
 ############################
 
+
 class GoogleOAuthRequest(BaseModel):
     credential: str
     invite_code: Optional[str] = None
+
 
 @app.post("/auth/google")
 async def google_oauth(req: GoogleOAuthRequest, request: Request, response: Response, db: Session = Depends(get_db)):
@@ -888,11 +951,7 @@ async def google_oauth(req: GoogleOAuthRequest, request: Request, response: Resp
 
     try:
         # Verify the Google ID token
-        idinfo = google_id_token.verify_oauth2_token(
-            req.credential,
-            google_requests.Request(),
-            google_client_id
-        )
+        idinfo = google_id_token.verify_oauth2_token(req.credential, google_requests.Request(), google_client_id)
 
         email = idinfo.get("email")
         name = idinfo.get("name", "")
@@ -921,11 +980,7 @@ async def google_oauth(req: GoogleOAuthRequest, request: Request, response: Resp
                 counter += 1
 
             db_user = User(
-                username=username,
-                email=email,
-                hashed_password=None,
-                email_verified=True,
-                oauth_provider="google"
+                username=username, email=email, hashed_password=None, email_verified=True, oauth_provider="google"
             )
             db.add(db_user)
             db.commit()
@@ -933,17 +988,14 @@ async def google_oauth(req: GoogleOAuthRequest, request: Request, response: Resp
 
             # Handle invite_code
             if req.invite_code:
-                company = db.query(Company).filter(
-                    Company.invite_code == req.invite_code,
-                    Company.invite_code_enabled == True
-                ).first()
+                company = (
+                    db.query(Company)
+                    .filter(Company.invite_code == req.invite_code, Company.invite_code_enabled == True)
+                    .first()
+                )
                 if company:
                     db_user.company_id = company.id
-                    membership = CompanyMembership(
-                        user_id=db_user.id,
-                        company_id=company.id,
-                        role="member"
-                    )
+                    membership = CompanyMembership(user_id=db_user.id, company_id=company.id, role="member")
                     db.add(membership)
                     db.commit()
 
@@ -954,13 +1006,7 @@ async def google_oauth(req: GoogleOAuthRequest, request: Request, response: Resp
         access_token = create_access_token(data={"sub": str(db_user.id)})
 
         response.set_cookie(
-            key="token",
-            value=access_token,
-            httponly=True,
-            secure=True,
-            samesite="none",
-            max_age=28800,
-            path="/"
+            key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
         )
 
         logger.info(f"Google OAuth login: {email}")
@@ -1006,8 +1052,8 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
                 "username": db_user.username,
                 "email": db_user.email,
                 "totp_enabled": db_user.totp_enabled,
-                "company_id": db_user.company_id
-            }
+                "company_id": db_user.company_id,
+            },
         }
     except HTTPException:
         raise
@@ -1090,10 +1136,7 @@ async def setup_2fa(request: Request, db: Session = Depends(get_db)):
 
     # Generate provisioning URI for QR code
     totp = pyotp.TOTP(secret)
-    provisioning_uri = totp.provisioning_uri(
-        name=db_user.email,
-        issuer_name="TAIC Companion"
-    )
+    provisioning_uri = totp.provisioning_uri(name=db_user.email, issuer_name="TAIC Companion")
 
     # Generate QR code as base64 image
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -1104,20 +1147,14 @@ async def setup_2fa(request: Request, db: Session = Depends(get_db)):
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     buffer.seek(0)
-    qr_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-    return {
-        "secret": secret,
-        "qr_code": f"data:image/png;base64,{qr_base64}"
-    }
+    return {"secret": secret, "qr_code": f"data:image/png;base64,{qr_base64}"}
 
 
 @app.post("/auth/2fa/confirm-setup")
 async def confirm_2fa_setup(
-    body: TwoFactorConfirmSetupRequest,
-    request: Request,
-    response: Response,
-    db: Session = Depends(get_db)
+    body: TwoFactorConfirmSetupRequest, request: Request, response: Response, db: Session = Depends(get_db)
 ):
     """Confirm 2FA setup by verifying the first TOTP code.
     Activates 2FA, generates backup codes, returns full access token.
@@ -1148,31 +1185,17 @@ async def confirm_2fa_setup(
     access_token = create_access_token(data={"sub": str(db_user.id)})
 
     response.set_cookie(
-        key="token",
-        value=access_token,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=28800,
-        path="/"
+        key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
     )
 
     logger.info(f"2FA setup completed for user {db_user.username}")
     event_tracker.track_user_action(db_user.id, "2fa_setup_completed")
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.post("/auth/2fa/verify")
-async def verify_2fa(
-    body: TwoFactorVerifyRequest,
-    request: Request,
-    response: Response,
-    db: Session = Depends(get_db)
-):
+async def verify_2fa(body: TwoFactorVerifyRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     """Verify TOTP code or backup code during login.
     Requires a pre_2fa token. Returns full access token on success.
     """
@@ -1201,22 +1224,13 @@ async def verify_2fa(
     access_token = create_access_token(data={"sub": str(db_user.id)})
 
     response.set_cookie(
-        key="token",
-        value=access_token,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=28800,
-        path="/"
+        key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
     )
 
     logger.info(f"2FA verified for user {db_user.username}")
     event_tracker.track_user_action(db_user.id, "2fa_verified")
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/auth/2fa/status")
@@ -1231,7 +1245,7 @@ async def get_2fa_status(request: Request, db: Session = Depends(get_db)):
 
     return {
         "totp_enabled": db_user.totp_enabled,
-        "setup_completed_at": db_user.totp_setup_completed_at.isoformat() if db_user.totp_setup_completed_at else None
+        "setup_completed_at": db_user.totp_setup_completed_at.isoformat() if db_user.totp_setup_completed_at else None,
     }
 
 
@@ -1247,11 +1261,10 @@ async def logout(response: Response):
 
 # Nouvelle version de l'endpoint /ask : utilise toujours la mémoire (historique) et le modèle fine-tuné si dispo
 
+
 @app.post("/ask")
 async def ask_question(
-    request: QuestionRequestValidated,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    request: QuestionRequestValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Ask question to RAG system (toujours avec mémoire et bon modèle)"""
     if not _check_api_rate_limit(user_id, "ask", _API_ASK_LIMIT):
@@ -1263,10 +1276,15 @@ async def ask_question(
 
         # Récupérer l'historique complet de la conversation si conversation_id fourni
         history = []
-        if hasattr(request, 'conversation_id') and request.conversation_id:
-            msgs = db.query(Message).filter(Message.conversation_id == request.conversation_id).order_by(Message.created_at.asc()).all()
+        if hasattr(request, "conversation_id") and request.conversation_id:
+            msgs = (
+                db.query(Message)
+                .filter(Message.conversation_id == request.conversation_id)
+                .order_by(Message.created_at.asc())
+                .all()
+            )
             history = [{"role": m.role, "content": m.content} for m in msgs]
-        elif hasattr(request, 'history') and request.history:
+        elif hasattr(request, "history") and request.history:
             # fallback: si le frontend envoie déjà l'historique
             history = request.history
 
@@ -1276,9 +1294,12 @@ async def ask_question(
         # Si agent_id fourni, comportement agent classique
         if request.agent_id:
             from database import Agent
+
             agent = _user_can_access_agent(int(user_id), request.agent_id, db)
             model_id = agent.finetuned_model_id or resolve_model_id(agent)
-            logger.info(f"[LLM ROUTING] Agent '{agent.name}' type={getattr(agent, 'type', 'unknown')} -> model_id={model_id}")
+            logger.info(
+                f"[LLM ROUTING] Agent '{agent.name}' type={getattr(agent, 'type', 'unknown')} -> model_id={model_id}"
+            )
             question_finale = request.question
             prompt = f"Sachant le contexte et la discussion en cours, réponds à cette question : {question_finale}"
             answer = get_answer(
@@ -1295,6 +1316,7 @@ async def ask_question(
         elif request.team_id:
             from database import Team, Agent
             import numpy as np
+
             team = db.query(Team).filter(Team.id == request.team_id).first()
             if not team:
                 raise HTTPException(status_code=404, detail="Team not found")
@@ -1308,7 +1330,11 @@ async def ask_question(
             all_sub_agent_ids = []
             if team.action_agent_ids:
                 try:
-                    action_ids = json.loads(team.action_agent_ids) if isinstance(team.action_agent_ids, str) else team.action_agent_ids
+                    action_ids = (
+                        json.loads(team.action_agent_ids)
+                        if isinstance(team.action_agent_ids, str)
+                        else team.action_agent_ids
+                    )
                     all_sub_agent_ids.extend(action_ids)
                 except:
                     pass
@@ -1330,7 +1356,9 @@ async def ask_question(
                             continue
                         try:
                             emb = np.array(json.loads(a.embedding))
-                            score = float(np.dot(prompt_embedding, emb) / (np.linalg.norm(prompt_embedding) * np.linalg.norm(emb)))
+                            score = float(
+                                np.dot(prompt_embedding, emb) / (np.linalg.norm(prompt_embedding) * np.linalg.norm(emb))
+                            )
                             if score > best_score:
                                 best_score = score
                                 best_agent = a
@@ -1348,11 +1376,11 @@ async def ask_question(
             if best_agent.finetuned_model_id:
                 model_id = best_agent.finetuned_model_id
             else:
-                atype = getattr(best_agent, 'type', 'conversationnel')
-                if atype == 'recherche_live':
-                    model_id = os.getenv('PERPLEXITY_MODEL', 'perplexity:sonar')
+                atype = getattr(best_agent, "type", "conversationnel")
+                if atype == "recherche_live":
+                    model_id = os.getenv("PERPLEXITY_MODEL", "perplexity:sonar")
                 else:
-                    model_id = os.getenv('MISTRAL_MODEL', 'mistral:mistral-small-latest')
+                    model_id = os.getenv("MISTRAL_MODEL", "mistral:mistral-small-latest")
             prompt = f"Sachant le contexte et la discussion en cours, réponds à cette question : {request.question}"
             agent_answer = get_answer(
                 prompt,
@@ -1694,9 +1722,7 @@ _ACTIONNABLE_REMOVED = """
 
 @app.post("/upload")
 async def upload_file(
-    file: UploadFile = File(...),
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    file: UploadFile = File(...), user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Upload and process document for a specific agent, extracting full text from any supported file type
 
@@ -1716,13 +1742,12 @@ async def upload_file(
 
         # Validate file extension against whitelist
         if not validate_file_extension(safe_filename):
-            allowed_exts = ', '.join(sorted(ALLOWED_FILE_EXTENSIONS))
-            raise HTTPException(
-                status_code=400,
-                detail=f"File type not allowed. Allowed types: {allowed_exts}"
-            )
+            allowed_exts = ", ".join(sorted(ALLOWED_FILE_EXTENSIONS))
+            raise HTTPException(status_code=400, detail=f"File type not allowed. Allowed types: {allowed_exts}")
 
-        logger.info(f"Début import PJ : filename={safe_filename}, content_type={file.content_type if hasattr(file, 'content_type') else 'unknown'}")
+        logger.info(
+            f"Début import PJ : filename={safe_filename}, content_type={file.content_type if hasattr(file, 'content_type') else 'unknown'}"
+        )
 
         # Read content and validate size
         content = await file.read()
@@ -1731,37 +1756,36 @@ async def upload_file(
         # Validate file size
         if not validate_file_size(content_size):
             max_size_mb = MAX_FILE_SIZE / (1024 * 1024)
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large (max {max_size_mb:.0f}MB)"
-            )
+            raise HTTPException(status_code=413, detail=f"File too large (max {max_size_mb:.0f}MB)")
 
         # Validate file content matches extension (magic bytes)
         if not validate_file_content(content, safe_filename):
-            raise HTTPException(
-                status_code=400,
-                detail="File content does not match its extension"
-            )
+            raise HTTPException(status_code=400, detail="File content does not match its extension")
 
         logger.info(f"PJ reçue : filename={safe_filename}, taille={content_size} octets")
         filename = safe_filename.lower()
         text = None
 
-        if filename.endswith('.pdf'):
+        if filename.endswith(".pdf"):
             MAX_PDF_PAGES = 500
             logger.info("Tentative extraction PDF (pdfplumber)")
             import pdfplumber
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(content)
                 tmp.flush()
                 logger.info(f"Fichier PDF temporaire créé : {tmp.name}")
                 try:
                     with pdfplumber.open(tmp.name) as pdf:
                         if len(pdf.pages) > MAX_PDF_PAGES:
-                            raise HTTPException(status_code=400, detail=f"PDF too large ({len(pdf.pages)} pages, max {MAX_PDF_PAGES})")
-                        text = '\n'.join([page.extract_text() or '' for page in pdf.pages])
-                    logger.info(f"Texte PDF extrait (pdfplumber) : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'")
+                            raise HTTPException(
+                                status_code=400, detail=f"PDF too large ({len(pdf.pages)} pages, max {MAX_PDF_PAGES})"
+                            )
+                        text = "\n".join([page.extract_text() or "" for page in pdf.pages])
+                    logger.info(
+                        f"Texte PDF extrait (pdfplumber) : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'"
+                    )
                 except Exception as e:
                     logger.error(f"PDF extraction error: {e}")
                 # Si le texte est vide, tente l'OCR sur chaque page
@@ -1770,87 +1794,112 @@ async def upload_file(
                     try:
                         from PIL import Image
                         import pytesseract
+
                         with pdfplumber.open(tmp.name) as pdf:
-                            ocr_text = ''
+                            ocr_text = ""
                             for i, page in enumerate(pdf.pages):
                                 img = page.to_image(resolution=300)
                                 pil_img = img.original
-                                page_ocr = pytesseract.image_to_string(pil_img, lang='fra')
-                                logger.info(f"OCR page {i+1}: longueur={len(page_ocr)}, aperçu='{page_ocr[:100]}'")
-                                ocr_text += page_ocr + '\n'
+                                page_ocr = pytesseract.image_to_string(pil_img, lang="fra")
+                                logger.info(f"OCR page {i + 1}: longueur={len(page_ocr)}, aperçu='{page_ocr[:100]}'")
+                                ocr_text += page_ocr + "\n"
                         text = ocr_text
                         logger.info(f"OCR PDF extrait: longueur={len(text)}, aperçu='{text[:200]}'")
                     except Exception as e:
                         logger.error(f"PDF OCR extraction error: {e}")
             os.unlink(tmp.name)
-        elif filename.endswith('.docx'):
+        elif filename.endswith(".docx"):
             logger.info("Tentative extraction DOCX")
             from docx import Document as DocxDocument
             import tempfile
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp:
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
                 tmp.write(content)
                 tmp.flush()
                 logger.info(f"Fichier DOCX temporaire créé : {tmp.name}")
                 try:
                     doc = DocxDocument(tmp.name)
-                    text = '\n'.join([p.text for p in doc.paragraphs])
-                    logger.info(f"Texte DOCX extrait : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'")
+                    text = "\n".join([p.text for p in doc.paragraphs])
+                    logger.info(
+                        f"Texte DOCX extrait : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'"
+                    )
                 except Exception as e:
                     logger.error(f"DOCX extraction error: {e}")
             os.unlink(tmp.name)
-        elif filename.endswith('.pptx'):
+        elif filename.endswith(".pptx"):
             logger.info("Tentative extraction PPTX")
             from pptx import Presentation
             import tempfile
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pptx') as tmp:
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as tmp:
                 tmp.write(content)
                 tmp.flush()
                 logger.info(f"Fichier PPTX temporaire créé : {tmp.name}")
                 try:
                     pres = Presentation(tmp.name)
-                    text = '\n'.join([shape.text for slide in pres.slides for shape in slide.shapes if hasattr(shape, "text")])
-                    logger.info(f"Texte PPTX extrait : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'")
+                    text = "\n".join(
+                        [shape.text for slide in pres.slides for shape in slide.shapes if hasattr(shape, "text")]
+                    )
+                    logger.info(
+                        f"Texte PPTX extrait : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'"
+                    )
                 except Exception as e:
                     logger.error(f"PPTX extraction error: {e}")
             os.unlink(tmp.name)
-        elif filename.endswith('.xlsx'):
+        elif filename.endswith(".xlsx"):
             logger.info("Tentative extraction XLSX")
             import openpyxl
             import tempfile
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
                 tmp.write(content)
                 tmp.flush()
                 logger.info(f"Fichier XLSX temporaire créé : {tmp.name}")
                 try:
                     wb = openpyxl.load_workbook(tmp.name, data_only=True)
-                    text = ''
+                    text = ""
                     for sheet in wb.worksheets:
                         for row in sheet.iter_rows(values_only=True):
-                            text += '\t'.join([str(cell) if cell is not None else '' for cell in row]) + '\n'
-                    logger.info(f"Texte XLSX extrait : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'")
+                            text += "\t".join([str(cell) if cell is not None else "" for cell in row]) + "\n"
+                    logger.info(
+                        f"Texte XLSX extrait : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'"
+                    )
                 except Exception as e:
                     logger.error(f"XLSX extraction error: {e}")
             os.unlink(tmp.name)
-        elif filename.endswith('.txt') or filename.endswith('.csv') or filename.endswith('.ics'):
+        elif filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".ics"):
             logger.info("Tentative extraction fichier texte/csv/ics")
             try:
-                text = content.decode('utf-8', errors='ignore')
-                logger.info(f"Texte fichier texte/csv/ics extrait : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'")
+                text = content.decode("utf-8", errors="ignore")
+                logger.info(
+                    f"Texte fichier texte/csv/ics extrait : longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'"
+                )
             except Exception as e:
                 logger.error(f"Text file decode error: {e}")
         else:
             raise HTTPException(status_code=400, detail="File type not supported")
 
-
-        logger.info(f"Texte extrait de la PJ ({file.filename}): longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'")
+        logger.info(
+            f"Texte extrait de la PJ ({file.filename}): longueur={len(text) if text else 0}, aperçu='{text[:200] if text else ''}'"
+        )
         if not text or not text.strip():
-            raise HTTPException(status_code=400, detail="Aucun texte détecté dans la pièce jointe. Vérifiez que le document contient du texte sélectionnable (pas une image ou un scan).")
+            raise HTTPException(
+                status_code=400,
+                detail="Aucun texte détecté dans la pièce jointe. Vérifiez que le document contient du texte sélectionnable (pas une image ou un scan).",
+            )
 
         # Process document with extracted text
-        doc_id = process_document_for_user(file.filename, text.encode('utf-8', errors='ignore'), int(user_id), db, agent_id=None, company_id=_get_caller_company_id(user_id, db))
+        doc_id = process_document_for_user(
+            file.filename,
+            text.encode("utf-8", errors="ignore"),
+            int(user_id),
+            db,
+            agent_id=None,
+            company_id=_get_caller_company_id(user_id, db),
+        )
 
         logger.info(f"Document uploaded for user {user_id}: {file.filename}")
         event_tracker.track_document_upload(int(user_id), file.filename, len(text))
@@ -1863,17 +1912,29 @@ async def upload_file(
         logger.error(f"Error uploading document: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-def _process_document_background(task_id: str, filename: str, content: bytes, user_id: int, agent_id: int, company_id: int = None):
+
+def _process_document_background(
+    task_id: str, filename: str, content: bytes, user_id: int, agent_id: int, company_id: int = None
+):
     """Background worker for async document processing. Uses its own DB session."""
     db = SessionLocal()
     try:
         # Update status to processing
         r = get_redis()
         if r:
-            r.setex(f"doc_task:{task_id}", 3600, json.dumps({
-                "task_id": task_id, "status": "processing",
-                "filename": filename, "document_id": None, "error": None,
-            }))
+            r.setex(
+                f"doc_task:{task_id}",
+                3600,
+                json.dumps(
+                    {
+                        "task_id": task_id,
+                        "status": "processing",
+                        "filename": filename,
+                        "document_id": None,
+                        "error": None,
+                    }
+                ),
+            )
 
         doc_id = process_document_for_user(filename, content, user_id, db, agent_id, company_id=company_id)
 
@@ -1881,18 +1942,36 @@ def _process_document_background(task_id: str, filename: str, content: bytes, us
         event_tracker.track_document_upload(user_id, filename, len(content))
 
         if r:
-            r.setex(f"doc_task:{task_id}", 3600, json.dumps({
-                "task_id": task_id, "status": "completed",
-                "filename": filename, "document_id": doc_id, "error": None,
-            }))
+            r.setex(
+                f"doc_task:{task_id}",
+                3600,
+                json.dumps(
+                    {
+                        "task_id": task_id,
+                        "status": "completed",
+                        "filename": filename,
+                        "document_id": doc_id,
+                        "error": None,
+                    }
+                ),
+            )
     except Exception as e:
         logger.error(f"Background document processing failed for {filename}: {e}")
         r = get_redis()
         if r:
-            r.setex(f"doc_task:{task_id}", 3600, json.dumps({
-                "task_id": task_id, "status": "failed",
-                "filename": filename, "document_id": None, "error": str(e),
-            }))
+            r.setex(
+                f"doc_task:{task_id}",
+                3600,
+                json.dumps(
+                    {
+                        "task_id": task_id,
+                        "status": "failed",
+                        "filename": filename,
+                        "document_id": None,
+                        "error": str(e),
+                    }
+                ),
+            )
     finally:
         db.close()
 
@@ -1903,7 +1982,7 @@ async def upload_file_for_agent(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Upload and process document for a specific agent (async when Redis available)"""
     if not _check_api_rate_limit(user_id, "upload", _API_UPLOAD_LIMIT):
@@ -1930,7 +2009,7 @@ async def upload_file_for_agent(
             raise HTTPException(status_code=413, detail="File too large (max 10MB)")
 
         # Check file type
-        allowed_types = ['.pdf', '.txt', '.docx', '.ics']
+        allowed_types = [".pdf", ".txt", ".docx", ".ics"]
         if not any(file.filename.lower().endswith(ext) for ext in allowed_types):
             raise HTTPException(status_code=400, detail="File type not supported")
 
@@ -1943,10 +2022,19 @@ async def upload_file_for_agent(
         r = get_redis()
         if r is not None:
             task_id = str(uuid4())
-            r.setex(f"doc_task:{task_id}", 3600, json.dumps({
-                "task_id": task_id, "status": "processing",
-                "filename": file.filename, "document_id": None, "error": None,
-            }))
+            r.setex(
+                f"doc_task:{task_id}",
+                3600,
+                json.dumps(
+                    {
+                        "task_id": task_id,
+                        "status": "processing",
+                        "filename": file.filename,
+                        "document_id": None,
+                        "error": None,
+                    }
+                ),
+            )
             caller_cid = _get_caller_company_id(user_id, db)
             background_tasks.add_task(
                 _process_document_background, task_id, file.filename, content, int(user_id), agent_id, caller_cid
@@ -1955,7 +2043,9 @@ async def upload_file_for_agent(
             return {"filename": file.filename, "task_id": task_id, "agent_id": agent_id, "status": "processing"}
 
         # Fallback: synchronous processing when Redis is unavailable
-        doc_id = process_document_for_user(file.filename, content, int(user_id), db, agent_id, company_id=_get_caller_company_id(user_id, db))
+        doc_id = process_document_for_user(
+            file.filename, content, int(user_id), db, agent_id, company_id=_get_caller_company_id(user_id, db)
+        )
         logger.info(f"Document uploaded (sync) for user {user_id}, agent {agent_id}: {file.filename}")
         event_tracker.track_document_upload(int(user_id), file.filename, len(content))
         return {"filename": file.filename, "document_id": doc_id, "agent_id": agent_id, "status": "uploaded"}
@@ -1981,16 +2071,14 @@ async def get_upload_status(
         raise HTTPException(status_code=404, detail="Task not found or expired")
     return json.loads(data)
 
+
 # Security: Debug endpoints /test-jwt, /test-auth, /test-openai, /debug/whoami have been removed
 # These endpoints exposed sensitive information (JWT secret length, ADC credentials, API connectivity)
 # and should not exist in production code
 
+
 @app.get("/user/documents")
-async def get_user_documents(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db),
-    agent_id: int = None
-):
+async def get_user_documents(user_id: str = Depends(verify_token), db: Session = Depends(get_db), agent_id: int = None):
     """Get user's documents, optionally filtered by agent"""
     try:
         logger.info(f"Fetching documents for user {user_id}, agent {agent_id}")
@@ -1999,11 +2087,11 @@ async def get_user_documents(
         uid = int(user_id)
         if agent_id is not None:
             # Check if user has edit access to this agent (owner or can_edit share)
-            share = db.query(AgentShare).filter(
-                AgentShare.agent_id == agent_id,
-                AgentShare.user_id == uid,
-                AgentShare.can_edit == True
-            ).first()
+            share = (
+                db.query(AgentShare)
+                .filter(AgentShare.agent_id == agent_id, AgentShare.user_id == uid, AgentShare.can_edit == True)
+                .first()
+            )
             if share:
                 # Shared user with edit access: show docs for the agent
                 query = db.query(Document).filter(Document.agent_id == agent_id)
@@ -2011,10 +2099,10 @@ async def get_user_documents(
                 query = db.query(Document).filter(Document.user_id == uid, Document.agent_id == agent_id)
         else:
             query = db.query(Document).filter(Document.user_id == uid)
-        
+
         documents = query.order_by(Document.created_at.desc()).all()
         logger.info(f"Found {len(documents)} documents for user {user_id}, agent {agent_id}")
-        
+
         result = []
 
         for doc in documents:
@@ -2024,10 +2112,10 @@ async def get_user_documents(
                     "filename": doc.filename,
                     "created_at": doc.created_at.isoformat(),
                     "gcs_url": doc.gcs_url,
-                    "notion_link_id": doc.notion_link_id
+                    "notion_link_id": doc.notion_link_id,
                 }
                 # Safely try to add agent_id if it exists
-                if hasattr(doc, 'agent_id'):
+                if hasattr(doc, "agent_id"):
                     doc_data["agent_id"] = doc.agent_id
                 result.append(doc_data)
             except Exception as doc_error:
@@ -2035,78 +2123,90 @@ async def get_user_documents(
                 continue
 
         return {"documents": result}
-        
+
     except Exception as e:
         logger.error(f"Error fetching documents: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 @app.delete("/documents/{document_id}")
-async def delete_document(
-    document_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def delete_document(document_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Delete a user's document"""
     try:
         # Check if document exists and belongs to user
-        document = db.query(Document).filter(
-            Document.id == document_id,
-            Document.user_id == int(user_id)
-        ).first()
-        
+        document = db.query(Document).filter(Document.id == document_id, Document.user_id == int(user_id)).first()
+
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         # Delete document
         db.delete(document)
         db.commit()
-        
+
         logger.info(f"Document {document_id} deleted by user {user_id}")
         event_tracker.track_user_action(int(user_id), f"document_deleted:{document.filename}")
-        
+
         return {"message": "Document deleted successfully"}
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error deleting document: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 # Endpoints pour les agents
 @app.get("/agents")
-async def get_agents(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Get user's own agents + agents shared with them"""
     try:
         uid = int(user_id)
         own_agents = db.query(Agent).filter(Agent.user_id == uid).order_by(Agent.created_at.desc()).all()
-        result = [{
-            "id": a.id, "name": a.name, "type": a.type, "statut": a.statut,
-            "profile_photo": a.profile_photo, "llm_provider": a.llm_provider,
-            "neo4j_enabled": a.neo4j_enabled, "email_tags": a.email_tags,
-            "weekly_recap_enabled": a.weekly_recap_enabled,
-            "created_at": a.created_at.isoformat() if a.created_at else None,
-            "shared": False
-        } for a in own_agents]
-
-        # Add agents shared with this user
-        shared = db.query(Agent, User, AgentShare).join(AgentShare, AgentShare.agent_id == Agent.id).join(
-            User, Agent.user_id == User.id
-        ).filter(AgentShare.user_id == uid).order_by(Agent.created_at.desc()).all()
-        for a, owner, share in shared:
-            result.append({
-                "id": a.id, "name": a.name, "type": a.type, "statut": a.statut,
-                "profile_photo": a.profile_photo, "llm_provider": a.llm_provider,
-                "neo4j_enabled": a.neo4j_enabled, "email_tags": a.email_tags,
+        result = [
+            {
+                "id": a.id,
+                "name": a.name,
+                "type": a.type,
+                "statut": a.statut,
+                "profile_photo": a.profile_photo,
+                "llm_provider": a.llm_provider,
+                "neo4j_enabled": a.neo4j_enabled,
+                "email_tags": a.email_tags,
                 "weekly_recap_enabled": a.weekly_recap_enabled,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
-                "shared": True,
-                "can_edit": share.can_edit,
-                "owner_username": owner.username
-            })
+                "shared": False,
+            }
+            for a in own_agents
+        ]
+
+        # Add agents shared with this user
+        shared = (
+            db.query(Agent, User, AgentShare)
+            .join(AgentShare, AgentShare.agent_id == Agent.id)
+            .join(User, Agent.user_id == User.id)
+            .filter(AgentShare.user_id == uid)
+            .order_by(Agent.created_at.desc())
+            .all()
+        )
+        for a, owner, share in shared:
+            result.append(
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "type": a.type,
+                    "statut": a.statut,
+                    "profile_photo": a.profile_photo,
+                    "llm_provider": a.llm_provider,
+                    "neo4j_enabled": a.neo4j_enabled,
+                    "email_tags": a.email_tags,
+                    "weekly_recap_enabled": a.weekly_recap_enabled,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                    "shared": True,
+                    "can_edit": share.can_edit,
+                    "owner_username": owner.username,
+                }
+            )
 
         return {"agents": result}
     except Exception as e:
@@ -2127,13 +2227,16 @@ async def create_agent(
     weekly_recap_enabled: str = Form("false"),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Create a new agent with optional profile photo upload"""
     try:
-        logger.info(f"[CREATE_AGENT] Champs reçus: name={name}, contexte={contexte}, biographie={biographie}, type={type}, profile_photo={profile_photo.filename if profile_photo else None}, user_id={user_id}")
+        logger.info(
+            f"[CREATE_AGENT] Champs reçus: name={name}, contexte={contexte}, biographie={biographie}, type={type}, profile_photo={profile_photo.filename if profile_photo else None}, user_id={user_id}"
+        )
         # --- GCS UPLOAD UTILS ---
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
+
         def upload_profile_photo_to_gcs(file: UploadFile) -> str:
             """Upload a file to Google Cloud Storage and return its public URL."""
             client = storage.Client()
@@ -2168,7 +2271,7 @@ async def create_agent(
                 parsed_email_tags = json.loads(email_tags)
             except json.JSONDecodeError:
                 # Sinon, traiter comme liste séparée par virgules
-                tags_list = [t.strip() for t in email_tags.split(',') if t.strip()]
+                tags_list = [t.strip() for t in email_tags.split(",") if t.strip()]
                 # Normaliser avec @ prefix
                 parsed_email_tags = [f"@{t.lstrip('@').lower()}" for t in tags_list]
             parsed_email_tags = json.dumps(parsed_email_tags) if parsed_email_tags else None
@@ -2206,6 +2309,7 @@ async def create_agent(
         logger.error(f"[CREATE_AGENT] Erreur inattendue: {e}")
         raise HTTPException(status_code=500, detail="Erreur lors de la création de l'agent")
 
+
 def _user_can_access_agent(user_id: int, agent_id: int, db: Session):
     """Return the agent if the user is owner OR has an AgentShare. Otherwise raise 403."""
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
@@ -2213,10 +2317,7 @@ def _user_can_access_agent(user_id: int, agent_id: int, db: Session):
         raise HTTPException(status_code=404, detail="Agent not found")
     if agent.user_id == user_id:
         return agent
-    share = db.query(AgentShare).filter(
-        AgentShare.agent_id == agent_id,
-        AgentShare.user_id == user_id
-    ).first()
+    share = db.query(AgentShare).filter(AgentShare.agent_id == agent_id, AgentShare.user_id == user_id).first()
     if share:
         return agent
     raise HTTPException(status_code=403, detail="Access denied to this agent")
@@ -2229,11 +2330,11 @@ def _user_can_edit_agent(user_id: int, agent_id: int, db: Session):
         raise HTTPException(status_code=404, detail="Agent not found")
     if agent.user_id == user_id:
         return agent
-    share = db.query(AgentShare).filter(
-        AgentShare.agent_id == agent_id,
-        AgentShare.user_id == user_id,
-        AgentShare.can_edit == True
-    ).first()
+    share = (
+        db.query(AgentShare)
+        .filter(AgentShare.agent_id == agent_id, AgentShare.user_id == user_id, AgentShare.can_edit == True)
+        .first()
+    )
     if share:
         return agent
     raise HTTPException(status_code=403, detail="You do not have edit permission on this agent")
@@ -2255,6 +2356,7 @@ def _delete_agent_and_related_data(agent: Agent, owner_user_id: int, db: Session
 
     # Delete all agent actions related to this agent
     from database import AgentAction
+
     actions = db.query(AgentAction).filter(AgentAction.agent_id == agent_id).all()
     for action in actions:
         db.delete(action)
@@ -2281,63 +2383,39 @@ def _delete_agent_and_related_data(agent: Agent, owner_user_id: int, db: Session
         team_ids = [team.id for team in teams_to_delete]
 
         ct_result = db.execute(
-            text("SELECT id FROM conversations_teams WHERE team_id = ANY(:team_ids)"),
-            {"team_ids": team_ids}
+            text("SELECT id FROM conversations_teams WHERE team_id = ANY(:team_ids)"), {"team_ids": team_ids}
         )
         ct_ids = [row[0] for row in ct_result]
 
         if ct_ids:
-            db.execute(
-                text("DELETE FROM messages_teams WHERE conversation_id = ANY(:ct_ids)"),
-                {"ct_ids": ct_ids}
-            )
+            db.execute(text("DELETE FROM messages_teams WHERE conversation_id = ANY(:ct_ids)"), {"ct_ids": ct_ids})
             db.flush()
-            db.execute(
-                text("DELETE FROM conversations_teams WHERE id = ANY(:ct_ids)"),
-                {"ct_ids": ct_ids}
-            )
+            db.execute(text("DELETE FROM conversations_teams WHERE id = ANY(:ct_ids)"), {"ct_ids": ct_ids})
             db.flush()
 
         conv_result = db.execute(
-            text("SELECT id FROM conversations WHERE team_id = ANY(:team_ids)"),
-            {"team_ids": team_ids}
+            text("SELECT id FROM conversations WHERE team_id = ANY(:team_ids)"), {"team_ids": team_ids}
         )
         conv_ids = [row[0] for row in conv_result]
 
         if conv_ids:
-            db.execute(
-                text("DELETE FROM messages WHERE conversation_id = ANY(:conv_ids)"),
-                {"conv_ids": conv_ids}
-            )
+            db.execute(text("DELETE FROM messages WHERE conversation_id = ANY(:conv_ids)"), {"conv_ids": conv_ids})
             db.flush()
 
-        db.execute(
-            text("DELETE FROM conversations WHERE team_id = ANY(:team_ids)"),
-            {"team_ids": team_ids}
-        )
+        db.execute(text("DELETE FROM conversations WHERE team_id = ANY(:team_ids)"), {"team_ids": team_ids})
         db.flush()
 
-        db.execute(
-            text("DELETE FROM teams WHERE id = ANY(:team_ids)"),
-            {"team_ids": team_ids}
-        )
+        db.execute(text("DELETE FROM teams WHERE id = ANY(:team_ids)"), {"team_ids": team_ids})
         db.flush()
 
     db.delete(agent)
 
 
 @app.delete("/agents/{agent_id}")
-async def delete_agent(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def delete_agent(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Delete an agent and all related data"""
     try:
-        agent = db.query(Agent).filter(
-            Agent.id == agent_id,
-            Agent.user_id == int(user_id)
-        ).first()
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.user_id == int(user_id)).first()
 
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
@@ -2353,12 +2431,9 @@ async def delete_agent(
         logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 @app.get("/agents/{agent_id}")
-async def get_agent(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Get a specific agent (owner or shared user)"""
     try:
         uid = int(user_id)
@@ -2368,15 +2443,16 @@ async def get_agent(
         # Check can_edit for shared agents
         can_edit = False
         if not is_owner:
-            share = db.query(AgentShare).filter(
-                AgentShare.agent_id == agent_id,
-                AgentShare.user_id == uid
-            ).first()
+            share = db.query(AgentShare).filter(AgentShare.agent_id == agent_id, AgentShare.user_id == uid).first()
             can_edit = share.can_edit if share else False
 
         result = {
-            "id": agent.id, "name": agent.name, "type": agent.type, "statut": agent.statut,
-            "profile_photo": agent.profile_photo, "llm_provider": agent.llm_provider,
+            "id": agent.id,
+            "name": agent.name,
+            "type": agent.type,
+            "statut": agent.statut,
+            "profile_photo": agent.profile_photo,
+            "llm_provider": agent.llm_provider,
             "neo4j_enabled": agent.neo4j_enabled,
             "created_at": agent.created_at.isoformat() if agent.created_at else None,
             "shared": not is_owner,
@@ -2384,12 +2460,16 @@ async def get_agent(
         }
         # Expose editable fields to owner OR shared user with can_edit
         if is_owner or can_edit:
-            result.update({
-                "contexte": agent.contexte, "biographie": agent.biographie,
-                "neo4j_person_name": agent.neo4j_person_name,
-                "neo4j_depth": agent.neo4j_depth, "email_tags": agent.email_tags,
-                "weekly_recap_enabled": agent.weekly_recap_enabled,
-            })
+            result.update(
+                {
+                    "contexte": agent.contexte,
+                    "biographie": agent.biographie,
+                    "neo4j_person_name": agent.neo4j_person_name,
+                    "neo4j_depth": agent.neo4j_depth,
+                    "email_tags": agent.email_tags,
+                    "weekly_recap_enabled": agent.weekly_recap_enabled,
+                }
+            )
         if not is_owner:
             owner = db.query(User).filter(User.id == agent.user_id).first()
             result["owner_username"] = owner.username if owner else None
@@ -2428,16 +2508,18 @@ async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends
             except Exception:
                 action_agent_names = []
 
-            out.append({
-                "id": t.id,
-                "name": t.name,
-                "contexte": t.contexte,
-                "leader_agent_id": t.leader_agent_id,
-                "leader_name": leader_name,
-                "action_agent_ids": json.loads(t.action_agent_ids) if t.action_agent_ids else [],
-                "action_agent_names": action_agent_names,
-                "created_at": t.created_at.isoformat() if t.created_at else None
-            })
+            out.append(
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "contexte": t.contexte,
+                    "leader_agent_id": t.leader_agent_id,
+                    "leader_name": leader_name,
+                    "action_agent_ids": json.loads(t.action_agent_ids) if t.action_agent_ids else [],
+                    "action_agent_names": action_agent_names,
+                    "created_at": t.created_at.isoformat() if t.created_at else None,
+                }
+            )
         return {"teams": out}
     except Exception as e:
         logger.exception(f"Error listing teams: {e}")
@@ -2445,7 +2527,9 @@ async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends
 
 
 @app.post("/teams")
-async def create_team(payload: TeamCreateValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+async def create_team(
+    payload: TeamCreateValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
     """Create a team. Expected payload: {name, contexte (opt), leader_agent_id, action_agent_ids: [id,id,id]}"""
     try:
         name = payload.name
@@ -2456,15 +2540,17 @@ async def create_team(payload: TeamCreateValidated, user_id: str = Depends(verif
 
         # Valider le chef (doit être conversationnel)
         leader = db.query(Agent).filter(Agent.id == int(leader_agent_id), Agent.user_id == int(user_id)).first()
-        if not leader or getattr(leader, 'type', 'conversationnel') != 'conversationnel':
+        if not leader or getattr(leader, "type", "conversationnel") != "conversationnel":
             raise HTTPException(status_code=400, detail="Leader agent must be a conversationnel agent belonging to you")
 
         # Valider les membres (uniquement conversationnels)
         member_agents = []
         for aid in member_agent_ids:
             a = db.query(Agent).filter(Agent.id == int(aid), Agent.user_id == int(user_id)).first()
-            if not a or getattr(a, 'type', '') != 'conversationnel':
-                raise HTTPException(status_code=400, detail=f"Agent {aid} doit être un agent conversationnel appartenant à vous")
+            if not a or getattr(a, "type", "") != "conversationnel":
+                raise HTTPException(
+                    status_code=400, detail=f"Agent {aid} doit être un agent conversationnel appartenant à vous"
+                )
             member_agents.append(a)
 
         team = Team(
@@ -2489,7 +2575,7 @@ async def create_team(payload: TeamCreateValidated, user_id: str = Depends(verif
                 "leader_name": leader.name,
                 "member_agent_ids": [int(x) for x in member_agent_ids],
                 "member_agent_names": [a.name for a in member_agents],
-                "created_at": team.created_at.isoformat() if team.created_at else None
+                "created_at": team.created_at.isoformat() if team.created_at else None,
             }
         }
         return resp
@@ -2498,8 +2584,11 @@ async def create_team(payload: TeamCreateValidated, user_id: str = Depends(verif
     except Exception as e:
         logger.exception(f"Error creating team: {e}")
         # If the teams table does not exist, provide a helpful message
-        if 'relation "teams"' in str(e) or 'does not exist' in str(e):
-            raise HTTPException(status_code=500, detail="teams table not found in database. Please create the table before using this endpoint.")
+        if 'relation "teams"' in str(e) or "does not exist" in str(e):
+            raise HTTPException(
+                status_code=500,
+                detail="teams table not found in database. Please create the table before using this endpoint.",
+            )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -2526,23 +2615,29 @@ async def get_team(team_id: int, user_id: str = Depends(verify_token), db: Sessi
         except Exception:
             action_agent_names = []
 
-        return {"team": {
-            "id": t.id,
-            "name": t.name,
-            "contexte": t.contexte,
-            "leader_agent_id": t.leader_agent_id,
-            "leader_name": leader_name,
-            "action_agent_ids": json.loads(t.action_agent_ids) if t.action_agent_ids else [],
-            "action_agent_names": action_agent_names,
-            "created_at": t.created_at.isoformat() if t.created_at else None
-        }}
+        return {
+            "team": {
+                "id": t.id,
+                "name": t.name,
+                "contexte": t.contexte,
+                "leader_agent_id": t.leader_agent_id,
+                "leader_name": leader_name,
+                "action_agent_ids": json.loads(t.action_agent_ids) if t.action_agent_ids else [],
+                "action_agent_names": action_agent_names,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+        }
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error fetching team {team_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
 # Endpoint pour modifier un agent existant
 from fastapi import Form
+
+
 @app.put("/agents/{agent_id}")
 async def update_agent(
     agent_id: int,
@@ -2557,7 +2652,7 @@ async def update_agent(
     weekly_recap_enabled: str = Form("false"),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Met à jour un agent existant, y compris la photo de profil (GCS), le statut et les email_tags."""
     try:
@@ -2578,7 +2673,7 @@ async def update_agent(
                 try:
                     parsed_tags = json.loads(email_tags)
                 except json.JSONDecodeError:
-                    tags_list = [t.strip() for t in email_tags.split(',') if t.strip()]
+                    tags_list = [t.strip() for t in email_tags.split(",") if t.strip()]
                     parsed_tags = [f"@{t.lstrip('@').lower()}" for t in tags_list]
                 agent.email_tags = json.dumps(parsed_tags) if parsed_tags else None
 
@@ -2591,6 +2686,7 @@ async def update_agent(
         agent.weekly_recap_enabled = weekly_recap_enabled.lower() in ("true", "1", "yes")
 
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
+
         def upload_profile_photo_to_gcs(file: UploadFile) -> str:
             client = storage.Client()
             bucket = client.bucket(GCS_BUCKET_NAME)
@@ -2624,13 +2720,12 @@ async def update_agent(
         logger.error(f"[UPDATE_AGENT] Erreur inattendue: {e}")
         raise HTTPException(status_code=500, detail="Erreur lors de la mise à jour de l'agent")
 
+
 ## ---- Weekly Recap Endpoints ----
 
+
 @app.post("/api/weekly-recap/trigger")
-async def trigger_weekly_recap(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def trigger_weekly_recap(request: Request, db: Session = Depends(get_db)):
     """Trigger weekly recap for all enabled agents. Protected by X-API-Key."""
     api_key = request.headers.get("X-API-Key", "")
     expected_key = os.getenv("WEEKLY_RECAP_API_KEY", "")
@@ -2652,17 +2747,20 @@ async def trigger_weekly_recap(
 
 
 @app.post("/api/agents/{agent_id}/recap-preview")
-async def recap_preview(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def recap_preview(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Generate a recap preview without sending email. Auth required."""
     agent = db.query(Agent).filter(Agent.id == agent_id, Agent.user_id == int(user_id)).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    from weekly_recap import fetch_weekly_messages, fetch_traceability_documents, fetch_notion_content, build_recap_prompt, generate_recap_html, get_model_id_for_agent
+    from weekly_recap import (
+        fetch_weekly_messages,
+        fetch_traceability_documents,
+        fetch_notion_content,
+        build_recap_prompt,
+        generate_recap_html,
+        get_model_id_for_agent,
+    )
     from openai_client import get_chat_response as _get_chat_response
 
     messages = fetch_weekly_messages(agent.id, db)
@@ -2682,16 +2780,12 @@ async def recap_preview(
         "html": html,
         "message_count": len(messages),
         "doc_count": len(docs),
-        "notion_count": len(notion_pages)
+        "notion_count": len(notion_pages),
     }
 
 
 @app.post("/api/agents/{agent_id}/recap-send")
-async def recap_send(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def recap_send(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Send recap email now for a specific agent. Auth required."""
     agent = db.query(Agent).filter(Agent.id == agent_id, Agent.user_id == int(user_id)).first()
     if not agent:
@@ -2700,24 +2794,23 @@ async def recap_send(
         raise HTTPException(status_code=400, detail="Weekly recap is not enabled for this agent")
 
     from weekly_recap import process_agent_recap
+
     result = process_agent_recap(agent, db)
     return result
 
 
 ## ---- Traceability Documents Endpoints ----
 
+
 @app.post("/api/agents/{agent_id}/traceability-docs")
 async def upload_traceability_doc(
-    agent_id: int,
-    file: UploadFile = File(...),
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    agent_id: int, file: UploadFile = File(...), user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Upload a traceability document (no chunking/embedding)."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
 
-    allowed_ext = {'.pdf', '.txt', '.docx', '.xlsx', '.xls', '.csv'}
-    file_ext = '.' + file.filename.split('.')[-1].lower() if '.' in file.filename else ''
+    allowed_ext = {".pdf", ".txt", ".docx", ".xlsx", ".xls", ".csv"}
+    file_ext = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""
     if file_ext not in allowed_ext:
         raise HTTPException(status_code=400, detail=f"Unsupported format. Use: {', '.join(allowed_ext)}")
 
@@ -2728,29 +2821,34 @@ async def upload_traceability_doc(
     # Extract text content
     text_content = ""
     try:
-        if file_ext == '.pdf':
+        if file_ext == ".pdf":
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
             try:
                 from file_loader import load_text_from_pdf
+
                 text_content = load_text_from_pdf(tmp_path) or ""
             finally:
                 os.unlink(tmp_path)
-        elif file_ext == '.docx':
+        elif file_ext == ".docx":
             import docx
+
             doc_obj = docx.Document(io.BytesIO(content))
             text_content = "\n".join(p.text for p in doc_obj.paragraphs)
-        elif file_ext in ('.xlsx', '.xls'):
+        elif file_ext in (".xlsx", ".xls"):
             import pandas as pd
+
             df = pd.read_excel(io.BytesIO(content))
             text_content = df.to_string(index=False)
-        elif file_ext == '.csv':
+        elif file_ext == ".csv":
             import pandas as pd
+
             text_content = pd.read_csv(io.BytesIO(content)).to_string(index=False)
         else:
-            text_content = content.decode('utf-8', errors='replace')
+            text_content = content.decode("utf-8", errors="replace")
     except Exception as e:
         logger.warning(f"Could not extract text from traceability doc: {e}")
         text_content = ""
@@ -2775,7 +2873,7 @@ async def upload_traceability_doc(
         agent_id=agent_id,
         company_id=_get_caller_company_id(user_id, db),
         gcs_url=gcs_url,
-        document_type="traceability"
+        document_type="traceability",
     )
     db.add(doc)
     db.commit()
@@ -2785,40 +2883,32 @@ async def upload_traceability_doc(
 
 
 @app.get("/api/agents/{agent_id}/traceability-docs")
-async def list_traceability_docs(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def list_traceability_docs(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """List traceability documents for an agent."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
 
-    docs = db.query(Document).filter(
-        Document.agent_id == agent_id,
-        Document.document_type == "traceability"
-    ).order_by(Document.created_at.desc()).all()
+    docs = (
+        db.query(Document)
+        .filter(Document.agent_id == agent_id, Document.document_type == "traceability")
+        .order_by(Document.created_at.desc())
+        .all()
+    )
 
-    return {"documents": [
-        {"id": d.id, "filename": d.filename, "created_at": d.created_at.isoformat()}
-        for d in docs
-    ]}
+    return {"documents": [{"id": d.id, "filename": d.filename, "created_at": d.created_at.isoformat()} for d in docs]}
 
 
 @app.delete("/api/agents/{agent_id}/traceability-docs/{doc_id}")
 async def delete_traceability_doc(
-    agent_id: int,
-    doc_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    agent_id: int, doc_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Delete a traceability document."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
 
-    doc = db.query(Document).filter(
-        Document.id == doc_id,
-        Document.agent_id == agent_id,
-        Document.document_type == "traceability"
-    ).first()
+    doc = (
+        db.query(Document)
+        .filter(Document.id == doc_id, Document.agent_id == agent_id, Document.document_type == "traceability")
+        .first()
+    )
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -2842,12 +2932,10 @@ async def delete_traceability_doc(
 
 ## ---- Notion Links Endpoints ----
 
+
 @app.post("/api/agents/{agent_id}/notion-links")
 async def add_notion_link(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db),
-    body: dict = Body(...)
+    agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db), body: dict = Body(...)
 ):
     """Link a Notion page or database to an agent."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
@@ -2860,10 +2948,13 @@ async def add_notion_link(
         raise HTTPException(status_code=400, detail="url is required")
 
     from notion_client import extract_notion_id, fetch_page_title, fetch_database_title, get_notion_token
+
     user = get_cached_user(user_id, db)
     user_company_id = user.company_id if user else None
     if not get_notion_token(user_company_id):
-        raise HTTPException(status_code=503, detail="Notion integration is not configured. Ask your organization owner to configure it.")
+        raise HTTPException(
+            status_code=503, detail="Notion integration is not configured. Ask your organization owner to configure it."
+        )
 
     try:
         notion_id = extract_notion_id(url)
@@ -2902,11 +2993,7 @@ async def add_notion_link(
 
 
 @app.get("/api/agents/{agent_id}/notion-links")
-async def list_notion_links(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def list_notion_links(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """List Notion links for an agent."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
 
@@ -2934,10 +3021,7 @@ async def list_notion_links(
 
 @app.delete("/api/agents/{agent_id}/notion-links/{link_id}")
 async def delete_notion_link(
-    agent_id: int,
-    link_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    agent_id: int, link_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Delete a Notion link from an agent."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
@@ -2958,10 +3042,7 @@ async def delete_notion_link(
 
 @app.post("/api/agents/{agent_id}/notion-links/{link_id}/preview")
 async def preview_notion_link(
-    agent_id: int,
-    link_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    agent_id: int, link_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Preview the live content of a Notion link."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
@@ -2971,6 +3052,7 @@ async def preview_notion_link(
         raise HTTPException(status_code=404, detail="Notion link not found")
 
     from notion_client import fetch_page_content, fetch_database_entries, blocks_to_text, database_entries_to_text
+
     user = get_cached_user(user_id, db)
     user_company_id = user.company_id if user else None
 
@@ -2988,32 +3070,32 @@ async def preview_notion_link(
 
 
 @app.get("/api/agents/{agent_id}/sources")
-async def get_agent_sources(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Consolidated sources page: documents + notion links + permissions."""
     agent = _user_can_access_agent(int(user_id), agent_id, db)
 
     # Check edit permission
     can_edit = agent.user_id == int(user_id)
     if not can_edit:
-        share = db.query(AgentShare).filter(
-            AgentShare.agent_id == agent_id,
-            AgentShare.user_id == int(user_id),
-            AgentShare.can_edit == True
-        ).first()
+        share = (
+            db.query(AgentShare)
+            .filter(AgentShare.agent_id == agent_id, AgentShare.user_id == int(user_id), AgentShare.can_edit == True)
+            .first()
+        )
         can_edit = share is not None
 
     # RAG documents for this agent
-    docs = db.query(Document).filter(
-        Document.agent_id == agent_id,
-        Document.document_type == "rag"
-    ).order_by(Document.created_at.desc()).all()
+    docs = (
+        db.query(Document)
+        .filter(Document.agent_id == agent_id, Document.document_type == "rag")
+        .order_by(Document.created_at.desc())
+        .all()
+    )
 
     # Notion links
-    notion_links = db.query(NotionLink).filter(NotionLink.agent_id == agent_id).order_by(NotionLink.created_at.desc()).all()
+    notion_links = (
+        db.query(NotionLink).filter(NotionLink.agent_id == agent_id).order_by(NotionLink.created_at.desc()).all()
+    )
 
     # Set of notion_link_ids that already have a Document
     ingested_link_ids = set()
@@ -3049,10 +3131,7 @@ async def get_agent_sources(
 
 @app.post("/api/agents/{agent_id}/notion-links/{link_id}/ingest")
 async def ingest_notion_link(
-    agent_id: int,
-    link_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    agent_id: int, link_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Ingest a Notion link's content into the RAG pipeline."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
@@ -3067,6 +3146,7 @@ async def ingest_notion_link(
         raise HTTPException(status_code=409, detail="This Notion link has already been ingested")
 
     from notion_client import fetch_page_content, fetch_database_entries, blocks_to_text, database_entries_to_text
+
     user = get_cached_user(user_id, db)
     user_company_id = user.company_id if user else None
 
@@ -3084,6 +3164,7 @@ async def ingest_notion_link(
         raise HTTPException(status_code=400, detail="Notion resource returned empty content")
 
     from rag_engine import ingest_text_content
+
     safe_label = (link.label or "untitled").replace("/", "_")[:80]
     filename = f"notion_{link.resource_type}_{safe_label}.txt"
 
@@ -3092,6 +3173,7 @@ async def ingest_notion_link(
     try:
         from google.cloud import storage as gcs_storage
         import time as _time
+
         bucket_name = os.getenv("GCS_BUCKET_NAME", "applydi-documents")
         gcs_client = gcs_storage.Client()
         bucket = gcs_client.bucket(bucket_name)
@@ -3126,10 +3208,7 @@ async def ingest_notion_link(
 
 @app.post("/api/agents/{agent_id}/notion-links/{link_id}/resync")
 async def resync_notion_link(
-    agent_id: int,
-    link_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    agent_id: int, link_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Re-sync a Notion link: delete existing document then re-ingest from Notion."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
@@ -3146,6 +3225,7 @@ async def resync_notion_link(
 
     # Re-fetch content from Notion
     from notion_client import fetch_page_content, fetch_database_entries, blocks_to_text, database_entries_to_text
+
     user = get_cached_user(user_id, db)
     user_company_id = user.company_id if user else None
 
@@ -3163,6 +3243,7 @@ async def resync_notion_link(
         raise HTTPException(status_code=400, detail="Notion resource returned empty content")
 
     from rag_engine import ingest_text_content
+
     safe_label = (link.label or "untitled").replace("/", "_")[:80]
     filename = f"notion_{link.resource_type}_{safe_label}.txt"
 
@@ -3170,6 +3251,7 @@ async def resync_notion_link(
     try:
         from google.cloud import storage as gcs_storage
         import time as _time
+
         bucket_name = os.getenv("GCS_BUCKET_NAME", "applydi-documents")
         gcs_client = gcs_storage.Client()
         bucket = gcs_client.bucket(bucket_name)
@@ -3208,6 +3290,7 @@ async def resync_notion_link(
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
 
+
 class ConversationCreate(BaseModel):
     agent_id: Optional[int] = None
     team_id: Optional[int] = None
@@ -3215,14 +3298,16 @@ class ConversationCreate(BaseModel):
 
     @classmethod
     def validate_one_id(cls, values):
-        if not values.get('agent_id') and not values.get('team_id'):
-            raise ValueError('agent_id ou team_id doit être fourni')
+        if not values.get("agent_id") and not values.get("team_id"):
+            raise ValueError("agent_id ou team_id doit être fourni")
         return values
 
     from pydantic import root_validator
+
     @root_validator(pre=True)
     def check_ids(cls, values):
         return cls.validate_one_id(values)
+
 
 class MessageCreate(BaseModel):
     conversation_id: int
@@ -3246,10 +3331,7 @@ def _verify_conversation_owner(conversation_id: int, user_id: str, db: Session) 
         if agent.user_id == uid:
             return conv
         # Check if user has a share on this agent
-        share = db.query(AgentShare).filter(
-            AgentShare.agent_id == conv.agent_id,
-            AgentShare.user_id == uid
-        ).first()
+        share = db.query(AgentShare).filter(AgentShare.agent_id == conv.agent_id, AgentShare.user_id == uid).first()
         if share:
             return conv
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -3263,7 +3345,9 @@ def _verify_conversation_owner(conversation_id: int, user_id: str, db: Session) 
 
 
 @app.post("/conversations", response_model=dict)
-async def create_conversation(conv: ConversationCreate, db: Session = Depends(get_db), user_id: str = Depends(verify_token)):
+async def create_conversation(
+    conv: ConversationCreate, db: Session = Depends(get_db), user_id: str = Depends(verify_token)
+):
     uid = int(user_id)
     if conv.agent_id:
         _user_can_access_agent(uid, conv.agent_id, db)
@@ -3271,7 +3355,13 @@ async def create_conversation(conv: ConversationCreate, db: Session = Depends(ge
         team = db.query(Team).filter(Team.id == conv.team_id).first()
         if not team or team.user_id != uid:
             raise HTTPException(status_code=404, detail="Team not found")
-    conversation = Conversation(agent_id=conv.agent_id, team_id=conv.team_id, title=conv.title, user_id=uid, company_id=_get_caller_company_id(user_id, db))
+    conversation = Conversation(
+        agent_id=conv.agent_id,
+        team_id=conv.team_id,
+        title=conv.title,
+        user_id=uid,
+        company_id=_get_caller_company_id(user_id, db),
+    )
     db.add(conversation)
     db.commit()
     db.refresh(conversation)
@@ -3280,54 +3370,79 @@ async def create_conversation(conv: ConversationCreate, db: Session = Depends(ge
 
 from fastapi import Query
 
+
 @app.get("/conversations", response_model=List[dict])
 async def list_conversations(
     agent_id: int = Query(None),
     team_id: int = Query(None),
     db: Session = Depends(get_db),
-    user_id: str = Depends(verify_token)
+    user_id: str = Depends(verify_token),
 ):
     uid = int(user_id)
     if agent_id is not None:
         agent = _user_can_access_agent(uid, agent_id, db)
         from sqlalchemy import or_
+
         # Show user's own conversations + legacy conversations (no user_id) if user is owner
         user_filter = [Conversation.user_id == uid]
         if agent.user_id == uid:
             user_filter.append(Conversation.user_id.is_(None))
-        conversations = db.query(Conversation).filter(
-            Conversation.agent_id == agent_id,
-            or_(*user_filter)
-        ).order_by(Conversation.created_at.desc()).all()
+        conversations = (
+            db.query(Conversation)
+            .filter(Conversation.agent_id == agent_id, or_(*user_filter))
+            .order_by(Conversation.created_at.desc())
+            .all()
+        )
     elif team_id is not None:
         team = db.query(Team).filter(Team.id == team_id).first()
         if not team or team.user_id != uid:
             raise HTTPException(status_code=404, detail="Team not found")
-        conversations = db.query(Conversation).filter(Conversation.team_id == team_id).order_by(Conversation.created_at.desc()).all()
+        conversations = (
+            db.query(Conversation)
+            .filter(Conversation.team_id == team_id)
+            .order_by(Conversation.created_at.desc())
+            .all()
+        )
     else:
         raise HTTPException(status_code=422, detail="agent_id ou team_id doit être fourni")
     return [{"id": c.id, "title": c.title, "created_at": c.created_at} for c in conversations]
 
+
 @app.post("/conversations/{conversation_id}/messages", response_model=dict)
-async def add_message(conversation_id: int, msg: MessageCreate, db: Session = Depends(get_db), user_id: str = Depends(verify_token)):
+async def add_message(
+    conversation_id: int, msg: MessageCreate, db: Session = Depends(get_db), user_id: str = Depends(verify_token)
+):
     _verify_conversation_owner(conversation_id, user_id, db)
-    message = Message(conversation_id=conversation_id, role=msg.role, content=msg.content, company_id=_get_caller_company_id(user_id, db))
+    message = Message(
+        conversation_id=conversation_id,
+        role=msg.role,
+        content=msg.content,
+        company_id=_get_caller_company_id(user_id, db),
+    )
     db.add(message)
     db.commit()
     db.refresh(message)
     return {"message_id": message.id}
 
+
 @app.get("/conversations/{conversation_id}/messages", response_model=List[dict])
 async def get_messages(conversation_id: int, db: Session = Depends(get_db), user_id: str = Depends(verify_token)):
     _verify_conversation_owner(conversation_id, user_id, db)
-    messages = db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.timestamp.asc()).all()
+    messages = (
+        db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.timestamp.asc()).all()
+    )
     return [{"id": m.id, "role": m.role, "content": m.content, "timestamp": m.timestamp} for m in messages]
+
+
 # Endpoint de connexion agent (email + password)
 class FeedbackRequest(BaseModel):
     feedback: str  # 'like' ou 'dislike'
 
+
 @app.patch("/messages/{message_id}/feedback")
-async def set_message_feedback(message_id: int, req: FeedbackRequest, db: Session = Depends(get_db), user_id: str = Depends(verify_token)):
+async def set_message_feedback(
+    message_id: int, req: FeedbackRequest, db: Session = Depends(get_db), user_id: str = Depends(verify_token)
+):
     msg = db.query(Message).filter(Message.id == message_id).first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -3340,42 +3455,61 @@ async def set_message_feedback(message_id: int, req: FeedbackRequest, db: Sessio
     if req.feedback == "like":
         msg.buffered = 1
         # Cherche le message user juste avant dans la même conversation
-        prev_user_msg = db.query(Message).filter(
-            Message.conversation_id == msg.conversation_id,
-            Message.timestamp < msg.timestamp,
-            Message.role == "user"
-        ).order_by(Message.timestamp.desc()).first()
+        prev_user_msg = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id == msg.conversation_id,
+                Message.timestamp < msg.timestamp,
+                Message.role == "user",
+            )
+            .order_by(Message.timestamp.desc())
+            .first()
+        )
         if prev_user_msg:
             prev_user_msg.feedback = "like"
             prev_user_msg.buffered = 1
     db.commit()
     return {"message_id": msg.id, "feedback": msg.feedback, "buffered": msg.buffered}
+
+
 # --- Endpoints pour conversations et messages ---
 # Use validated model from validation.py
 # class ConversationTitleUpdate is now ConversationTitleValidated
 
+
 @app.put("/conversations/{conversation_id}/title")
-async def update_conversation_title(conversation_id: int, data: ConversationTitleValidated, db: Session = Depends(get_db), user_id: str = Depends(verify_token)):
+async def update_conversation_title(
+    conversation_id: int,
+    data: ConversationTitleValidated,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(verify_token),
+):
     conv = _verify_conversation_owner(conversation_id, user_id, db)
     conv.title = data.title
     db.commit()
     db.refresh(conv)
     return {"id": conv.id, "title": conv.title}
 
+
 # Endpoint pour supprimer une conversation
 @app.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: int, db: Session = Depends(get_db), user_id: str = Depends(verify_token)):
+async def delete_conversation(
+    conversation_id: int, db: Session = Depends(get_db), user_id: str = Depends(verify_token)
+):
     conv = _verify_conversation_owner(conversation_id, user_id, db)
     db.delete(conv)
     db.commit()
     return {"message": "Conversation deleted"}
 
+
 # --- SLACK CONFIG ENDPOINTS ---
+
 
 @app.get("/api/agents/{agent_id}/slack-config")
 async def get_slack_config(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """Get Slack configuration status for an agent. Never returns tokens in clear."""
     from auth import verify_token_from_cookie
+
     user_id = verify_token_from_cookie(request)
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
@@ -3413,9 +3547,12 @@ class SlackConfigRequest(BaseModel):
 
 
 @app.put("/api/agents/{agent_id}/slack-config")
-async def update_slack_config(agent_id: int, payload: SlackConfigRequest, request: Request, db: Session = Depends(get_db)):
+async def update_slack_config(
+    agent_id: int, payload: SlackConfigRequest, request: Request, db: Session = Depends(get_db)
+):
     """Save Slack credentials after validating the bot token via auth.test."""
     from auth import verify_token_from_cookie
+
     user_id = verify_token_from_cookie(request)
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
@@ -3457,6 +3594,7 @@ async def update_slack_config(agent_id: int, payload: SlackConfigRequest, reques
 async def delete_slack_config(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """Remove all Slack configuration from an agent."""
     from auth import verify_token_from_cookie
+
     user_id = verify_token_from_cookie(request)
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
@@ -3478,6 +3616,7 @@ async def delete_slack_config(agent_id: int, request: Request, db: Session = Dep
 async def test_slack_connection(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """Test Slack connection using the stored bot token."""
     from auth import verify_token_from_cookie
+
     user_id = verify_token_from_cookie(request)
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
@@ -3547,11 +3686,7 @@ def verify_slack_signature(request_body: bytes, timestamp: str, signature: str, 
 
     # Compute expected signature using HMAC-SHA256
     sig_basestring = f"v0:{timestamp}:".encode() + request_body
-    expected_signature = "v0=" + hmac.new(
-        signing_secret.encode(),
-        sig_basestring,
-        hashlib.sha256
-    ).hexdigest()
+    expected_signature = "v0=" + hmac.new(signing_secret.encode(), sig_basestring, hashlib.sha256).hexdigest()
 
     # Constant-time comparison to prevent timing attacks
     if not hmac.compare_digest(expected_signature, signature):
@@ -3569,7 +3704,7 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
     body = await request.body()
 
     # Parse JSON data
-    data = json.loads(body.decode('utf-8'))
+    data = json.loads(body.decode("utf-8"))
 
     # Vérification du challenge lors de l'installation (no signature needed for this)
     if data.get("type") == "url_verification":
@@ -3590,10 +3725,9 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
 
     if mentioned_bot_user_ids:
         for bot_user_id in mentioned_bot_user_ids:
-            agent = db.query(Agent).filter(
-                Agent.slack_bot_user_id == bot_user_id,
-                Agent.slack_team_id == team_id
-            ).first()
+            agent = (
+                db.query(Agent).filter(Agent.slack_bot_user_id == bot_user_id, Agent.slack_team_id == team_id).first()
+            )
             if agent:
                 agent_for_verification = agent
                 matched_bot_user_id = bot_user_id
@@ -3602,9 +3736,7 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
 
     # Priority 2: Fallback to team_id only (less specific, for backwards compatibility)
     if not agent_for_verification:
-        agent_for_verification = db.query(Agent).filter(
-            Agent.slack_team_id == team_id
-        ).first()
+        agent_for_verification = db.query(Agent).filter(Agent.slack_team_id == team_id).first()
         if agent_for_verification:
             logger.info(f"Found agent by team_id only: {team_id} -> {agent_for_verification.name}")
 
@@ -3614,7 +3746,9 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
 
     # SECURITY: Verify Slack signature with this agent's signing_secret
     if not verify_slack_signature(body, timestamp, signature, agent_for_verification.slack_signing_secret):
-        logger.error(f"Slack signature verification failed for team_id: {team_id}, agent: {agent_for_verification.name}")
+        logger.error(
+            f"Slack signature verification failed for team_id: {team_id}, agent: {agent_for_verification.name}"
+        )
         raise HTTPException(status_code=403, detail="Invalid Slack signature")
 
     logger.info(f"Slack signature verified for team: {team_id}, agent: {agent_for_verification.name}")
@@ -3652,19 +3786,19 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
                 resp = requests.get(
                     "https://slack.com/api/conversations.replies",
                     headers=headers,
-                    params={"channel": channel, "ts": thread_ts}
+                    params={"channel": channel, "ts": thread_ts},
                 )
                 messages = resp.json().get("messages", [])
-                logger.info(f"Slack thread history (count={len(messages)}): {[m.get('text','') for m in messages]}")
+                logger.info(f"Slack thread history (count={len(messages)}): {[m.get('text', '') for m in messages]}")
             else:
                 # Récupère les derniers messages du channel
                 resp = requests.get(
                     "https://slack.com/api/conversations.history",
                     headers=headers,
-                    params={"channel": channel, "limit": 10}
+                    params={"channel": channel, "limit": 10},
                 )
                 messages = resp.json().get("messages", [])
-                logger.info(f"Slack channel history (count={len(messages)}): {[m.get('text','') for m in messages]}")
+                logger.info(f"Slack channel history (count={len(messages)}): {[m.get('text', '') for m in messages]}")
             # Formate l'historique pour le modèle dans l'ordre du plus ancien au plus récent
             for msg in sorted(messages, key=lambda m: float(m.get("ts", 0))):
                 role = "user" if msg.get("user") else "assistant"
@@ -3680,11 +3814,11 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
         if agent.finetuned_model_id:
             slack_model_id = agent.finetuned_model_id
         else:
-            atype = getattr(agent, 'type', 'conversationnel')
-            if atype == 'recherche_live':
-                slack_model_id = os.getenv('PERPLEXITY_MODEL', 'perplexity:sonar')
+            atype = getattr(agent, "type", "conversationnel")
+            if atype == "recherche_live":
+                slack_model_id = os.getenv("PERPLEXITY_MODEL", "perplexity:sonar")
             else:
-                slack_model_id = os.getenv('MISTRAL_MODEL', 'mistral:mistral-small-latest')
+                slack_model_id = os.getenv("MISTRAL_MODEL", "mistral:mistral-small-latest")
         # Appel direct à la fonction get_answer avec l'historique Slack
         answer = get_answer(
             user_message,
@@ -3699,15 +3833,17 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
         resp = requests.post(
             "https://slack.com/api/chat.postMessage",
             headers={"Authorization": f"Bearer {slack_token}"},
-            json={"channel": channel, "text": answer, "thread_ts": thread_ts} if thread_ts else {"channel": channel, "text": answer}
+            json={"channel": channel, "text": answer, "thread_ts": thread_ts}
+            if thread_ts
+            else {"channel": channel, "text": answer},
         )
         logger.info(f"Slack API response: status={resp.status_code}")
     return {"ok": True}
 
 
-
 class ForgotPasswordRequest(BaseModel):
     email: str
+
 
 class ResetPasswordRequest(BaseModel):
     token: str
@@ -3718,7 +3854,7 @@ class ResetPasswordRequest(BaseModel):
 @app.post("/forgot-password")
 async def forgot_password(req: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
     # Rate limiting: prevent abuse of password reset
-    ip = request.client.host if hasattr(request, 'client') and request.client else 'unknown'
+    ip = request.client.host if hasattr(request, "client") and request.client else "unknown"
     if not _check_auth_rate_limit(ip):
         logger.warning(f"Rate limit exceeded for forgot-password from IP: {ip}")
         raise HTTPException(status_code=429, detail="Too many password reset attempts. Please try again in 15 minutes.")
@@ -3737,7 +3873,7 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request, db: Sess
         user_id=user.id,
         token=token_hash,  # Store hash, not plaintext
         expires_at=expires_at,
-        used=False
+        used=False,
     )
     db.add(reset_token)
     db.commit()
@@ -3753,11 +3889,12 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request, db: Sess
         logger.error(f"Erreur lors de l'envoi de l'email: {e}")
         return {"message": "Erreur lors de l'envoi de l'email"}
 
+
 # Endpoint pour réinitialiser le mot de passe (DB version)
 @app.post("/reset-password")
 async def reset_password(req: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
     # Rate limiting: prevent brute force token guessing
-    ip = request.client.host if hasattr(request, 'client') and request.client else 'unknown'
+    ip = request.client.host if hasattr(request, "client") and request.client else "unknown"
     if not _check_auth_rate_limit(ip):
         logger.warning(f"Rate limit exceeded for reset-password from IP: {ip}")
         raise HTTPException(status_code=429, detail="Too many reset attempts. Please try again in 15 minutes.")
@@ -3784,6 +3921,8 @@ async def reset_password(req: ResetPasswordRequest, request: Request, db: Sessio
 
     logger.info(f"Password reset successful for user {user.email}")
     return {"message": "Mot de passe réinitialisé avec succès"}
+
+
 # Mémoire temporaire pour les event_id déjà traités (reset à chaque redémarrage du serveur)
 
 
@@ -3791,6 +3930,7 @@ async def reset_password(req: ResetPasswordRequest, request: Request, db: Sessio
 async def health_nltk():
     """Health check for NLTK and chunking logic"""
     from file_loader import chunk_text
+
     test_text = "Hello world. This is a test.\n\nNew paragraph."
     try:
         chunks = chunk_text(test_text)
@@ -3799,7 +3939,8 @@ async def health_nltk():
         logger.error(f"Health check NLTK failed: {e}")
         return {"status": "error", "detail": "NLTK health check failed"}
 
-#test
+
+# test
 ##### Public agents endpoints (no auth) #####
 
 # Public chat rate limiting configuration
@@ -3854,10 +3995,10 @@ def _check_rate_limit(ip: str):
 @app.get("/public/agents/{agent_id}")
 async def public_get_agent(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """Return public agent profile if statut == 'public'"""
-    ip = request.client.host if hasattr(request, 'client') and request.client else 'unknown'
+    ip = request.client.host if hasattr(request, "client") and request.client else "unknown"
     if not _check_rate_limit(ip):
         raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.statut == 'public').first()
+    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.statut == "public").first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found or not public")
     # Only expose non-sensitive fields
@@ -3867,8 +4008,8 @@ async def public_get_agent(agent_id: int, request: Request, db: Session = Depend
         "contexte": agent.contexte,
         "biographie": agent.biographie,
         "profile_photo": agent.profile_photo,
-        "created_at": agent.created_at.isoformat() if hasattr(agent, 'created_at') else None,
-        "slug": getattr(agent, 'slug', None),
+        "created_at": agent.created_at.isoformat() if hasattr(agent, "created_at") else None,
+        "slug": getattr(agent, "slug", None),
     }
 
 
@@ -3880,12 +4021,12 @@ class PublicChatRequest(BaseModel):
 @app.post("/public/agents/{agent_id}/chat")
 async def public_agent_chat(agent_id: int, req: PublicChatRequest, request: Request, db: Session = Depends(get_db)):
     """Public chat endpoint for a public agent. Rate-limited by IP."""
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.statut == 'public').first()
+    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.statut == "public").first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found or not public")
 
     # Rate limiting (distributed via Redis)
-    ip = request.client.host if hasattr(request, 'client') and request.client else 'unknown'
+    ip = request.client.host if hasattr(request, "client") and request.client else "unknown"
     if not _check_rate_limit(ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again in 1 hour.")
 
@@ -3913,11 +4054,15 @@ async def public_agent_chat(agent_id: int, req: PublicChatRequest, request: Requ
 
     return {"answer": answer}
 
-#test
+
+# test
 @app.get("/documents/{document_id}/download-url")
-async def get_signed_download_url(document_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+async def get_signed_download_url(
+    document_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
     """Retourne une URL signée pour télécharger le document depuis GCS"""
     from urllib.parse import urlparse
+
     logger = logging.getLogger("main.download_url")
 
     try:
@@ -3936,16 +4081,17 @@ async def get_signed_download_url(document_id: int, user_id: str = Depends(verif
 
         # Parse bucket and blob name (supports storage.googleapis.com and gs:// formats)
         from urllib.parse import unquote
+
         parsed = urlparse(gcs_url)
-        if gcs_url.startswith('gs://'):
-            parts = gcs_url[5:].split('/', 1)
+        if gcs_url.startswith("gs://"):
+            parts = gcs_url[5:].split("/", 1)
             bucket_name = parts[0]
-            blob_name = parts[1] if len(parts) > 1 else ''
+            blob_name = parts[1] if len(parts) > 1 else ""
         else:
-            path = parsed.path.lstrip('/')
-            path_parts = path.split('/')
+            path = parsed.path.lstrip("/")
+            path_parts = path.split("/")
             bucket_name = path_parts[0]
-            blob_name_encoded = '/'.join(path_parts[1:])
+            blob_name_encoded = "/".join(path_parts[1:])
             # URL-decode the blob name (handles %C3%A9, %2B, etc.)
             blob_name = unquote(blob_name_encoded)
 
@@ -3962,7 +4108,10 @@ async def get_signed_download_url(document_id: int, user_id: str = Depends(verif
             exists = blob.exists()
         except Exception as e:
             logger.exception("Error checking blob existence (possible permission issue)")
-            raise HTTPException(status_code=500, detail="Erreur lors de la vérification de l'existence du fichier GCS (vérifiez les permissions du service account)")
+            raise HTTPException(
+                status_code=500,
+                detail="Erreur lors de la vérification de l'existence du fichier GCS (vérifiez les permissions du service account)",
+            )
 
         if not exists:
             logger.error(f"Blob not found: {bucket_name}/{blob_name}")
@@ -3991,11 +4140,16 @@ async def get_signed_download_url(document_id: int, user_id: str = Depends(verif
         tb = traceback.format_exc()
         logger = logging.getLogger("main.download_url")
         logger.error(f"Unexpected error generating signed URL for document {document_id}: {e}\n{tb}")
-        raise HTTPException(status_code=500, detail="Erreur interne lors de la génération du lien de téléchargement. Vérifiez les logs du backend.")
+        raise HTTPException(
+            status_code=500,
+            detail="Erreur interne lors de la génération du lien de téléchargement. Vérifiez les logs du backend.",
+        )
 
 
 @app.get("/documents/{document_id}/download")
-async def proxy_download_document(document_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+async def proxy_download_document(
+    document_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
     """Stream the object from GCS through the backend as an authenticated proxy.
     This is a secure fallback when signed URL generation is not possible from the environment.
     """
@@ -4010,12 +4164,13 @@ async def proxy_download_document(document_id: int, user_id: str = Depends(verif
             raise HTTPException(status_code=403, detail="Access denied")
 
     from urllib.parse import urlparse, unquote
+
     gcs_url = document.gcs_url
     parsed = urlparse(gcs_url)
-    path = parsed.path.lstrip('/')
-    path_parts = path.split('/')
+    path = parsed.path.lstrip("/")
+    path_parts = path.split("/")
     bucket_name = path_parts[0]
-    blob_name_encoded = '/'.join(path_parts[1:])
+    blob_name_encoded = "/".join(path_parts[1:])
     blob_name = unquote(blob_name_encoded)
     logger = logging.getLogger("main.download_url")
     logger.info(f"Proxy download: bucket={bucket_name}, blob_encoded={blob_name_encoded}, blob_decoded={blob_name}")
@@ -4051,6 +4206,7 @@ async def proxy_download_document(document_id: int, user_id: str = Depends(verif
         # If download failed, try unicode normalization variants (NFC/NFD)
         try:
             import unicodedata
+
             tried = []
             for norm in ("NFC", "NFD"):
                 alt_name = unicodedata.normalize(norm, blob_name)
@@ -4075,8 +4231,13 @@ async def proxy_download_document(document_id: int, user_id: str = Depends(verif
         # Determine if likely permission issue vs not found
         # If exists is None, we couldn't determine existence due to permission; respond with 403 hint
         if exists is None:
-            logger.error(f"Download failed and existence unknown for {bucket_name}/{blob_name}. Likely permission issue.")
-            raise HTTPException(status_code=403, detail="Le service n'a pas les permissions nécessaires pour lire l'objet GCS. Vérifiez roles/storage.objectViewer.")
+            logger.error(
+                f"Download failed and existence unknown for {bucket_name}/{blob_name}. Likely permission issue."
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Le service n'a pas les permissions nécessaires pour lire l'objet GCS. Vérifiez roles/storage.objectViewer.",
+            )
         else:
             logger.error(f"All attempts to download blob failed for {bucket_name}/{blob_name}")
             raise HTTPException(status_code=500, detail="Impossible de récupérer le fichier depuis GCS")
@@ -4084,25 +4245,23 @@ async def proxy_download_document(document_id: int, user_id: str = Depends(verif
     # Guess mimetype
     mime, _ = mimetypes.guess_type(document.filename)
     if not mime:
-        mime = 'application/octet-stream'
+        mime = "application/octet-stream"
 
     from fastapi.responses import StreamingResponse
     from io import BytesIO
+
     # Ensure filename is safe; use the stored document filename
     safe_filename = document.filename or os.path.basename(blob_name)
-    headers = {
-        'Content-Disposition': f'attachment; filename="{safe_filename}"'
-    }
+    headers = {"Content-Disposition": f'attachment; filename="{safe_filename}"'}
     return StreamingResponse(BytesIO(data), media_type=mime, headers=headers)
+
 
 # Endpoint pour extraire le texte des fichiers uploadés (PDF, TXT, DOCX, XLSX, PPTX, etc.)
 
+
 # Nouvelle version : accepte un seul fichier UploadFile
 @app.post("/api/agent/extractText")
-async def extract_text_from_file(
-    file: UploadFile = File(...),
-    user_id: str = Depends(verify_token)
-):
+async def extract_text_from_file(file: UploadFile = File(...), user_id: str = Depends(verify_token)):
     """Extrait le texte d'un fichier uploadé et renvoie le texte extrait.
 
     Security: Requires authentication to prevent unauthorized file processing.
@@ -4110,8 +4269,10 @@ async def extract_text_from_file(
     if not _check_api_rate_limit(user_id, "extract", _API_EXTRACT_LIMIT):
         raise HTTPException(status_code=429, detail="Too many extraction requests. Please try again later.")
     logger = logging.getLogger("extractText")
-    ext = file.filename.lower().split('.')[-1]
-    logger.info(f"Appel reçu sur /api/agent/extractText : filename={file.filename}, ext={ext}, content_type={getattr(file, 'content_type', 'unknown')}")
+    ext = file.filename.lower().split(".")[-1]
+    logger.info(
+        f"Appel reçu sur /api/agent/extractText : filename={file.filename}, ext={ext}, content_type={getattr(file, 'content_type', 'unknown')}"
+    )
     text = ""
     try:
         if ext == "pdf":
@@ -4119,12 +4280,17 @@ async def extract_text_from_file(
             logger.info(f"Tentative extraction PDF: {file.filename}")
             try:
                 import pdfplumber
+
                 with pdfplumber.open(file.file) as pdf:
                     if len(pdf.pages) > MAX_PDF_PAGES:
-                        raise HTTPException(status_code=400, detail=f"PDF too large ({len(pdf.pages)} pages, max {MAX_PDF_PAGES})")
+                        raise HTTPException(
+                            status_code=400, detail=f"PDF too large ({len(pdf.pages)} pages, max {MAX_PDF_PAGES})"
+                        )
                     for i, page in enumerate(pdf.pages):
                         page_text = page.extract_text()
-                        logger.info(f"Page {i+1} PDF: longueur={len(page_text) if page_text else 0}, aperçu='{page_text[:100] if page_text else ''}'")
+                        logger.info(
+                            f"Page {i + 1} PDF: longueur={len(page_text) if page_text else 0}, aperçu='{page_text[:100] if page_text else ''}'"
+                        )
                         if page_text:
                             text += page_text + "\n"
             except Exception as e:
@@ -4180,8 +4346,10 @@ async def extract_text_from_file(
 def update_agent_embedding(agent, db):
     if agent.contexte:
         from mistral_embeddings import get_embedding as mistral_get_embedding
+
         agent.embedding = json.dumps(mistral_get_embedding(agent.contexte))
         db.commit()
+
 
 # Security: /debug/test-openai-embeddings endpoint removed (exposed API connectivity)
 
@@ -4190,12 +4358,14 @@ def update_agent_embedding(agent, db):
 # EMAIL INGESTION API - Cloud Function Integration
 # ============================================================================
 
+
 # Pydantic models for email ingestion
 class EmailTag(BaseModel):
     name: str
     category: Optional[str] = None
     confidence: Optional[float] = None
     source: Optional[str] = None
+
 
 class EmailMetadata(BaseModel):
     from_email: Optional[str] = None
@@ -4211,9 +4381,10 @@ class EmailMetadata(BaseModel):
 
     def __init__(self, **data):
         # Handle 'from' field mapping to 'from_email'
-        if 'from' in data:
-            data['from_email'] = data.pop('from')
+        if "from" in data:
+            data["from_email"] = data.pop("from")
         super().__init__(**data)
+
 
 class EmailIngestRequest(BaseModel):
     source: str
@@ -4228,7 +4399,8 @@ class EmailIngestRequest(BaseModel):
 def extract_email_tags_from_title(title: str) -> List[str]:
     """Extrait les @tags du titre de l'email (case-insensitive)"""
     import re
-    pattern = r'@([a-zA-Z0-9_-]+)'
+
+    pattern = r"@([a-zA-Z0-9_-]+)"
     matches = re.findall(pattern, title)
     # Normaliser en lowercase avec @
     return [f"@{tag.lower()}" for tag in matches]
@@ -4270,23 +4442,19 @@ def verify_email_api_key(request: Request) -> bool:
         raise HTTPException(status_code=500, detail="API Key not configured on server")
 
     if not api_key:
-        logger.warning(f"Missing API Key for email ingestion")
+        logger.warning("Missing API Key for email ingestion")
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
     # Constant-time comparison to prevent timing attacks
     if not hmac.compare_digest(api_key, expected_key):
-        logger.warning(f"Invalid API Key attempt for email ingestion")
+        logger.warning("Invalid API Key attempt for email ingestion")
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
     return True
 
 
 @app.post("/api/emails/ingest")
-async def ingest_email(
-    payload: EmailIngestRequest,
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def ingest_email(payload: EmailIngestRequest, request: Request, db: Session = Depends(get_db)):
     """
     Ingère un email depuis la Cloud Function Gmail.
 
@@ -4319,7 +4487,7 @@ async def ingest_email(
                 "success": True,
                 "document_ids": [],
                 "agents_matched": 0,
-                "message": "Aucun tag trouvé ou aucun companion correspondant - email ignoré"
+                "message": "Aucun tag trouvé ou aucun companion correspondant - email ignoré",
             }
 
         # 4. Construire le contenu enrichi avec les métadonnées
@@ -4339,9 +4507,9 @@ async def ingest_email(
 
         # Fonction pour découper les gros chunks
         def split_for_embedding(chunk, max_tokens=8192):
-            chunk = chunk.replace('\x00', '')
+            chunk = chunk.replace("\x00", "")
             max_chars = max_tokens * 4
-            return [chunk[i:i+max_chars] for i in range(0, len(chunk), max_chars)]
+            return [chunk[i : i + max_chars] for i in range(0, len(chunk), max_chars)]
 
         # Préparer les chunks une seule fois (réutilisés pour chaque agent)
         chunks = chunk_text(enriched_content)
@@ -4375,9 +4543,7 @@ async def ingest_email(
             # Vérifier les doublons pour cet agent spécifique
             # L'identifiant unique est stocké dans gcs_url pour la déduplication
             unique_id = f"email_{payload.source_id}_agent_{agent.id}"
-            existing_doc = db.query(Document).filter(
-                Document.gcs_url == unique_id
-            ).first()
+            existing_doc = db.query(Document).filter(Document.gcs_url == unique_id).first()
 
             if existing_doc:
                 logger.info(f"Email already ingested for agent {agent.name}: {payload.source_id}")
@@ -4393,7 +4559,7 @@ async def ingest_email(
                 user_id=agent.user_id,
                 agent_id=agent.id,
                 company_id=agent.company_id,
-                gcs_url=unique_id  # Identifiant unique pour la déduplication
+                gcs_url=unique_id,  # Identifiant unique pour la déduplication
             )
             db.add(document)
             db.commit()
@@ -4408,7 +4574,7 @@ async def ingest_email(
                     company_id=agent.company_id,
                     chunk_text=chunk,
                     embedding_vec=chunk_embeddings[i] if chunk_embeddings[i] else None,
-                    chunk_index=i
+                    chunk_index=i,
                 )
                 db.add(doc_chunk)
 
@@ -4423,7 +4589,7 @@ async def ingest_email(
             "agents_matched": len(target_agents),
             "agents": [{"id": a.id, "name": a.name} for a in target_agents],
             "tags_extracted": extracted_tags,
-            "message": f"Email ingéré avec succès vers {len(target_agents)} companion(s)"
+            "message": f"Email ingéré avec succès vers {len(target_agents)} companion(s)",
         }
 
     except HTTPException:
@@ -4436,11 +4602,7 @@ async def ingest_email(
 
 
 @app.post("/api/emails/upload-attachment")
-async def upload_email_attachment(
-    request: Request,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
+async def upload_email_attachment(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Upload une pièce jointe d'email comme document séparé.
     Le fichier est stocké sur GCS et devient téléchargeable.
@@ -4477,17 +4639,14 @@ async def upload_email_attachment(
                 "success": True,
                 "document_ids": [],
                 "agents_matched": 0,
-                "message": "Aucun companion correspondant - pièce jointe ignorée"
+                "message": "Aucun companion correspondant - pièce jointe ignorée",
             }
 
         # Vérifier le type de fichier
-        allowed_types = ['.pdf', '.txt', '.docx']
+        allowed_types = [".pdf", ".txt", ".docx"]
         if not any(file.filename.lower().endswith(ext) for ext in allowed_types):
             logger.warning(f"Unsupported file type: {file.filename}")
-            return {
-                "success": False,
-                "message": f"Type de fichier non supporté: {file.filename}"
-            }
+            return {"success": False, "message": f"Type de fichier non supporté: {file.filename}"}
 
         # Lire le contenu du fichier
         content = await file.read()
@@ -4504,10 +4663,11 @@ async def upload_email_attachment(
         for agent in target_agents:
             # Vérifier les doublons
             unique_id = f"attachment_{source_id}_{file.filename}_agent_{agent.id}"
-            existing_doc = db.query(Document).filter(
-                Document.gcs_url.contains(file.filename),
-                Document.agent_id == agent.id
-            ).first()
+            existing_doc = (
+                db.query(Document)
+                .filter(Document.gcs_url.contains(file.filename), Document.agent_id == agent.id)
+                .first()
+            )
 
             if existing_doc and source_id:
                 # Vérification plus stricte avec source_id si disponible
@@ -4516,11 +4676,7 @@ async def upload_email_attachment(
             try:
                 # Utiliser process_document_for_user qui gère l'upload GCS
                 doc_id = process_document_for_user(
-                    filename=file.filename,
-                    content=content,
-                    user_id=agent.user_id,
-                    db=db,
-                    agent_id=agent.id
+                    filename=file.filename, content=content, user_id=agent.user_id, db=db, agent_id=agent.id
                 )
                 document_ids.append(doc_id)
                 logger.info(f"Attachment uploaded for agent {agent.name}: {file.filename} (doc_id: {doc_id})")
@@ -4535,7 +4691,7 @@ async def upload_email_attachment(
             "agents_matched": len(target_agents),
             "agents": [{"id": a.id, "name": a.name} for a in target_agents],
             "filename": file.filename,
-            "message": f"Pièce jointe uploadée vers {len(document_ids)} companion(s)"
+            "message": f"Pièce jointe uploadée vers {len(document_ids)} companion(s)",
         }
 
     except HTTPException:
@@ -4549,14 +4705,12 @@ async def upload_email_attachment(
 # COMPANY & NEO4J ENDPOINTS
 # ============================================================================
 
+
 @app.post("/api/companies")
-async def create_company(
-    request: Request,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def create_company(request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Create a company and affiliate the creator as owner."""
     import secrets as _secrets
+
     body = await request.json()
     name = body.get("name", "").strip()
     if not name:
@@ -4585,14 +4739,18 @@ async def create_company(
         db.commit()
         invalidate_user_cache(user.id)
 
-    return {"company": {"id": company.id, "name": company.name, "neo4j_enabled": company.neo4j_enabled, "invite_code": company.invite_code}}
+    return {
+        "company": {
+            "id": company.id,
+            "name": company.name,
+            "neo4j_enabled": company.neo4j_enabled,
+            "invite_code": company.invite_code,
+        }
+    }
 
 
 @app.get("/api/companies/mine")
-async def get_my_company(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def get_my_company(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Get the current user's company with role and integration status."""
     uid = int(user_id)
     membership = db.query(CompanyMembership).filter(CompanyMembership.user_id == uid).first()
@@ -4621,9 +4779,7 @@ async def get_my_company(
 
 @app.put("/api/user/company")
 async def affiliate_user_to_company(
-    request: Request,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Affiliate user to an existing company by name."""
     body = await request.json()
@@ -4650,12 +4806,9 @@ async def affiliate_user_to_company(
 # ORGANIZATION MANAGEMENT ENDPOINTS
 # ============================================================================
 
+
 @app.post("/api/companies/invite")
-async def invite_to_company(
-    request: Request,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def invite_to_company(request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Send an email invitation to join the organization. Requires admin+."""
     import secrets as _secrets
     from permissions import require_role
@@ -4673,19 +4826,26 @@ async def invite_to_company(
     # Check if user with this email is already a member
     existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
-        existing_m = db.query(CompanyMembership).filter(
-            CompanyMembership.user_id == existing_user.id,
-            CompanyMembership.company_id == membership.company_id
-        ).first()
+        existing_m = (
+            db.query(CompanyMembership)
+            .filter(
+                CompanyMembership.user_id == existing_user.id, CompanyMembership.company_id == membership.company_id
+            )
+            .first()
+        )
         if existing_m:
             raise HTTPException(status_code=409, detail="This user is already a member of the organization")
 
     # Check for pending invitation
-    pending = db.query(CompanyInvitation).filter(
-        CompanyInvitation.company_id == membership.company_id,
-        CompanyInvitation.email == email,
-        CompanyInvitation.status == "pending"
-    ).first()
+    pending = (
+        db.query(CompanyInvitation)
+        .filter(
+            CompanyInvitation.company_id == membership.company_id,
+            CompanyInvitation.email == email,
+            CompanyInvitation.status == "pending",
+        )
+        .first()
+    )
     if pending:
         if pending.expires_at < datetime.utcnow():
             db.delete(pending)
@@ -4700,7 +4860,7 @@ async def invite_to_company(
         role=role,
         token=token,
         invited_by_user_id=int(user_id),
-        expires_at=datetime.utcnow() + timedelta(hours=24)
+        expires_at=datetime.utcnow() + timedelta(hours=24),
     )
     db.add(invitation)
     db.commit()
@@ -4718,13 +4878,10 @@ async def invite_to_company(
 
 
 @app.post("/api/companies/join")
-async def join_company(
-    request: Request,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def join_company(request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Join an organization via invite token (email) or invite_code (shareable link)."""
     import secrets as _secrets
+
     uid = int(user_id)
     body = await request.json()
     token = body.get("token", "").strip()
@@ -4741,10 +4898,11 @@ async def join_company(
 
     if token:
         # Join via email invitation token
-        invitation = db.query(CompanyInvitation).filter(
-            CompanyInvitation.token == token,
-            CompanyInvitation.status == "pending"
-        ).first()
+        invitation = (
+            db.query(CompanyInvitation)
+            .filter(CompanyInvitation.token == token, CompanyInvitation.status == "pending")
+            .first()
+        )
         if not invitation:
             raise HTTPException(status_code=404, detail="Invalid or expired invitation")
         if invitation.expires_at < datetime.utcnow():
@@ -4758,10 +4916,9 @@ async def join_company(
 
     elif invite_code:
         # Join via shareable invite code
-        company = db.query(Company).filter(
-            Company.invite_code == invite_code,
-            Company.invite_code_enabled == True
-        ).first()
+        company = (
+            db.query(Company).filter(Company.invite_code == invite_code, Company.invite_code_enabled == True).first()
+        )
         if not company:
             raise HTTPException(status_code=404, detail="Invalid invite code")
         company_id = company.id
@@ -4777,14 +4934,14 @@ async def join_company(
     invalidate_user_cache(uid)
 
     company = db.query(Company).filter(Company.id == company_id).first()
-    return {"message": f"You have joined {company.name}", "company": {"id": company.id, "name": company.name, "role": role}}
+    return {
+        "message": f"You have joined {company.name}",
+        "company": {"id": company.id, "name": company.name, "role": role},
+    }
 
 
 @app.post("/api/companies/invite-code/regenerate")
-async def regenerate_invite_code(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def regenerate_invite_code(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Regenerate the shareable invite code. Owner only."""
     import secrets as _secrets
     from permissions import require_role
@@ -4798,11 +4955,7 @@ async def regenerate_invite_code(
 
 
 @app.put("/api/companies/invite-code/toggle")
-async def toggle_invite_code(
-    request: Request,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def toggle_invite_code(request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Enable or disable the shareable invite code. Owner only."""
     from permissions import require_role
 
@@ -4818,10 +4971,7 @@ async def toggle_invite_code(
 
 
 @app.get("/api/companies/members")
-async def list_company_members(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def list_company_members(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """List all members of the organization. Requires admin+."""
     from permissions import require_role
     from sqlalchemy import func
@@ -4839,25 +4989,24 @@ async def list_company_members(
     result = []
     for m, u in members:
         agent_count = db.query(Agent).filter(Agent.user_id == u.id).count()
-        result.append({
-            "id": m.id,
-            "user_id": u.id,
-            "username": u.username,
-            "email": u.email,
-            "role": m.role,
-            "joined_at": m.joined_at.isoformat() if m.joined_at else None,
-            "agent_count": agent_count,
-        })
+        result.append(
+            {
+                "id": m.id,
+                "user_id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "role": m.role,
+                "joined_at": m.joined_at.isoformat() if m.joined_at else None,
+                "agent_count": agent_count,
+            }
+        )
 
     return {"members": result}
 
 
 @app.put("/api/companies/members/{member_id}/role")
 async def update_member_role(
-    member_id: int,
-    request: Request,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    member_id: int, request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Change a member's role. Owner only."""
     from permissions import require_role
@@ -4869,10 +5018,11 @@ async def update_member_role(
     if new_role not in ("member", "admin"):
         raise HTTPException(status_code=400, detail="Role must be 'member' or 'admin'")
 
-    target = db.query(CompanyMembership).filter(
-        CompanyMembership.id == member_id,
-        CompanyMembership.company_id == membership.company_id
-    ).first()
+    target = (
+        db.query(CompanyMembership)
+        .filter(CompanyMembership.id == member_id, CompanyMembership.company_id == membership.company_id)
+        .first()
+    )
     if not target:
         raise HTTPException(status_code=404, detail="Member not found")
 
@@ -4886,19 +5036,16 @@ async def update_member_role(
 
 
 @app.delete("/api/companies/members/{member_id}")
-async def remove_member(
-    member_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def remove_member(member_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Remove a member from the organization. Requires admin+."""
     from permissions import require_role
 
     membership = require_role(int(user_id), db, "admin")
-    target = db.query(CompanyMembership).filter(
-        CompanyMembership.id == member_id,
-        CompanyMembership.company_id == membership.company_id
-    ).first()
+    target = (
+        db.query(CompanyMembership)
+        .filter(CompanyMembership.id == member_id, CompanyMembership.company_id == membership.company_id)
+        .first()
+    )
     if not target:
         raise HTTPException(status_code=404, detail="Member not found")
 
@@ -4921,10 +5068,7 @@ async def remove_member(
 
 
 @app.post("/api/companies/leave")
-async def leave_company(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def leave_company(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Leave the current organization. Owner cannot leave."""
     from permissions import get_user_membership
 
@@ -4934,7 +5078,10 @@ async def leave_company(
         raise HTTPException(status_code=404, detail="You are not a member of any organization")
 
     if membership.role == "owner":
-        raise HTTPException(status_code=403, detail="Owner cannot leave the organization. Transfer ownership first or delete the organization.")
+        raise HTTPException(
+            status_code=403,
+            detail="Owner cannot leave the organization. Transfer ownership first or delete the organization.",
+        )
 
     # Clean up agent shares for the departing user
     db.query(AgentShare).filter(AgentShare.user_id == uid).delete()
@@ -4951,10 +5098,7 @@ async def leave_company(
 
 
 @app.delete("/api/companies")
-async def delete_company(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def delete_company(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Delete the organization. Owner only. Does not delete user accounts."""
     from permissions import require_role
 
@@ -4965,13 +5109,23 @@ async def delete_company(
         raise HTTPException(status_code=404, detail="Organization not found")
 
     # Collect member user IDs for cache invalidation
-    member_ids = [m.user_id for m in db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).all()]
+    member_ids = [
+        m.user_id for m in db.query(CompanyMembership).filter(CompanyMembership.company_id == company_id).all()
+    ]
 
     # RLS WITH CHECK blocks writing company_id = NULL.
     # Use a raw connection to temporarily DISABLE RLS, do all cleanup, then re-enable.
     rls_tables = [
-        "agents", "agent_shares", "documents", "document_chunks", "conversations",
-        "messages", "teams", "notion_links", "weekly_recap_logs", "agent_actions",
+        "agents",
+        "agent_shares",
+        "documents",
+        "document_chunks",
+        "conversations",
+        "messages",
+        "teams",
+        "notion_links",
+        "weekly_recap_logs",
+        "agent_actions",
     ]
 
     raw = engine.raw_connection()
@@ -5017,9 +5171,7 @@ async def delete_company(
 
 @app.put("/api/companies/integrations")
 async def update_company_integrations(
-    request: Request,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Configure org-level integration credentials. Owner only."""
     from permissions import require_role
@@ -5045,10 +5197,7 @@ async def update_company_integrations(
 
 
 @app.get("/api/companies/integrations")
-async def get_company_integrations(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def get_company_integrations(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Get the integration status (without secrets). Owner only."""
     from permissions import require_role
 
@@ -5069,10 +5218,7 @@ async def get_company_integrations(
 
 
 @app.get("/api/companies/agents")
-async def list_company_agents(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def list_company_agents(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """List all agents in the organization. Requires admin+."""
     from permissions import require_role
 
@@ -5080,40 +5226,42 @@ async def list_company_agents(
 
     # Get all user IDs in this company
     member_ids = [
-        m.user_id for m in
-        db.query(CompanyMembership).filter(CompanyMembership.company_id == membership.company_id).all()
+        m.user_id
+        for m in db.query(CompanyMembership).filter(CompanyMembership.company_id == membership.company_id).all()
     ]
 
-    agents = db.query(Agent, User).join(User, Agent.user_id == User.id).filter(
-        Agent.user_id.in_(member_ids)
-    ).order_by(Agent.created_at.desc()).all()
+    agents = (
+        db.query(Agent, User)
+        .join(User, Agent.user_id == User.id)
+        .filter(Agent.user_id.in_(member_ids))
+        .order_by(Agent.created_at.desc())
+        .all()
+    )
 
     result = []
     for agent, owner in agents:
         doc_count = db.query(Document).filter(Document.agent_id == agent.id).count()
         share_count = db.query(AgentShare).filter(AgentShare.agent_id == agent.id).count()
-        result.append({
-            "id": agent.id,
-            "name": agent.name,
-            "type": agent.type,
-            "statut": agent.statut,
-            "llm_provider": agent.llm_provider,
-            "owner_username": owner.username,
-            "owner_id": owner.id,
-            "created_at": agent.created_at.isoformat() if agent.created_at else None,
-            "document_count": doc_count,
-            "shared_with_count": share_count,
-        })
+        result.append(
+            {
+                "id": agent.id,
+                "name": agent.name,
+                "type": agent.type,
+                "statut": agent.statut,
+                "llm_provider": agent.llm_provider,
+                "owner_username": owner.username,
+                "owner_id": owner.id,
+                "created_at": agent.created_at.isoformat() if agent.created_at else None,
+                "document_count": doc_count,
+                "shared_with_count": share_count,
+            }
+        )
 
     return {"agents": result}
 
 
 @app.delete("/api/companies/agents/{agent_id}")
-async def delete_company_agent(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def delete_company_agent(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Delete an agent from the organization. Requires admin+."""
     from permissions import require_role
 
@@ -5124,10 +5272,11 @@ async def delete_company_agent(
         raise HTTPException(status_code=404, detail="Agent not found")
 
     # Verify the agent owner is a member of the same company
-    owner_membership = db.query(CompanyMembership).filter(
-        CompanyMembership.user_id == agent.user_id,
-        CompanyMembership.company_id == membership.company_id
-    ).first()
+    owner_membership = (
+        db.query(CompanyMembership)
+        .filter(CompanyMembership.user_id == agent.user_id, CompanyMembership.company_id == membership.company_id)
+        .first()
+    )
     if not owner_membership:
         raise HTTPException(status_code=404, detail="Agent not found in this organization")
 
@@ -5143,10 +5292,7 @@ async def delete_company_agent(
 
 @app.post("/api/companies/agents/{agent_id}/share")
 async def share_agent(
-    agent_id: int,
-    request: Request,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    agent_id: int, request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Share an agent with another user in the same org. Owner of agent or admin+ required."""
     from permissions import require_role, get_user_membership
@@ -5172,10 +5318,13 @@ async def share_agent(
     if not caller_membership:
         raise HTTPException(status_code=403, detail="You are not in an organization")
 
-    target_membership = db.query(CompanyMembership).filter(
-        CompanyMembership.user_id == target_user_id,
-        CompanyMembership.company_id == caller_membership.company_id
-    ).first()
+    target_membership = (
+        db.query(CompanyMembership)
+        .filter(
+            CompanyMembership.user_id == target_user_id, CompanyMembership.company_id == caller_membership.company_id
+        )
+        .first()
+    )
     if not target_membership:
         raise HTTPException(status_code=404, detail="Target user not found in this organization")
 
@@ -5184,10 +5333,9 @@ async def share_agent(
         raise HTTPException(status_code=400, detail="Cannot share an agent with its owner")
 
     # Check if already shared
-    existing = db.query(AgentShare).filter(
-        AgentShare.agent_id == agent_id,
-        AgentShare.user_id == target_user_id
-    ).first()
+    existing = (
+        db.query(AgentShare).filter(AgentShare.agent_id == agent_id, AgentShare.user_id == target_user_id).first()
+    )
     if existing:
         raise HTTPException(status_code=409, detail="Agent already shared with this user")
 
@@ -5208,13 +5356,7 @@ async def share_agent(
         if target_user and sharer_user:
             frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
             chat_link = f"{frontend_url}/chat/{agent_id}"
-            send_agent_share_email(
-                target_user.email,
-                sharer_user.username,
-                agent.name,
-                can_edit,
-                chat_link
-            )
+            send_agent_share_email(target_user.email, sharer_user.username, agent.name, can_edit, chat_link)
             logger.info(f"Share notification email sent to {target_user.email} for agent {agent_id}")
     except Exception as e:
         logger.warning(f"Failed to send share notification email for agent {agent_id}: {e}")
@@ -5224,10 +5366,7 @@ async def share_agent(
 
 @app.delete("/api/companies/agents/{agent_id}/share/{target_user_id}")
 async def unshare_agent(
-    agent_id: int,
-    target_user_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    agent_id: int, target_user_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Remove a share. Owner of agent, admin+, or the target user themselves."""
     from permissions import require_role, get_user_membership
@@ -5244,10 +5383,7 @@ async def unshare_agent(
     if not is_owner and not is_self:
         require_role(uid, db, "admin")
 
-    share = db.query(AgentShare).filter(
-        AgentShare.agent_id == agent_id,
-        AgentShare.user_id == target_user_id
-    ).first()
+    share = db.query(AgentShare).filter(AgentShare.agent_id == agent_id, AgentShare.user_id == target_user_id).first()
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
 
@@ -5260,11 +5396,7 @@ async def unshare_agent(
             target_user = db.query(User).filter(User.id == target_user_id).first()
             sharer_user = db.query(User).filter(User.id == uid).first()
             if target_user and sharer_user:
-                send_agent_unshare_email(
-                    target_user.email,
-                    sharer_user.username,
-                    agent.name
-                )
+                send_agent_unshare_email(target_user.email, sharer_user.username, agent.name)
                 logger.info(f"Unshare notification email sent to {target_user.email} for agent {agent_id}")
         except Exception as e:
             logger.warning(f"Failed to send unshare notification email for agent {agent_id}: {e}")
@@ -5278,7 +5410,7 @@ async def update_agent_share(
     target_user_id: int,
     request: Request,
     user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Update can_edit permission on a share. Owner of agent or admin+ required."""
     from permissions import require_role
@@ -5293,10 +5425,7 @@ async def update_agent_share(
     if not is_owner:
         require_role(uid, db, "admin")
 
-    share = db.query(AgentShare).filter(
-        AgentShare.agent_id == agent_id,
-        AgentShare.user_id == target_user_id
-    ).first()
+    share = db.query(AgentShare).filter(AgentShare.agent_id == agent_id, AgentShare.user_id == target_user_id).first()
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
 
@@ -5318,11 +5447,7 @@ async def update_agent_share(
                 frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
                 chat_link = f"{frontend_url}/chat/{agent_id}"
                 send_agent_share_updated_email(
-                    target_user.email,
-                    sharer_user.username,
-                    agent.name,
-                    share.can_edit,
-                    chat_link
+                    target_user.email, sharer_user.username, agent.name, share.can_edit, chat_link
                 )
                 logger.info(f"Permission change notification email sent to {target_user.email} for agent {agent_id}")
         except Exception as e:
@@ -5332,11 +5457,7 @@ async def update_agent_share(
 
 
 @app.get("/api/companies/agents/{agent_id}/shares")
-async def list_agent_shares(
-    agent_id: int,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def list_agent_shares(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """List users an agent is shared with. Owner of agent or admin+ required."""
     from permissions import require_role, get_user_membership
 
@@ -5350,27 +5471,29 @@ async def list_agent_shares(
     if not is_owner:
         require_role(uid, db, "admin")
 
-    shares = db.query(AgentShare, User).join(User, AgentShare.user_id == User.id).filter(
-        AgentShare.agent_id == agent_id
-    ).all()
+    shares = (
+        db.query(AgentShare, User)
+        .join(User, AgentShare.user_id == User.id)
+        .filter(AgentShare.agent_id == agent_id)
+        .all()
+    )
 
-    return {"shares": [
-        {
-            "user_id": u.id,
-            "username": u.username,
-            "email": u.email,
-            "can_edit": s.can_edit,
-            "shared_at": s.created_at.isoformat() if s.created_at else None
-        }
-        for s, u in shares
-    ]}
+    return {
+        "shares": [
+            {
+                "user_id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "can_edit": s.can_edit,
+                "shared_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s, u in shares
+        ]
+    }
 
 
 @app.get("/api/neo4j/persons")
-async def list_neo4j_persons(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def list_neo4j_persons(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """List Person nodes from Neo4j for the user's company."""
     user = get_cached_user(user_id, db)
     if not user or not user.company_id:
@@ -5378,6 +5501,7 @@ async def list_neo4j_persons(
 
     try:
         from neo4j_client import get_persons_for_company
+
         persons = get_persons_for_company(user.company_id)
         return {"persons": persons}
     except Exception as e:
@@ -5393,6 +5517,7 @@ async def list_neo4j_persons(
 _password_change_rate_limit_fallback = {}
 _PASSWORD_CHANGE_LIMIT = 5
 _PASSWORD_CHANGE_WINDOW = 300  # 5 minutes
+
 
 def _check_password_change_rate_limit(user_id: str) -> bool:
     """Check if user has exceeded rate limit for password change. 5 attempts per 5 minutes."""
@@ -5424,10 +5549,7 @@ def _check_password_change_rate_limit(user_id: str) -> bool:
 
 @app.post("/api/user/change-password")
 async def change_password(
-    request: Request,
-    body: ChangePasswordRequest,
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
+    request: Request, body: ChangePasswordRequest, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Change the authenticated user's password."""
     if not _check_password_change_rate_limit(user_id):
@@ -5454,11 +5576,9 @@ async def change_password(
 # GDPR COMPLIANCE ENDPOINTS (Phase 5)
 # ============================================================================
 
+
 @app.get("/api/user/export-data")
-async def export_user_data(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def export_user_data(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """
     Export all user data in JSON format (GDPR Article 15 - Right of Access).
 
@@ -5480,50 +5600,61 @@ async def export_user_data(
         for agent in agents:
             # Get documents for this agent
             documents = db.query(Document).filter(Document.agent_id == agent.id).all()
-            agents_data.append({
-                "id": agent.id,
-                "name": agent.name,
-                "type": agent.type,
-                "statut": agent.statut,
-                "contexte": agent.contexte,
-                "biographie": agent.biographie,
-                "created_at": agent.created_at.isoformat() if agent.created_at else None,
-                "documents_count": len(documents),
-                "documents": [{
-                    "id": doc.id,
-                    "filename": doc.filename,
-                    "created_at": doc.created_at.isoformat() if doc.created_at else None
-                } for doc in documents]
-            })
+            agents_data.append(
+                {
+                    "id": agent.id,
+                    "name": agent.name,
+                    "type": agent.type,
+                    "statut": agent.statut,
+                    "contexte": agent.contexte,
+                    "biographie": agent.biographie,
+                    "created_at": agent.created_at.isoformat() if agent.created_at else None,
+                    "documents_count": len(documents),
+                    "documents": [
+                        {
+                            "id": doc.id,
+                            "filename": doc.filename,
+                            "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                        }
+                        for doc in documents
+                    ],
+                }
+            )
 
         # Get all conversations
-        conversations = db.query(Conversation).filter(
-            Conversation.agent_id.in_([a.id for a in agents])
-        ).all()
+        conversations = db.query(Conversation).filter(Conversation.agent_id.in_([a.id for a in agents])).all()
         conversations_data = []
         for conv in conversations:
             messages = db.query(Message).filter(Message.conversation_id == conv.id).all()
-            conversations_data.append({
-                "id": conv.id,
-                "title": conv.title,
-                "agent_id": conv.agent_id,
-                "created_at": conv.created_at.isoformat() if conv.created_at else None,
-                "messages": [{
-                    "role": msg.role,
-                    "content": msg.content,
-                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
-                    "feedback": msg.feedback
-                } for msg in messages]
-            })
+            conversations_data.append(
+                {
+                    "id": conv.id,
+                    "title": conv.title,
+                    "agent_id": conv.agent_id,
+                    "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                    "messages": [
+                        {
+                            "role": msg.role,
+                            "content": msg.content,
+                            "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                            "feedback": msg.feedback,
+                        }
+                        for msg in messages
+                    ],
+                }
+            )
 
         # Get team memberships
         teams = db.query(Team).filter(Team.user_id == int(user_id)).all()
-        teams_data = [{
-            "id": team.id,
-            "name": team.name,
-            "contexte": team.contexte,
-            "created_at": team.created_at.isoformat() if team.created_at else None
-        } for team in teams]
+        teams_data = [
+            {
+                "id": team.id,
+                "name": team.name,
+                "contexte": team.contexte,
+                "created_at": team.created_at.isoformat() if team.created_at else None,
+            }
+            for team in teams
+        ]
 
         export_data = {
             "export_date": datetime.utcnow().isoformat(),
@@ -5531,7 +5662,7 @@ async def export_user_data(
                 "id": user.id,
                 "username": user.username,
                 "email": user.email,
-                "created_at": user.created_at.isoformat() if user.created_at else None
+                "created_at": user.created_at.isoformat() if user.created_at else None,
             },
             "agents": agents_data,
             "conversations": conversations_data,
@@ -5541,8 +5672,8 @@ async def export_user_data(
                 "total_documents": sum(len(a["documents"]) for a in agents_data),
                 "total_conversations": len(conversations_data),
                 "total_messages": sum(len(c["messages"]) for c in conversations_data),
-                "total_teams": len(teams_data)
-            }
+                "total_teams": len(teams_data),
+            },
         }
 
         logger.info(f"User {user_id} exported their data (GDPR Art. 15)")
@@ -5556,10 +5687,7 @@ async def export_user_data(
 
 
 @app.get("/api/user/stats")
-async def get_user_stats(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db)
-):
+async def get_user_stats(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Get analytics data for the current user's activity."""
     try:
         from sqlalchemy import func, cast, Date
@@ -5569,10 +5697,7 @@ async def get_user_stats(
 
         # 1. Messages per day (last 30 days)
         messages_per_day_q = (
-            db.query(
-                cast(Message.timestamp, Date).label("date"),
-                func.count(Message.id).label("count")
-            )
+            db.query(cast(Message.timestamp, Date).label("date"), func.count(Message.id).label("count"))
             .join(Conversation, Message.conversation_id == Conversation.id)
             .filter(Conversation.user_id == uid)
             .filter(Message.timestamp >= thirty_days_ago)
@@ -5584,10 +5709,7 @@ async def get_user_stats(
 
         # 2. Messages per agent
         messages_per_agent_q = (
-            db.query(
-                Agent.name.label("name"),
-                func.count(Message.id).label("messages")
-            )
+            db.query(Agent.name.label("name"), func.count(Message.id).label("messages"))
             .join(Conversation, Message.conversation_id == Conversation.id)
             .join(Agent, Conversation.agent_id == Agent.id)
             .filter(Conversation.user_id == uid)
@@ -5599,24 +5721,20 @@ async def get_user_stats(
 
         # 3. Conversations per agent
         conversations_per_agent_q = (
-            db.query(
-                Agent.name.label("name"),
-                func.count(Conversation.id).label("conversations")
-            )
+            db.query(Agent.name.label("name"), func.count(Conversation.id).label("conversations"))
             .join(Agent, Conversation.agent_id == Agent.id)
             .filter(Conversation.user_id == uid)
             .group_by(Agent.name)
             .order_by(func.count(Conversation.id).desc())
             .all()
         )
-        conversations_per_agent = [{"name": r.name, "conversations": r.conversations} for r in conversations_per_agent_q]
+        conversations_per_agent = [
+            {"name": r.name, "conversations": r.conversations} for r in conversations_per_agent_q
+        ]
 
         # 4. Feedback distribution (agent messages only)
         feedback_q = (
-            db.query(
-                Message.feedback,
-                func.count(Message.id).label("count")
-            )
+            db.query(Message.feedback, func.count(Message.id).label("count"))
             .join(Conversation, Message.conversation_id == Conversation.id)
             .filter(Conversation.user_id == uid)
             .filter(Message.role == "agent")
@@ -5630,10 +5748,7 @@ async def get_user_stats(
 
         # 5. Average messages per conversation
         subq = (
-            db.query(
-                Conversation.id,
-                func.count(Message.id).label("msg_count")
-            )
+            db.query(Conversation.id, func.count(Message.id).label("msg_count"))
             .join(Message, Message.conversation_id == Conversation.id)
             .filter(Conversation.user_id == uid)
             .group_by(Conversation.id)
@@ -5644,10 +5759,7 @@ async def get_user_stats(
 
         # 6. Role distribution (user vs agent messages)
         role_q = (
-            db.query(
-                Message.role,
-                func.count(Message.id).label("count")
-            )
+            db.query(Message.role, func.count(Message.id).label("count"))
             .join(Conversation, Message.conversation_id == Conversation.id)
             .filter(Conversation.user_id == uid)
             .group_by(Message.role)
@@ -5668,7 +5780,7 @@ async def get_user_stats(
             "feedback": feedback,
             "avg_messages_per_conversation": avg_messages,
             "role_distribution": role_distribution,
-            "most_active_agent": most_active_agent
+            "most_active_agent": most_active_agent,
         }
 
     except HTTPException:
@@ -5680,9 +5792,7 @@ async def get_user_stats(
 
 @app.delete("/api/user/delete-account")
 async def delete_user_account(
-    user_id: str = Depends(verify_token),
-    db: Session = Depends(get_db),
-    anonymize: bool = False
+    user_id: str = Depends(verify_token), db: Session = Depends(get_db), anonymize: bool = False
 ):
     """
     Delete user account and all associated data (GDPR Article 17 - Right to Erasure).
@@ -5718,11 +5828,7 @@ async def delete_user_account(
             db.commit()
             invalidate_user_cache(user.id)
             logger.info(f"User {user_id} account anonymized (GDPR Art. 17)")
-            return {
-                "message": "Account anonymized successfully",
-                "anonymized": True,
-                "user_id": user.id
-            }
+            return {"message": "Account anonymized successfully", "anonymized": True, "user_id": user.id}
         else:
             # Complete deletion
             # Get all agents
@@ -5731,9 +5837,7 @@ async def delete_user_account(
 
             # Delete conversations and messages for user's agents
             if agent_ids:
-                conversations = db.query(Conversation).filter(
-                    Conversation.agent_id.in_(agent_ids)
-                ).all()
+                conversations = db.query(Conversation).filter(Conversation.agent_id.in_(agent_ids)).all()
                 conv_ids = [conv.id for conv in conversations]
 
                 if conv_ids:
@@ -5753,7 +5857,10 @@ async def delete_user_account(
 
             # Delete password reset tokens
             from database import PasswordResetToken
-            db.query(PasswordResetToken).filter(PasswordResetToken.user_id == int(user_id)).delete(synchronize_session=False)
+
+            db.query(PasswordResetToken).filter(PasswordResetToken.user_id == int(user_id)).delete(
+                synchronize_session=False
+            )
 
             # Finally delete user
             db.delete(user)
@@ -5761,11 +5868,7 @@ async def delete_user_account(
             invalidate_user_cache(user_id)
 
             logger.info(f"User {user_id} account completely deleted (GDPR Art. 17)")
-            return {
-                "message": "Account deleted successfully",
-                "anonymized": False,
-                "deleted": True
-            }
+            return {"message": "Account deleted successfully", "anonymized": False, "deleted": True}
 
     except HTTPException:
         raise
