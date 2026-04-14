@@ -116,8 +116,17 @@ def build_recap_prompt(
 
     agent_name = agent.name or "Agent"
     agent_context = agent.contexte or ""
+    custom_prompt = getattr(agent, "weekly_recap_prompt", None)
 
-    system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
+    if custom_prompt and custom_prompt.strip():
+        system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
+
+{custom_prompt.strip()}
+
+IMPORTANT: Génère UNIQUEMENT du contenu HTML, sans balises <html>, <head>, <body>.
+Utilise des <h2> pour les titres de section et des <ul>/<li> pour les listes."""
+    else:
+        system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
 
 Tu dois générer un recap hebdomadaire structuré en HTML à partir des conversations et documents de la semaine.
 

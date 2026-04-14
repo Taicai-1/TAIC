@@ -2225,6 +2225,7 @@ async def create_agent(
     neo4j_person_name: str = Form(None),
     neo4j_depth: str = Form("1"),
     weekly_recap_enabled: str = Form("false"),
+    weekly_recap_prompt: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -2292,6 +2293,7 @@ async def create_agent(
             neo4j_person_name=neo4j_person_name if neo4j_person_name and neo4j_person_name.strip() else None,
             neo4j_depth=int(neo4j_depth) if neo4j_depth else 1,
             weekly_recap_enabled=weekly_recap_enabled.lower() in ("true", "1", "yes"),
+            weekly_recap_prompt=weekly_recap_prompt if weekly_recap_prompt and weekly_recap_prompt.strip() else None,
             user_id=int(user_id),
             company_id=caller_company_id,
         )
@@ -2468,6 +2470,7 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
                     "neo4j_depth": agent.neo4j_depth,
                     "email_tags": agent.email_tags,
                     "weekly_recap_enabled": agent.weekly_recap_enabled,
+                    "weekly_recap_prompt": agent.weekly_recap_prompt,
                 }
             )
         if not is_owner:
@@ -2650,6 +2653,7 @@ async def update_agent(
     neo4j_person_name: str = Form(None),
     neo4j_depth: str = Form("1"),
     weekly_recap_enabled: str = Form("false"),
+    weekly_recap_prompt: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -2684,6 +2688,7 @@ async def update_agent(
 
         # Update Weekly Recap
         agent.weekly_recap_enabled = weekly_recap_enabled.lower() in ("true", "1", "yes")
+        agent.weekly_recap_prompt = weekly_recap_prompt if weekly_recap_prompt and weekly_recap_prompt.strip() else None
 
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
 

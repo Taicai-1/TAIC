@@ -292,6 +292,7 @@ class Agent(Base):
 
     # Weekly Recap
     weekly_recap_enabled = Column(Boolean, default=False, nullable=False)
+    weekly_recap_prompt = Column(Text, nullable=True)
 
     # Relations
     owner = relationship("User", back_populates="agents")
@@ -555,6 +556,7 @@ def ensure_columns():
     """Add new columns to existing tables if they don't exist (safe migration)"""
     migrations = [
         ("agents", "weekly_recap_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("agents", "weekly_recap_prompt", "TEXT"),
         ("documents", "document_type", "VARCHAR(20) NOT NULL DEFAULT 'rag'"),
         # Company org-level columns
         ("companies", "invite_code", "VARCHAR(32) UNIQUE"),
