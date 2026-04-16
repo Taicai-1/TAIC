@@ -613,6 +613,9 @@ async def upload_url(request: UrlUploadValidated, user_id: str = Depends(verify_
 # Security: Restrict origins to only trusted domains to prevent unauthorized API access
 # Separate CORS configuration for development vs production environments
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "jeremy@taic.co")
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8080").rstrip("/")
+FRONTEND_PUBLIC_URL = os.getenv("FRONTEND_PUBLIC_URL", "http://localhost:3000").rstrip("/")
 
 # Base production origins
 allowed_origins = [
