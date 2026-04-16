@@ -358,3 +358,107 @@ def send_feedback_email(from_user_email: str, username: str, feedback_type: str,
         server.send_message(msg)
 
     logger.info(f"Feedback email sent from {from_user_email}: {type_label}")
+
+
+def render_admin_org_request_email(
+    requester_email: str,
+    requested_name: str,
+    approve_url: str,
+    reject_url: str,
+) -> str:
+    """Render the HTML email sent to admin when a new org creation is requested."""
+    content = f"""
+        <h2 style="color:#111827; font-size:20px; margin:0 0 16px; font-weight:700;">
+            Nouvelle demande d'organisation
+        </h2>
+        <p style="color:#374151; font-size:15px; line-height:1.5; margin:0 0 8px;">
+            <strong>{requester_email}</strong> souhaite créer l'organisation&nbsp;:
+        </p>
+        <p style="color:#111827; font-size:18px; font-weight:600; margin:0 0 24px; padding:12px 16px; background:#f3f4f6; border-radius:8px;">
+            {requested_name}
+        </p>
+        <p style="color:#374151; font-size:14px; line-height:1.5; margin:0 0 24px;">
+            Choisissez une action&nbsp;:
+        </p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+            <tr>
+                <td style="padding:0 8px;">
+                    <a href="{approve_url}"
+                       style="display:inline-block; padding:14px 28px; background:#10b981; color:#ffffff;
+                              text-decoration:none; border-radius:8px; font-weight:600; font-size:15px;">
+                        ✅ Approuver
+                    </a>
+                </td>
+                <td style="padding:0 8px;">
+                    <a href="{reject_url}"
+                       style="display:inline-block; padding:14px 28px; background:#ef4444; color:#ffffff;
+                              text-decoration:none; border-radius:8px; font-weight:600; font-size:15px;">
+                        ❌ Refuser
+                    </a>
+                </td>
+            </tr>
+        </table>
+        <p style="color:#9ca3af; font-size:12px; line-height:1.5; margin:24px 0 0; text-align:center;">
+            Les liens pointent vers une page de confirmation — rien n'est exécuté automatiquement.
+        </p>
+    """
+    return _wrap_template(
+        content,
+        preheader=f"{requester_email} demande '{requested_name}'",
+    )
+
+
+def render_user_org_approved_email(requested_name: str, app_url: str) -> str:
+    """Render the HTML email sent to user when their org request is approved."""
+    content = f"""
+        <h2 style="color:#111827; font-size:20px; margin:0 0 16px; font-weight:700;">
+            🎉 Votre organisation a été approuvée
+        </h2>
+        <p style="color:#374151; font-size:15px; line-height:1.5; margin:0 0 16px;">
+            Bonne nouvelle&nbsp;: votre organisation
+            <strong>{requested_name}</strong> a été approuvée et est maintenant active.
+        </p>
+        <p style="color:#374151; font-size:15px; line-height:1.5; margin:0 0 24px;">
+            Vous pouvez dès à présent inviter vos collaborateurs et configurer vos intégrations.
+        </p>
+        <div style="text-align:center; margin:32px 0;">
+            <a href="{app_url}"
+               style="display:inline-block; padding:14px 32px; background:linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+                      color:#ffffff; text-decoration:none; border-radius:8px; font-weight:600; font-size:15px;">
+                Accéder à mon organisation
+            </a>
+        </div>
+    """
+    return _wrap_template(content, preheader=f"'{requested_name}' est prête")
+
+
+def render_user_org_rejected_email(requested_name: str, reason: str | None, app_url: str) -> str:
+    """Render the HTML email sent to user when their org request is rejected."""
+    reason_block = ""
+    if reason:
+        reason_block = f"""
+        <p style="color:#374151; font-size:14px; line-height:1.5; margin:0 0 16px; padding:12px 16px; background:#fef2f2; border-left:3px solid #ef4444; border-radius:4px;">
+            <strong>Raison&nbsp;:</strong> {reason}
+        </p>
+        """
+    content = f"""
+        <h2 style="color:#111827; font-size:20px; margin:0 0 16px; font-weight:700;">
+            Votre demande d'organisation
+        </h2>
+        <p style="color:#374151; font-size:15px; line-height:1.5; margin:0 0 16px;">
+            Votre demande pour l'organisation <strong>{requested_name}</strong>
+            n'a pas pu être acceptée pour le moment.
+        </p>
+        {reason_block}
+        <p style="color:#374151; font-size:15px; line-height:1.5; margin:0 0 24px;">
+            Vous pouvez soumettre une nouvelle demande depuis votre espace.
+        </p>
+        <div style="text-align:center; margin:32px 0;">
+            <a href="{app_url}"
+               style="display:inline-block; padding:14px 32px; background:#6366f1;
+                      color:#ffffff; text-decoration:none; border-radius:8px; font-weight:600; font-size:15px;">
+                Soumettre une nouvelle demande
+            </a>
+        </div>
+    """
+    return _wrap_template(content, preheader="Information sur votre demande")
