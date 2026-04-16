@@ -4,6 +4,7 @@ All outbound emails go through this module using contact@taic.co (Google Workspa
 """
 
 import os
+import re
 import logging
 import smtplib
 from datetime import datetime
@@ -183,9 +184,22 @@ def send_invitation_email(to_email: str, company_name: str, join_link: str):
     send_email(to_email, f"Invitation à rejoindre {company_name}", html)
 
 
+def _strip_markdown_fences(text: str) -> str:
+    """Remove markdown code fences (```html, ```) that LLMs sometimes wrap output in."""
+    if not text:
+        return text
+    cleaned = text.strip()
+    # Remove opening fence like ```html or ```
+    cleaned = re.sub(r"^```[a-zA-Z]*\s*\n?", "", cleaned)
+    # Remove closing fence
+    cleaned = re.sub(r"\n?```\s*$", "", cleaned)
+    return cleaned.strip()
+
+
 def generate_recap_html(agent_name: str, recap_content: str) -> str:
     """Wrap LLM-generated recap content in the branded TAIC email template."""
     now = datetime.utcnow().strftime("%d/%m/%Y")
+    recap_content = _strip_markdown_fences(recap_content)
 
     content = f"""
 <p style="color:#6b7280; font-size:14px; margin:0 0 20px 0; text-align:center;">
