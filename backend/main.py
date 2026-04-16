@@ -4921,6 +4921,132 @@ async def admin_org_request_confirm_page(
         )
 
 
+@app.post("/api/admin/companies/request/{token}/decide", response_class=HTMLResponse)
+async def admin_org_request_decide(
+    token: str,
+    action: str = Form(...),
+    reason: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Execute the admin decision (approve/reject). No auth: token is the auth."""
+    import secrets as _secrets
+    from admin_html_pages import success_page, error_page
+    from email_service import (
+        send_email,
+        render_user_org_approved_email,
+        render_user_org_rejected_email,
+    )
+
+    if action not in ("approve", "reject"):
+        return HTMLResponse(error_page("Action inconnue."), status_code=400)
+
+    req = db.query(CompanyCreationRequest).filter(CompanyCreationRequest.token == token).first()
+    if not req:
+        return HTMLResponse(error_page("Cette demande n'existe pas."), status_code=404)
+
+    if req.status != "pending":
+        return HTMLResponse(
+            error_page(f"Cette demande a déjà été traitée (statut : {req.status})."),
+            status_code=410,
+        )
+
+    user = db.query(User).filter(User.id == req.user_id).first()
+    if not user:
+        req.status = "rejected"
+        req.decided_at = datetime.utcnow()
+        req.decided_reason = "Utilisateur introuvable"
+        db.commit()
+        return HTMLResponse(error_page("Utilisateur introuvable — demande annulée."), status_code=404)
+
+    user_app_url = f"{FRONTEND_PUBLIC_URL}/organization"
+
+    if action == "approve":
+        # Re-check name uniqueness at approval time (race condition with other orgs)
+        if db.query(Company).filter(Company.name == req.requested_name).first():
+            return HTMLResponse(
+                error_page(
+                    f"Le nom \"{req.requested_name}\" est déjà pris. "
+                    "Refusez cette demande ou contactez le demandeur."
+                ),
+                status_code=409,
+            )
+
+        # Re-check user is not already in an org
+        if db.query(CompanyMembership).filter(CompanyMembership.user_id == user.id).first():
+            return HTMLResponse(
+                error_page("L'utilisateur a rejoint une autre organisation entre-temps."),
+                status_code=409,
+            )
+
+        # Create company + membership
+        company = Company(
+            name=req.requested_name,
+            neo4j_enabled=True,
+            invite_code=_secrets.token_urlsafe(16),
+        )
+        db.add(company)
+        db.flush()
+
+        membership = CompanyMembership(
+            user_id=user.id,
+            company_id=company.id,
+            role="owner",
+        )
+        db.add(membership)
+
+        # Also sync user.company_id (existing pattern in the codebase)
+        user.company_id = company.id
+
+        req.status = "approved"
+        req.decided_at = datetime.utcnow()
+        req.company_id = company.id
+        db.commit()
+
+        # Invalidate user cache (consistent with other user mutations)
+        try:
+            invalidate_user_cache(user.id)
+        except Exception as e:
+            logger.error(f"Failed to invalidate user cache: {e}")
+
+        # Send approval email
+        try:
+            html = render_user_org_approved_email(req.requested_name, user_app_url)
+            send_email(
+                to=user.email,
+                subject=f"✅ Votre organisation \"{req.requested_name}\" a été approuvée",
+                html_body=html,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send approval email: {e}")
+
+        return HTMLResponse(
+            success_page(f"L'organisation \"{req.requested_name}\" a été créée pour {user.email}.")
+        )
+
+    else:  # reject
+        cleaned_reason = (reason or "").strip() or None
+        req.status = "rejected"
+        req.decided_at = datetime.utcnow()
+        req.decided_reason = cleaned_reason
+        db.commit()
+
+        try:
+            html = render_user_org_rejected_email(
+                req.requested_name, cleaned_reason, user_app_url
+            )
+            send_email(
+                to=user.email,
+                subject="Votre demande d'organisation",
+                html_body=html,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send rejection email: {e}")
+
+        return HTMLResponse(
+            success_page(f"La demande pour \"{req.requested_name}\" a été refusée.")
+        )
+
+
 @app.post("/api/companies")
 async def create_company(request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Create a company and affiliate the creator as owner."""
