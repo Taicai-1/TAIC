@@ -4874,6 +4874,53 @@ async def get_my_company_request(
     }
 
 
+from fastapi.responses import HTMLResponse
+
+
+@app.get("/api/admin/companies/request/{token}", response_class=HTMLResponse)
+async def admin_org_request_confirm_page(
+    token: str,
+    action: str,
+    db: Session = Depends(get_db),
+):
+    """Admin confirmation page (rendered HTML). No auth: token IS the auth.
+
+    Shows a confirmation button to avoid accidental actions from Gmail pre-fetch.
+    """
+    from admin_html_pages import (
+        confirm_approve_page,
+        confirm_reject_page,
+        error_page,
+    )
+
+    if action not in ("approve", "reject"):
+        return HTMLResponse(error_page("Action inconnue."), status_code=400)
+
+    req = db.query(CompanyCreationRequest).filter(CompanyCreationRequest.token == token).first()
+    if not req:
+        return HTMLResponse(error_page("Cette demande n'existe pas."), status_code=404)
+
+    if req.status != "pending":
+        return HTMLResponse(
+            error_page(f"Cette demande a déjà été traitée (statut : {req.status})."),
+            status_code=410,
+        )
+
+    user = db.query(User).filter(User.id == req.user_id).first()
+    requester_email = user.email if user else "inconnu"
+
+    post_url = f"{BACKEND_PUBLIC_URL}/api/admin/companies/request/{token}/decide"
+
+    if action == "approve":
+        return HTMLResponse(
+            confirm_approve_page(token, requester_email, req.requested_name, post_url)
+        )
+    else:
+        return HTMLResponse(
+            confirm_reject_page(token, requester_email, req.requested_name, post_url)
+        )
+
+
 @app.post("/api/companies")
 async def create_company(request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Create a company and affiliate the creator as owner."""
