@@ -232,6 +232,23 @@ class CompanyInvitation(Base):
     invited_by = relationship("User")
 
 
+class CompanyCreationRequest(Base):
+    __tablename__ = "company_creation_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    requested_name = Column(String(200), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")  # 'pending' | 'approved' | 'rejected'
+    token = Column(String(128), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    decided_at = Column(DateTime, nullable=True)
+    decided_reason = Column(Text, nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+    company = relationship("Company", foreign_keys=[company_id])
+
+
 class Agent(Base):
     __tablename__ = "agents"
 
