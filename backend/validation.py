@@ -453,6 +453,20 @@ class TeamCreateValidated(BaseModel):
         return v
 
 
+class CompanyRequestCreateValidated(BaseModel):
+    """Company creation request with validation"""
+
+    name: str = Field(..., min_length=2, max_length=200)
+
+    @validator("name")
+    def validate_name(cls, v):
+        v = SCRIPT_PATTERN.sub("", v)
+        v = sanitize_text(v, 200)
+        if not v or len(v) < 2:
+            raise ValueError("Organization name must be at least 2 characters")
+        return v
+
+
 # ============================================================================
 # VALIDATION HELPERS FOR DIRECT USE
 # ============================================================================
