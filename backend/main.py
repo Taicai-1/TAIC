@@ -71,6 +71,7 @@ from database import (
     Message,
     PasswordResetToken,
     Company,
+    CompanyCreationRequest,
     CompanyMembership,
     CompanyInvitation,
     WeeklyRecapLog,
@@ -4751,6 +4752,99 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
 # ============================================================================
 # COMPANY & NEO4J ENDPOINTS
 # ============================================================================
+
+
+@app.post("/api/companies/request")
+async def create_company_request(
+    request: Request,
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Submit a request to create a new organization. Requires manual approval."""
+    import secrets as _secrets
+    from validation import CompanyRequestCreateValidated
+    from email_service import send_email, render_admin_org_request_email
+
+    # Rate limit by IP
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_org_request_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Trop de demandes, réessayez dans une heure",
+        )
+
+    # Parse + validate body
+    body = await request.json()
+    try:
+        validated = CompanyRequestCreateValidated(**body)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    name = validated.name
+
+    uid = int(user_id)
+
+    # User must not already be in an org
+    if db.query(CompanyMembership).filter(CompanyMembership.user_id == uid).first():
+        raise HTTPException(
+            status_code=409,
+            detail="Vous êtes déjà membre d'une organisation",
+        )
+
+    # User must not already have a pending request
+    existing_pending = (
+        db.query(CompanyCreationRequest)
+        .filter(
+            CompanyCreationRequest.user_id == uid,
+            CompanyCreationRequest.status == "pending",
+        )
+        .first()
+    )
+    if existing_pending:
+        raise HTTPException(
+            status_code=409,
+            detail="Une demande est déjà en cours d'examen",
+        )
+
+    # Create the request
+    token = _secrets.token_urlsafe(48)
+    req = CompanyCreationRequest(
+        user_id=uid,
+        requested_name=name,
+        status="pending",
+        token=token,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    # Fetch requester info for the email
+    user = db.query(User).filter(User.id == uid).first()
+    requester_email = user.email if user else "inconnu"
+
+    # Build magic links
+    approve_url = f"{BACKEND_PUBLIC_URL}/api/admin/companies/request/{token}?action=approve"
+    reject_url = f"{BACKEND_PUBLIC_URL}/api/admin/companies/request/{token}?action=reject"
+
+    # Send admin email (best-effort — don't fail the request if SMTP is down)
+    try:
+        html = render_admin_org_request_email(
+            requester_email=requester_email,
+            requested_name=name,
+            approve_url=approve_url,
+            reject_url=reject_url,
+        )
+        send_email(
+            to=ADMIN_NOTIFICATION_EMAIL,
+            subject=f"🏢 Nouvelle demande : \"{name}\" par {requester_email}",
+            html_body=html,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send admin notification for org request {req.id}: {e}")
+
+    return {
+        "status": "pending",
+        "requested_name": name,
+    }
 
 
 @app.post("/api/companies")
