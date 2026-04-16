@@ -5055,11 +5055,11 @@ async def create_company(request: Request, user_id: str = Depends(verify_token),
     body = await request.json()
     name = body.get("name", "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Company name is required")
+        raise HTTPException(status_code=400, detail="Le nom de l'organisation est requis")
 
     existing = db.query(Company).filter(Company.name == name).first()
     if existing:
-        raise HTTPException(status_code=409, detail="A company with this name already exists")
+        raise HTTPException(status_code=409, detail="Une organisation avec ce nom existe déjà")
 
     # Check user isn't already in an org
     existing_membership = db.query(CompanyMembership).filter(CompanyMembership.user_id == int(user_id)).first()
@@ -5126,11 +5126,11 @@ async def affiliate_user_to_company(
     body = await request.json()
     company_name = body.get("company_name", "").strip()
     if not company_name:
-        raise HTTPException(status_code=400, detail="company_name is required")
+        raise HTTPException(status_code=400, detail="Le paramètre 'company_name' est requis")
 
     company = db.query(Company).filter(Company.name == company_name).first()
     if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
+        raise HTTPException(status_code=404, detail="Organisation introuvable")
 
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
