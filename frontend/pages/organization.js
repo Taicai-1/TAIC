@@ -31,6 +31,7 @@ import {
   ChevronUp,
   Share2,
   X,
+  XCircle,
 } from 'lucide-react';
 
 export default function Organization() {
@@ -45,6 +46,9 @@ export default function Organization() {
   const [createName, setCreateName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Org creation request state
+  const [myRequest, setMyRequest] = useState(null); // { id, requested_name, status, created_at, decided_reason }
 
   // Members
   const [members, setMembers] = useState([]);
@@ -87,6 +91,18 @@ export default function Organization() {
       const data = res.data;
       setCompany(data.company);
 
+      // If no company, check for a pending/rejected request
+      if (!data.company) {
+        try {
+          const reqRes = await api.get('/api/companies/request/mine');
+          setMyRequest(reqRes.data.request);
+        } catch {
+          setMyRequest(null);
+        }
+      } else {
+        setMyRequest(null);
+      }
+
       if (data.company && ['admin', 'owner'].includes(data.company.role)) {
         loadMembers();
         loadOrgAgents();
@@ -128,10 +144,11 @@ export default function Organization() {
     if (!createName.trim()) return;
     setActionLoading(true);
     try {
-      await api.post('/api/companies', { name: createName.trim() });
-      toast.success(t('organization:noOrg.createButton') + ' OK');
-      loadCompany();
+      await api.post('/api/companies/request', { name: createName.trim() });
+      toast.success(t('organization:noOrg.requestSubmitted'));
       setCreateName('');
+      // Refresh to show pending state
+      loadCompany();
     } catch (error) {
       toast.error(error.response?.data?.detail || t('organization:errors.generic'));
     } finally {
@@ -378,7 +395,55 @@ export default function Organization() {
           </div>
 
           {/* ======== NO ORG ======== */}
-          {!company && (
+          {!company && myRequest?.status === 'pending' && (
+            <div className="bg-white rounded-card shadow-card border border-gray-200 p-8 max-w-2xl mx-auto text-center">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center mx-auto mb-4">
+                <Loader2 className="w-8 h-8 text-white animate-spin" />
+              </div>
+              <h2 className="text-xl font-heading font-bold text-gray-900 mb-3">
+                {t('organization:request.pendingTitle')}
+              </h2>
+              <p className="text-gray-600 mb-4">
+                {t('organization:request.pendingBody', { name: myRequest.requested_name })}
+              </p>
+              {myRequest.created_at && (
+                <p className="text-sm text-gray-400">
+                  {t('organization:request.pendingSubmittedAt', {
+                    date: new Date(myRequest.created_at).toLocaleDateString()
+                  })}
+                </p>
+              )}
+            </div>
+          )}
+
+          {!company && myRequest?.status === 'rejected' && (
+            <div className="bg-white rounded-card shadow-card border border-gray-200 p-8 max-w-2xl mx-auto">
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center mb-4">
+                  <XCircle className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-xl font-heading font-bold text-gray-900 mb-3">
+                  {t('organization:request.rejectedTitle')}
+                </h2>
+                <p className="text-gray-600 mb-2">
+                  {t('organization:request.rejectedBody', { name: myRequest.requested_name })}
+                </p>
+                {myRequest.decided_reason && (
+                  <p className="text-sm text-gray-500 p-3 bg-red-50 border-l-3 border-red-400 rounded mt-3">
+                    {t('organization:request.rejectedReason', { reason: myRequest.decided_reason })}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setMyRequest(null)}
+                className="w-full py-3 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white font-semibold rounded-button shadow-card hover:shadow-elevated transition-all"
+              >
+                {t('organization:request.retryButton')}
+              </button>
+            </div>
+          )}
+
+          {!company && !myRequest && (
             <div className="grid md:grid-cols-2 gap-6">
               {/* Create */}
               <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
