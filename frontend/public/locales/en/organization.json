@@ -7,10 +7,20 @@
     "description": "Create a new organization or join an existing one with an invite code.",
     "createTitle": "Create Organization",
     "namePlaceholder": "Organization name",
-    "createButton": "Create",
+    "createButton": "Request creation",
     "joinTitle": "Join with Invite Code",
     "codePlaceholder": "Paste invite code",
-    "joinButton": "Join"
+    "joinButton": "Join",
+    "requestSubmitted": "Request submitted! You will receive an email once it is reviewed."
+  },
+  "request": {
+    "pendingTitle": "Request under review",
+    "pendingBody": "Your request for the organization \"{{name}}\" is being reviewed by our team. You will receive an email once it is processed.",
+    "pendingSubmittedAt": "Submitted on {{date}}",
+    "rejectedTitle": "Request rejected",
+    "rejectedBody": "Your previous request for \"{{name}}\" was rejected.",
+    "rejectedReason": "Reason: {{reason}}",
+    "retryButton": "Submit a new request"
   },
   "info": {
     "title": "Organization",
