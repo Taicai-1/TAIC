@@ -4847,6 +4847,33 @@ async def create_company_request(
     }
 
 
+@app.get("/api/companies/request/mine")
+async def get_my_company_request(
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Return the user's most recent org creation request (or null)."""
+    uid = int(user_id)
+    req = (
+        db.query(CompanyCreationRequest)
+        .filter(CompanyCreationRequest.user_id == uid)
+        .order_by(CompanyCreationRequest.created_at.desc())
+        .first()
+    )
+    if not req:
+        return {"request": None}
+    return {
+        "request": {
+            "id": req.id,
+            "requested_name": req.requested_name,
+            "status": req.status,
+            "created_at": req.created_at.isoformat() if req.created_at else None,
+            "decided_at": req.decided_at.isoformat() if req.decided_at else None,
+            "decided_reason": req.decided_reason,
+        }
+    }
+
+
 @app.post("/api/companies")
 async def create_company(request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Create a company and affiliate the creator as owner."""
