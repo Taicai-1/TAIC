@@ -7,10 +7,20 @@
     "description": "Creez une nouvelle organisation ou rejoignez-en une avec un code d'invitation.",
     "createTitle": "Creer une organisation",
     "namePlaceholder": "Nom de l'organisation",
-    "createButton": "Creer",
+    "createButton": "Demander la creation",
     "joinTitle": "Rejoindre avec un code",
     "codePlaceholder": "Collez le code d'invitation",
-    "joinButton": "Rejoindre"
+    "joinButton": "Rejoindre",
+    "requestSubmitted": "Demande envoyee ! Vous recevrez un email des qu'elle sera traitee."
+  },
+  "request": {
+    "pendingTitle": "Demande en cours d'examen",
+    "pendingBody": "Votre demande pour l'organisation \"{{name}}\" est en cours d'examen par notre equipe. Vous recevrez un email des qu'elle sera traitee.",
+    "pendingSubmittedAt": "Soumise le {{date}}",
+    "rejectedTitle": "Demande refusee",
+    "rejectedBody": "Votre precedente demande pour \"{{name}}\" a ete refusee.",
+    "rejectedReason": "Raison : {{reason}}",
+    "retryButton": "Soumettre une nouvelle demande"
   },
   "info": {
     "title": "Organisation",
