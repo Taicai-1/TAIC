@@ -253,6 +253,7 @@ def _get_caller_company_id(user_id, db: Session) -> Optional[int]:
 _auth_rate_limit_fallback = {}
 _public_chat_rate_fallback = {}
 _api_rate_limit_fallback = {}
+_org_request_rate_limit_fallback = {}
 
 # Rate limiting configuration
 _AUTH_LIMIT = 5  # max failed attempts per window
@@ -263,6 +264,10 @@ _API_UPLOAD_LIMIT = 30  # max uploads per window per user
 _API_ASK_LIMIT = 60  # max /ask calls per window per user
 _API_EXTRACT_LIMIT = 30  # max extractText calls per window per user
 _API_WINDOW = 3600  # 1 hour in seconds
+
+# Rate limiting for org creation request (per IP)
+_ORG_REQUEST_LIMIT = 5  # max requests per IP per window
+_ORG_REQUEST_WINDOW = 3600  # 1 hour in seconds
 
 
 def _check_api_rate_limit(user_id: str, action: str, limit: int) -> bool:
@@ -295,6 +300,40 @@ def _check_api_rate_limit(user_id: str, action: str, limit: int) -> bool:
         return False
     attempts.append(now)
     _api_rate_limit_fallback[fallback_key] = attempts
+    return True
+
+
+def _check_org_request_rate_limit(ip: str) -> bool:
+    """
+    Check if IP has exceeded rate limit for org creation requests.
+    Returns True if allowed, False if rate limited.
+    Increments counter on every call (unlike _check_auth_rate_limit which
+    only counts failures).
+    """
+    key = f"rate_limit:org_request:{ip}"
+
+    if redis_client:
+        try:
+            current = redis_client.get(key)
+            current = int(current) if current else 0
+            if current >= _ORG_REQUEST_LIMIT:
+                return False
+            pipe = redis_client.pipeline()
+            pipe.incr(key)
+            pipe.expire(key, _ORG_REQUEST_WINDOW)
+            pipe.execute()
+            return True
+        except Exception as e:
+            logger.error(f"Redis org_request rate limit failed: {e}. Using fallback.")
+
+    # Fallback to in-memory
+    now = time.time()
+    attempts = _org_request_rate_limit_fallback.get(ip, [])
+    attempts = [t for t in attempts if now - t < _ORG_REQUEST_WINDOW]
+    if len(attempts) >= _ORG_REQUEST_LIMIT:
+        return False
+    attempts.append(now)
+    _org_request_rate_limit_fallback[ip] = attempts
     return True
 
 

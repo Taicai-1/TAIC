@@ -46,3 +46,33 @@ class TestEmailRendering:
             app_url="https://app.taic.co/organization",
         )
         assert "Ma Boîte" in html
+
+
+class TestIpRateLimit:
+    """In-memory fallback behavior (Redis path tested manually in staging)."""
+
+    @pytest.fixture(autouse=True)
+    def _main_module(self):
+        try:
+            import importlib
+            import main
+            importlib.reload(main)
+            self.main = main
+        except Exception:
+            pytest.skip("main.py import requires full DB config")
+
+    def test_allows_first_five_requests(self):
+        ip = "10.0.0.1"
+        for _ in range(5):
+            assert self.main._check_org_request_rate_limit(ip) is True
+
+    def test_blocks_sixth_request_within_window(self):
+        ip = "10.0.0.2"
+        for _ in range(5):
+            self.main._check_org_request_rate_limit(ip)
+        assert self.main._check_org_request_rate_limit(ip) is False
+
+    def test_different_ips_isolated(self):
+        for _ in range(5):
+            self.main._check_org_request_rate_limit("10.0.0.3")
+        assert self.main._check_org_request_rate_limit("10.0.0.4") is True
