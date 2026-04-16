@@ -5047,49 +5047,6 @@ async def admin_org_request_decide(
         )
 
 
-@app.post("/api/companies")
-async def create_company(request: Request, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
-    """Create a company and affiliate the creator as owner."""
-    import secrets as _secrets
-
-    body = await request.json()
-    name = body.get("name", "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Le nom de l'organisation est requis")
-
-    existing = db.query(Company).filter(Company.name == name).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="Une organisation avec ce nom existe déjà")
-
-    # Check user isn't already in an org
-    existing_membership = db.query(CompanyMembership).filter(CompanyMembership.user_id == int(user_id)).first()
-    if existing_membership:
-        raise HTTPException(status_code=409, detail="You are already a member of an organization")
-
-    company = Company(name=name, neo4j_enabled=True, invite_code=_secrets.token_urlsafe(16))
-    db.add(company)
-    db.commit()
-    db.refresh(company)
-
-    # Affiliate the creator
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if user:
-        user.company_id = company.id
-        membership = CompanyMembership(user_id=user.id, company_id=company.id, role="owner")
-        db.add(membership)
-        db.commit()
-        invalidate_user_cache(user.id)
-
-    return {
-        "company": {
-            "id": company.id,
-            "name": company.name,
-            "neo4j_enabled": company.neo4j_enabled,
-            "invite_code": company.invite_code,
-        }
-    }
-
-
 @app.get("/api/companies/mine")
 async def get_my_company(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Get the current user's company with role and integration status."""
