@@ -106,14 +106,16 @@ Nouveau fichier SQL dans `backend/migrations/` (additive, pas de breaking change
   - Envoie email user "refusée"
 - Retourne : page HTML de confirmation ("✅ Organisation approuvée" ou "❌ Demande refusée")
 
-### Endpoints remplacés
+### Endpoints supprimés
 
-- `POST /api/companies` : désactivé (retour 403 "La création d'organisation doit passer par le flux de demande") ou supprimé après bascule frontend complète
+- `POST /api/companies` : **supprimé** au moment du bascule frontend (pas de phase intermédiaire 403). Tout client qui tenterait cet endpoint recevra 404 de FastAPI.
 
 ### Rate limiting
 
-- Le check "1 request pending max par user" limite naturellement l'abus
-- Pas de rate limit IP supplémentaire pour la V1 (à ajouter si spam observé)
+- Le check "1 request pending max par user" limite naturellement l'abus côté user authentifié
+- **Rate limit IP sur `POST /api/companies/request`** : 5 requêtes par IP par heure (pour contrer création massive de comptes + demandes automatisées)
+- Implémentation : `slowapi` si déjà présent dans le projet, sinon middleware custom simple basé sur Redis (compteur `ratelimit:org_request:{ip}`, TTL 1h). Fallback in-memory si Redis indisponible (cohérent avec les autres caches Redis du projet).
+- En cas de dépassement : HTTP 429 avec message "Trop de demandes, réessayez dans une heure"
 
 ## 7. Frontend
 
@@ -231,10 +233,11 @@ Tous via `email_service.py` (`send_email` + `_wrap_template` déjà existants).
 ### Ordre des changements
 
 1. Migration SQL : nouvelle table `company_creation_requests`
-2. Backend : nouveaux endpoints + templates email (l'ancien `POST /api/companies` reste actif en parallèle)
-3. Frontend : ajout du composant de demande + appel au nouvel endpoint
-4. Bascule : l'UI appelle désormais `/api/companies/request`
-5. Cleanup : désactivation (403) ou suppression de l'ancien `POST /api/companies`
+2. Backend : nouveaux endpoints + templates email + rate limit (l'ancien `POST /api/companies` reste actif temporairement pendant le dev)
+3. Frontend : ajout du composant de demande + appel au nouvel endpoint + harmonisation terminologie "organisation"
+4. Bascule + cleanup simultanés : l'UI appelle `/api/companies/request` ET on **supprime** l'ancien `POST /api/companies` dans le même commit/PR
+
+**Note** : pas de phase staged avec 403 — suppression directe pour simplicité. La PR est atomique : le jour où le frontend bascule, l'ancien endpoint disparaît.
 
 ### Données existantes
 
@@ -249,15 +252,38 @@ Nouvelles :
 
 ### Rollback
 
-- Possible tant que l'ancien `POST /api/companies` n'est pas supprimé
-- La table `company_creation_requests` peut rester en base (pas de data loss)
+- Rollback via `git revert` de la PR (restaure l'ancien endpoint + supprime le nouveau flux frontend)
+- La table `company_creation_requests` peut rester en base après rollback (pas de data loss, just orpheline)
+- **Dépendance à l'atomicité de la PR** : c'est pour ça que la bascule + suppression se font dans un seul commit
 
 ### CI
 
 - Les nouveaux tests tournent dans la pipeline existante (pytest)
 - Ruff et ESLint couvrent les nouveaux fichiers
 
-## 12. Évolutions futures (hors scope)
+## 12. Harmonisation terminologique
+
+Le codebase actuel mélange **"company"** (tables, modèles SQLAlchemy, noms d'endpoints) et **"organization"** (messages d'erreur, docstrings, certaines interfaces UX). Cette inconsistance rend l'UX confuse.
+
+### Décision
+
+- **Côté backend / code interne** : on garde **"company"** (trop coûteux à renommer, tables SQL existantes, migrations en place)
+- **Côté UX utilisateur (tous les messages visibles)** : on utilise **"organisation"** (français) de façon stricte et exclusive
+- **URLs API** : on garde `/api/companies/*` (cohérence avec le reste, pas de breaking change)
+
+### Actions d'harmonisation (dans la même PR)
+
+1. **Frontend** : tous les labels, boutons, toasts, messages d'erreur affichés utilisent "organisation" (jamais "company" / "entreprise" / "société" pour l'UX utilisateur)
+2. **Backend, messages d'erreur HTTPException** : auditer les détails retournés par les endpoints `/api/companies/*` et normaliser à "organisation" (car ces messages sont souvent affichés tels quels côté frontend). Exemple : `"A company with this name already exists"` → `"Une organisation avec ce nom existe déjà"`
+3. **Emails** : tous les templates utilisent "organisation" systématiquement (déjà le cas dans le design des 3 nouveaux emails)
+4. **Code backend, docstrings et variables internes** : peuvent rester en "company" (pas visible de l'utilisateur)
+
+### Portée
+
+- Scope limité aux fichiers touchés par cette feature + un sweep rapide des messages d'erreur existants dans `/api/companies/*`
+- Pas de refactor massif sur tout le codebase (hors scope)
+
+## 13. Évolutions futures (hors scope)
 
 - Admin panel Next.js pour gérer les requests
 - Self-serve automatique avec rate limit + vérification d'email + billing
