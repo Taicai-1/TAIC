@@ -6,6 +6,7 @@ import pytest
 class TestEmailRendering:
     def test_admin_notification_renders(self):
         from email_service import render_admin_org_request_email
+
         html = render_admin_org_request_email(
             requester_email="alice@example.com",
             requested_name="Ma Boîte",
@@ -20,6 +21,7 @@ class TestEmailRendering:
 
     def test_user_approved_renders(self):
         from email_service import render_user_org_approved_email
+
         html = render_user_org_approved_email(
             requested_name="Ma Boîte",
             app_url="https://app.taic.co/organization",
@@ -30,6 +32,7 @@ class TestEmailRendering:
 
     def test_user_rejected_renders_with_reason(self):
         from email_service import render_user_org_rejected_email
+
         html = render_user_org_rejected_email(
             requested_name="Ma Boîte",
             reason="Nom non conforme",
@@ -40,6 +43,7 @@ class TestEmailRendering:
 
     def test_user_rejected_renders_without_reason(self):
         from email_service import render_user_org_rejected_email
+
         html = render_user_org_rejected_email(
             requested_name="Ma Boîte",
             reason=None,
@@ -56,6 +60,7 @@ class TestIpRateLimit:
         try:
             import importlib
             import main
+
             importlib.reload(main)
             self.main = main
         except Exception:

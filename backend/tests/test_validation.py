@@ -154,26 +154,31 @@ class TestUserCreateValidated:
 class TestCompanyRequestCreateValidated:
     def test_accepts_valid_name(self):
         from validation import CompanyRequestCreateValidated
+
         v = CompanyRequestCreateValidated(name="Ma Boîte")
         assert v.name == "Ma Boîte"
 
     def test_rejects_empty_name(self):
         from validation import CompanyRequestCreateValidated
+
         with pytest.raises(ValidationError):
             CompanyRequestCreateValidated(name="")
 
     def test_rejects_name_too_long(self):
         from validation import CompanyRequestCreateValidated
+
         with pytest.raises(ValidationError):
             CompanyRequestCreateValidated(name="a" * 201)
 
     def test_strips_and_sanitizes(self):
         from validation import CompanyRequestCreateValidated
+
         v = CompanyRequestCreateValidated(name="  <script>alert('x')</script>Test  ")
         assert "<script>" not in v.name
         assert "Test" in v.name
 
     def test_rejects_name_too_short(self):
         from validation import CompanyRequestCreateValidated
+
         with pytest.raises(ValidationError):
             CompanyRequestCreateValidated(name="a")  # min_length=2

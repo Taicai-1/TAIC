@@ -4835,7 +4835,7 @@ async def create_company_request(
         )
         send_email(
             to=ADMIN_NOTIFICATION_EMAIL,
-            subject=f"🏢 Nouvelle demande : \"{name}\" par {requester_email}",
+            subject=f'🏢 Nouvelle demande : "{name}" par {requester_email}',
             html_body=html,
         )
     except Exception as e:
@@ -4912,13 +4912,9 @@ async def admin_org_request_confirm_page(
     post_url = f"{BACKEND_PUBLIC_URL}/api/admin/companies/request/{token}/decide"
 
     if action == "approve":
-        return HTMLResponse(
-            confirm_approve_page(token, requester_email, req.requested_name, post_url)
-        )
+        return HTMLResponse(confirm_approve_page(token, requester_email, req.requested_name, post_url))
     else:
-        return HTMLResponse(
-            confirm_reject_page(token, requester_email, req.requested_name, post_url)
-        )
+        return HTMLResponse(confirm_reject_page(token, requester_email, req.requested_name, post_url))
 
 
 @app.post("/api/admin/companies/request/{token}/decide", response_class=HTMLResponse)
@@ -4965,8 +4961,7 @@ async def admin_org_request_decide(
         if db.query(Company).filter(Company.name == req.requested_name).first():
             return HTMLResponse(
                 error_page(
-                    f"Le nom \"{req.requested_name}\" est déjà pris. "
-                    "Refusez cette demande ou contactez le demandeur."
+                    f'Le nom "{req.requested_name}" est déjà pris. Refusez cette demande ou contactez le demandeur.'
                 ),
                 status_code=409,
             )
@@ -5013,15 +5008,13 @@ async def admin_org_request_decide(
             html = render_user_org_approved_email(req.requested_name, user_app_url)
             send_email(
                 to=user.email,
-                subject=f"✅ Votre organisation \"{req.requested_name}\" a été approuvée",
+                subject=f'✅ Votre organisation "{req.requested_name}" a été approuvée',
                 html_body=html,
             )
         except Exception as e:
             logger.error(f"Failed to send approval email: {e}")
 
-        return HTMLResponse(
-            success_page(f"L'organisation \"{req.requested_name}\" a été créée pour {user.email}.")
-        )
+        return HTMLResponse(success_page(f'L\'organisation "{req.requested_name}" a été créée pour {user.email}.'))
 
     else:  # reject
         cleaned_reason = (reason or "").strip() or None
@@ -5031,9 +5024,7 @@ async def admin_org_request_decide(
         db.commit()
 
         try:
-            html = render_user_org_rejected_email(
-                req.requested_name, cleaned_reason, user_app_url
-            )
+            html = render_user_org_rejected_email(req.requested_name, cleaned_reason, user_app_url)
             send_email(
                 to=user.email,
                 subject="Votre demande d'organisation",
@@ -5042,9 +5033,7 @@ async def admin_org_request_decide(
         except Exception as e:
             logger.error(f"Failed to send rejection email: {e}")
 
-        return HTMLResponse(
-            success_page(f"La demande pour \"{req.requested_name}\" a été refusée.")
-        )
+        return HTMLResponse(success_page(f'La demande pour "{req.requested_name}" a été refusée.'))
 
 
 @app.get("/api/companies/mine")
