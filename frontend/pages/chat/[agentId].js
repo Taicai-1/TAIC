@@ -23,6 +23,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // Image block rendered inside markdown (generated images)
 const MarkdownImage = ({ src, alt, t }) => (
@@ -48,6 +49,7 @@ const MarkdownText = ({ children }) => {
   return (
     <div className="leading-relaxed markdown-content">
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
           strong: ({ node, ...props }) => <strong {...props} />,
           em: ({ node, ...props }) => <em {...props} />,
@@ -63,6 +65,14 @@ const MarkdownText = ({ children }) => {
             <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
           ),
           img: ({ node, ...props }) => <MarkdownImage {...props} t={t} />,
+          table: ({ node, ...props }) => (
+            <div className="overflow-x-auto my-3">
+              <table className="min-w-full border-collapse border border-gray-200 rounded-lg text-sm" {...props} />
+            </div>
+          ),
+          thead: ({ node, ...props }) => <thead className="bg-gray-50" {...props} />,
+          th: ({ node, ...props }) => <th className="border border-gray-200 px-3 py-2 text-left font-semibold text-gray-700" {...props} />,
+          td: ({ node, ...props }) => <td className="border border-gray-200 px-3 py-2 text-gray-700" {...props} />,
         }}
       >
         {children}
