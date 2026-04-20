@@ -616,7 +616,7 @@ async def upload_url(request: UrlUploadValidated, user_id: str = Depends(verify_
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "jeremy@taic.co")
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8080").rstrip("/")
-FRONTEND_PUBLIC_URL = os.getenv("FRONTEND_PUBLIC_URL", "http://localhost:3000").rstrip("/")
+FRONTEND_PUBLIC_URL = os.getenv("FRONTEND_URL", "https://taic.ai").rstrip("/")
 
 # Base production origins
 allowed_origins = [
