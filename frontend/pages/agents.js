@@ -53,6 +53,7 @@ export default function AgentsPage() {
   const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
   const [emailTagInput, setEmailTagInput] = useState("");
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoPreviewError, setPhotoPreviewError] = useState(false);
   const [creating, setCreating] = useState(false);
   const [neo4jPersons, setNeo4jPersons] = useState([]);
   const [userCompany, setUserCompany] = useState(null);
@@ -424,18 +425,19 @@ export default function AgentsPage() {
               </div>
 
               <div className="flex flex-col items-center space-y-4 p-6 bg-gray-50 rounded-card border border-dashed border-gray-300">
-                {photoPreview ? (
+                {photoPreview && !photoPreviewError ? (
                   <div className="relative group">
                     <img
                       src={photoPreview}
-                      alt={t('agents:form.photo.preview')}
+                      alt=""
                       className="w-28 h-28 object-cover rounded-full border-4 border-blue-400 shadow-card ring-4 ring-blue-100"
+                      onError={() => setPhotoPreviewError(true)}
                     />
                     <div className="absolute inset-0 bg-blue-600/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   </div>
                 ) : (
                   <div className="w-28 h-28 rounded-full border-4 border-dashed border-gray-300 flex items-center justify-center text-gray-400 bg-white shadow-subtle">
-                    <Plus className="w-12 h-12" />
+                    {form.profile_photo ? <ImageIcon className="w-12 h-12 text-blue-400" /> : <Plus className="w-12 h-12" />}
                   </div>
                 )}
                 <label className="group px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-button font-semibold cursor-pointer hover:from-blue-700 hover:to-purple-700 transition-all shadow-card hover:shadow-elevated flex items-center">
@@ -448,6 +450,7 @@ export default function AgentsPage() {
                       if (e.target.files && e.target.files[0]) {
                         const file = e.target.files[0];
                         setForm(f => ({...f, profile_photo: file}));
+                        setPhotoPreviewError(false);
                         setPhotoPreview(URL.createObjectURL(file));
                       }
                     }}
