@@ -50,7 +50,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "" });
+  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
   const [emailTagInput, setEmailTagInput] = useState("");
   const [creating, setCreating] = useState(false);
   const [neo4jPersons, setNeo4jPersons] = useState([]);
@@ -215,7 +215,7 @@ export default function AgentsPage() {
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
           <button
             onClick={() => {
-              setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "" });
+              setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
               setShowForm(true);
             }}
             className="group flex items-center justify-center px-8 py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-button hover:from-blue-700 hover:to-purple-700 transition-all font-semibold shadow-card hover:shadow-elevated"
@@ -485,6 +485,9 @@ export default function AgentsPage() {
                     formData.append("neo4j_depth", String(form.neo4j_depth || 1));
                     formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
                     if (form.weekly_recap_prompt) formData.append("weekly_recap_prompt", form.weekly_recap_prompt);
+                    if (form.weekly_recap_recipients && form.weekly_recap_recipients.length > 0) {
+                      formData.append("weekly_recap_recipients", JSON.stringify(form.weekly_recap_recipients));
+                    }
                     await api.post('/agents', formData, {
                       headers: {
                         "Content-Type": "multipart/form-data"
@@ -492,7 +495,7 @@ export default function AgentsPage() {
                     });
                     toast.success(t('agents:toast.createSuccess'));
                     setShowForm(false);
-                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "" });
+                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
                     loadAgents();
                   } catch (err) {
                     toast.error(t('agents:toast.createError'));

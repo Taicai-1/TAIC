@@ -78,7 +78,10 @@
       "helpText": "Receive a weekly AI-generated summary every Monday by email based on conversations and traceability documents.",
       "promptLabel": "Custom prompt",
       "promptPlaceholder": "E.g.: Generate a recap with sections: Project progress, Identified risks, Action items...",
-      "promptHelpText": "Leave empty to use the default prompt (3 sections: Completed projects, Deadlines, Key issues)."
+      "promptHelpText": "Leave empty to use the default prompt (3 sections: Completed projects, Deadlines, Key issues).",
+      "recipientsLabel": "Additional recipients",
+      "recipientsPlaceholder": "email@example.com",
+      "recipientsHelpText": "The agent owner always receives the recap. Add team members here."
     }
   },
   "slack": {

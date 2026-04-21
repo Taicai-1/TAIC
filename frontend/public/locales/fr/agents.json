@@ -78,7 +78,10 @@
       "helpText": "Recevez chaque lundi par email un résumé IA basé sur les conversations et documents de traçabilité.",
       "promptLabel": "Prompt personnalisé",
       "promptPlaceholder": "Ex: Génère un recap avec les sections : Avancement des projets, Risques identifiés, Actions à mener...",
-      "promptHelpText": "Laissez vide pour utiliser le prompt par défaut (3 sections : Projets réalisés, Deadlines, Enjeux clés)."
+      "promptHelpText": "Laissez vide pour utiliser le prompt par défaut (3 sections : Projets réalisés, Deadlines, Enjeux clés).",
+      "recipientsLabel": "Destinataires supplémentaires",
+      "recipientsPlaceholder": "email@exemple.com",
+      "recipientsHelpText": "Le propriétaire de l'agent reçoit toujours le recap. Ajoutez des membres de l'équipe ici."
     }
   },
   "slack": {

@@ -58,7 +58,8 @@ export default function CompanionSettings() {
     name: "", contexte: "", biographie: "", profile_photo: null,
     type: 'conversationnel',
     email_tags: [], neo4j_enabled: false, neo4j_person_name: "",
-    neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: ""
+    neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "",
+    weekly_recap_recipients: []
   });
   const [emailTagInput, setEmailTagInput] = useState("");
 
@@ -86,6 +87,7 @@ export default function CompanionSettings() {
   const [savingSlack, setSavingSlack] = useState(false);
   const [testingSlack, setTestingSlack] = useState(false);
   const [sendingRecap, setSendingRecap] = useState(false);
+  const [recapRecipientInput, setRecapRecipientInput] = useState("");
 
   // Neo4j
   const [neo4jPersons, setNeo4jPersons] = useState([]);
@@ -124,7 +126,8 @@ export default function CompanionSettings() {
         email_tags: parsedEmailTags, neo4j_enabled: agent.neo4j_enabled || false,
         neo4j_person_name: agent.neo4j_person_name || "", neo4j_depth: agent.neo4j_depth || 1,
         weekly_recap_enabled: agent.weekly_recap_enabled || false,
-        weekly_recap_prompt: agent.weekly_recap_prompt || ""
+        weekly_recap_prompt: agent.weekly_recap_prompt || "",
+        weekly_recap_recipients: agent.weekly_recap_recipients ? JSON.parse(agent.weekly_recap_recipients) : []
       });
     } catch (error) {
       toast.error(t('agents:toast.loadError'));
@@ -252,6 +255,9 @@ export default function CompanionSettings() {
       formData.append("neo4j_depth", String(form.neo4j_depth || 1));
       formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
       if (form.weekly_recap_prompt) formData.append("weekly_recap_prompt", form.weekly_recap_prompt);
+      if (form.weekly_recap_recipients && form.weekly_recap_recipients.length > 0) {
+        formData.append("weekly_recap_recipients", JSON.stringify(form.weekly_recap_recipients));
+      }
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -876,6 +882,63 @@ export default function CompanionSettings() {
                     onChange={e => setForm(f => ({ ...f, weekly_recap_prompt: e.target.value }))}
                   />
                   <p className="text-xs text-gray-400 mt-1">{t('agents:form.weeklyRecap.promptHelpText')}</p>
+                </div>
+                {/* Recipients */}
+                <div className="mt-3">
+                  <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                    <Users className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                    {t('agents:form.weeklyRecap.recipientsLabel')}
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      className="flex-1 px-3 py-1.5 border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
+                      placeholder={t('agents:form.weeklyRecap.recipientsPlaceholder')}
+                      value={recapRecipientInput}
+                      onChange={e => setRecapRecipientInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const email = recapRecipientInput.trim();
+                          if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !form.weekly_recap_recipients.includes(email)) {
+                            setForm(f => ({ ...f, weekly_recap_recipients: [...f.weekly_recap_recipients, email] }));
+                            setRecapRecipientInput("");
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const email = recapRecipientInput.trim();
+                        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !form.weekly_recap_recipients.includes(email)) {
+                          setForm(f => ({ ...f, weekly_recap_recipients: [...f.weekly_recap_recipients, email] }));
+                          setRecapRecipientInput("");
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-lg transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{t('agents:form.weeklyRecap.recipientsHelpText')}</p>
+                  {form.weekly_recap_recipients.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {form.weekly_recap_recipients.map((email, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full">
+                          <Mail className="w-3 h-3" />
+                          {email}
+                          <button
+                            type="button"
+                            onClick={() => setForm(f => ({ ...f, weekly_recap_recipients: f.weekly_recap_recipients.filter((_, idx) => idx !== i) }))}
+                            className="ml-0.5 hover:text-red-600 transition-colors"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {currentAgent && (
                   <button

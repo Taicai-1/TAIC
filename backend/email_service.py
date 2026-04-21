@@ -214,9 +214,12 @@ def generate_recap_html(agent_name: str, recap_content: str) -> str:
     return _wrap_template(content, preheader=f"Recap hebdomadaire - {agent_name}")
 
 
-def send_recap_email(to_email: str, agent_name: str, html: str):
-    """Send the weekly recap email."""
-    send_email(to_email, f"Recap Hebdomadaire - {agent_name}", html)
+def send_recap_email(to_email: str | list[str], agent_name: str, html: str):
+    """Send the weekly recap email to one or more recipients."""
+    subject = f"Recap Hebdomadaire - {agent_name}"
+    recipients = to_email if isinstance(to_email, list) else [to_email]
+    for recipient in recipients:
+        send_email(recipient, subject, html)
 
 
 def send_agent_share_email(to_email: str, sharer_name: str, agent_name: str, can_edit: bool, chat_link: str):

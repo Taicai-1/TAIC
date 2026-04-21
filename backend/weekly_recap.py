@@ -3,6 +3,7 @@ Weekly Recap Module
 Generates and sends weekly AI-powered recap emails per agent.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta
 
@@ -201,8 +202,25 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
         # 3. Generate HTML email
         html = generate_recap_html(agent.name, recap_content)
 
-        # 4. Send email
-        send_recap_email(user.email, agent.name, html)
+        # 4. Build recipient list (owner + extra recipients)
+        recipients = [user.email]
+        raw_recipients = getattr(agent, "weekly_recap_recipients", None)
+        if raw_recipients:
+            try:
+                extra = json.loads(raw_recipients)
+                if isinstance(extra, list):
+                    recipients.extend(e.strip() for e in extra if e.strip() and e.strip() != user.email)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        # Deduplicate while preserving order
+        seen = set()
+        unique_recipients = []
+        for r in recipients:
+            if r not in seen:
+                seen.add(r)
+                unique_recipients.append(r)
+
+        send_recap_email(unique_recipients, agent.name, html)
 
         # 5. Log success
         log = WeeklyRecapLog(
@@ -218,7 +236,7 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
         return {
             "status": "success",
             "agent_name": agent.name,
-            "email": user.email,
+            "email": ", ".join(unique_recipients),
             "message_count": len(messages),
             "doc_count": len(docs),
         }

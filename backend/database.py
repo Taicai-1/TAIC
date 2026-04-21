@@ -310,6 +310,7 @@ class Agent(Base):
     # Weekly Recap
     weekly_recap_enabled = Column(Boolean, default=False, nullable=False)
     weekly_recap_prompt = Column(Text, nullable=True)
+    weekly_recap_recipients = Column(Text, nullable=True)  # JSON array of extra email recipients
 
     # Relations
     owner = relationship("User", back_populates="agents")
