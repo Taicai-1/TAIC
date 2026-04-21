@@ -2540,6 +2540,24 @@ async def delete_agent(agent_id: int, user_id: str = Depends(verify_token), db: 
             raise HTTPException(status_code=404, detail="Agent not found")
 
         _delete_agent_and_related_data(agent, int(user_id), db)
+
+        # Clean up slash_commands references in the agent's company
+        user_company_id = _get_caller_company_id(user_id, db)
+        if user_company_id:
+            company = db.query(Company).filter(Company.id == user_company_id).first()
+            if company and company.slash_commands:
+                try:
+                    commands = json.loads(company.slash_commands)
+                    updated = False
+                    for cmd in commands:
+                        if agent_id in cmd.get("agent_ids", []):
+                            cmd["agent_ids"] = [aid for aid in cmd["agent_ids"] if aid != agent_id]
+                            updated = True
+                    if updated:
+                        company.slash_commands = json.dumps(commands)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
         db.commit()
 
         return {"message": "Agent deleted successfully"}
