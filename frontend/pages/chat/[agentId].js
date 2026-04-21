@@ -422,7 +422,7 @@ const handleDeleteConversation = async (convId) => {
                   height={80}
                   style={{ objectFit: "cover" }}
                   className="w-full h-full"
-                  onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.png'; }}
+                  onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}
                 />
               </div>
             )}

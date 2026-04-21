@@ -502,7 +502,7 @@ export default function CompanionSettings() {
                     src={profilePhotoUrl}
                     alt={form.name}
                     className="w-32 h-32 rounded-card object-cover border-4 border-white shadow-elevated ring-4 ring-blue-100"
-                    onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.png'; }}
+                    onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}
                   />
                 ) : (
                   <div className={`w-32 h-32 rounded-card ${typeConfig.color} flex items-center justify-center border-4 border-white shadow-elevated ring-4 ring-blue-100`}>

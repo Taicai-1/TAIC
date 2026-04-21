@@ -572,7 +572,7 @@ export default function AgentsPage() {
                             src={agent.profile_photo.startsWith('http') ? agent.profile_photo : `${API_URL}/profile_photos/${agent.profile_photo.replace(/^.*[\\/]/, '')}`}
                             alt={agent.name}
                             className="w-16 h-16 object-cover rounded-full border-4 border-white shadow-card ring-2 ring-gray-100"
-                            onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.png'; }}
+                            onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}
                           />
                           <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-3 border-white"></div>
                         </div>
