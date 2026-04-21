@@ -26,7 +26,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import text
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import List, Optional
 from google.cloud import storage
 import google.auth
@@ -940,6 +940,32 @@ class VerifyEmailRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: str
+
+
+class SlashCommandItem(BaseModel):
+    """Slash command with validation"""
+    id: Optional[str] = None
+    command: str
+    prompt: str
+    agent_ids: list[int] = []
+
+    @validator("command")
+    def validate_command(cls, v):
+        if not v:
+            raise ValueError("Command cannot be empty")
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+            raise ValueError("Command can only contain letters, numbers, dash, and underscore")
+        if len(v) > 32:
+            raise ValueError("Command must be 32 characters or less")
+        return v.lower()
+
+    @validator("prompt")
+    def validate_prompt(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Prompt cannot be empty")
+        if len(v) > 5000:
+            raise ValueError("Prompt must be 5000 characters or less")
+        return v.strip()
 
 
 @app.post("/auth/verify-email")
@@ -5830,6 +5856,77 @@ async def list_agent_shares(agent_id: int, user_id: str = Depends(verify_token),
             for s, u in shares
         ]
     }
+
+
+@app.get("/api/companies/slash-commands")
+async def get_slash_commands(
+    agent_id: Optional[int] = None,
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Get slash commands for the caller's company. Optional agent_id filter."""
+    company_id = _get_caller_company_id(user_id, db)
+    if not company_id:
+        raise HTTPException(status_code=404, detail="No company found")
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    commands = json.loads(company.slash_commands) if company.slash_commands else []
+    if agent_id is not None:
+        commands = [c for c in commands if agent_id in c.get("agent_ids", [])]
+    return {"slash_commands": commands}
+
+
+@app.put("/api/companies/slash-commands")
+async def update_slash_commands(
+    request: Request,
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Replace all slash commands for the caller's company. Owner/admin only."""
+    company_id = _get_caller_company_id(user_id, db)
+    if not company_id:
+        raise HTTPException(status_code=404, detail="No company found")
+
+    # Check role - use CompanyMembership model
+    membership = db.query(CompanyMembership).filter(
+        CompanyMembership.company_id == company_id,
+        CompanyMembership.user_id == int(user_id)
+    ).first()
+    if not membership or membership.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner or admin required")
+
+    body = await request.json()
+    items = body if isinstance(body, list) else body.get("slash_commands", [])
+
+    # Validate each item
+    seen_commands = set()
+    validated = []
+    for item in items:
+        sc = SlashCommandItem(**item)
+        if sc.command in seen_commands:
+            raise HTTPException(status_code=400, detail=f"Duplicate command: {sc.command}")
+        seen_commands.add(sc.command)
+
+        # Validate agent_ids exist
+        for aid in sc.agent_ids:
+            agent = db.query(Agent).filter(Agent.id == aid).first()
+            if not agent:
+                raise HTTPException(status_code=400, detail=f"Agent {aid} not found")
+
+        validated.append({
+            "id": sc.id or str(uuid4()),
+            "command": sc.command,
+            "prompt": sc.prompt,
+            "agent_ids": sc.agent_ids,
+        })
+
+    company = db.query(Company).filter(Company.id == company_id).first()
+    company.slash_commands = json.dumps(validated)
+    db.commit()
+
+    return {"slash_commands": validated}
 
 
 @app.get("/api/neo4j/persons")
