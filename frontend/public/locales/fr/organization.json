@@ -128,5 +128,37 @@
   },
   "navigation": {
     "backToAgents": "Retour aux companions"
+  },
+  "slashCommands": {
+    "title": "Raccourcis Prompts",
+    "description": "Configurez des commandes / pour envoyer des prompts prédéfinis à vos companions",
+    "addButton": "Ajouter un raccourci",
+    "empty": "Aucun raccourci configuré",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer ce raccourci ?",
+    "created": "Raccourci créé",
+    "updated": "Raccourci mis à jour",
+    "deleted": "Raccourci supprimé",
+    "table": {
+      "command": "Commande",
+      "prompt": "Prompt",
+      "companions": "Companions"
+    },
+    "modal": {
+      "createTitle": "Nouveau raccourci",
+      "editTitle": "Modifier le raccourci",
+      "commandLabel": "Nom de la commande",
+      "commandPlaceholder": "analyse",
+      "promptLabel": "Prompt",
+      "promptPlaceholder": "Analyse moi les tendances sur l'IA sur les 6 derniers mois...",
+      "companionsLabel": "Companions avec accès",
+      "addCompanion": "+ Ajouter un companion",
+      "cancel": "Annuler",
+      "save": "Enregistrer"
+    },
+    "errors": {
+      "requiredFields": "Le nom et le prompt sont obligatoires"
+    }
   }
 }

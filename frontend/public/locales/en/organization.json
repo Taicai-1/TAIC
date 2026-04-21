@@ -128,5 +128,37 @@
   },
   "navigation": {
     "backToAgents": "Back to companions"
+  },
+  "slashCommands": {
+    "title": "Prompt Shortcuts",
+    "description": "Configure / commands to send predefined prompts to your companions",
+    "addButton": "Add shortcut",
+    "empty": "No shortcuts configured",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this shortcut?",
+    "created": "Shortcut created",
+    "updated": "Shortcut updated",
+    "deleted": "Shortcut deleted",
+    "table": {
+      "command": "Command",
+      "prompt": "Prompt",
+      "companions": "Companions"
+    },
+    "modal": {
+      "createTitle": "New shortcut",
+      "editTitle": "Edit shortcut",
+      "commandLabel": "Command name",
+      "commandPlaceholder": "analyse",
+      "promptLabel": "Prompt",
+      "promptPlaceholder": "Analyze AI trends over the last 6 months...",
+      "companionsLabel": "Companions with access",
+      "addCompanion": "+ Add companion",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "errors": {
+      "requiredFields": "Name and prompt are required"
+    }
   }
 }
