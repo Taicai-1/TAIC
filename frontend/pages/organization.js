@@ -32,6 +32,8 @@ import {
   Share2,
   X,
   XCircle,
+  Zap,
+  Edit3,
 } from 'lucide-react';
 
 export default function Organization() {
@@ -79,6 +81,14 @@ export default function Organization() {
   const [shareCanEdit, setShareCanEdit] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
 
+  // Slash commands
+  const [slashCommands, setSlashCommands] = useState([]);
+  const [slashModalOpen, setSlashModalOpen] = useState(false);
+  const [slashEditItem, setSlashEditItem] = useState(null);
+  const [slashForm, setSlashForm] = useState({ command: '', prompt: '', agent_ids: [] });
+  const [slashLoading, setSlashLoading] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
+
   useEffect(() => {
     if (!authenticated) return;
     loadCompany();
@@ -106,6 +116,7 @@ export default function Organization() {
       if (data.company && ['admin', 'owner'].includes(data.company.role)) {
         loadMembers();
         loadOrgAgents();
+        loadSlashCommands();
         if (data.company.role === 'owner') loadIntegrations();
       }
     } catch (error) {
@@ -137,6 +148,70 @@ export default function Organization() {
       const data = res.data;
       setOrgAgents(data.agents || []);
     } catch {}
+  };
+
+  const loadSlashCommands = async () => {
+    try {
+      const res = await api.get('/api/companies/slash-commands');
+      setSlashCommands(res.data.slash_commands || []);
+    } catch {}
+  };
+
+  const handleSaveSlashCommand = async () => {
+    if (!slashForm.command.trim() || !slashForm.prompt.trim()) {
+      toast.error(t('organization:slashCommands.errors.requiredFields'));
+      return;
+    }
+    setSlashLoading(true);
+    try {
+      let updated;
+      if (slashEditItem) {
+        updated = slashCommands.map(c =>
+          c.id === slashEditItem.id
+            ? { ...c, command: slashForm.command.toLowerCase(), prompt: slashForm.prompt, agent_ids: slashForm.agent_ids }
+            : c
+        );
+      } else {
+        updated = [...slashCommands, {
+          command: slashForm.command.toLowerCase(),
+          prompt: slashForm.prompt,
+          agent_ids: slashForm.agent_ids,
+        }];
+      }
+      const res = await api.put('/api/companies/slash-commands', { slash_commands: updated });
+      setSlashCommands(res.data.slash_commands || []);
+      setSlashModalOpen(false);
+      setSlashEditItem(null);
+      setSlashForm({ command: '', prompt: '', agent_ids: [] });
+      toast.success(slashEditItem ? t('organization:slashCommands.updated') : t('organization:slashCommands.created'));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:errors.generic'));
+    } finally {
+      setSlashLoading(false);
+    }
+  };
+
+  const handleDeleteSlashCommand = (id) => {
+    if (!confirm(t('organization:slashCommands.deleteConfirm'))) return;
+    const updated = slashCommands.filter(c => c.id !== id);
+    api.put('/api/companies/slash-commands', { slash_commands: updated })
+      .then(res => {
+        setSlashCommands(res.data.slash_commands || []);
+        toast.success(t('organization:slashCommands.deleted'));
+      })
+      .catch(error => toast.error(error.response?.data?.detail || t('organization:errors.generic')));
+  };
+
+  const openSlashEdit = (item) => {
+    setSlashEditItem(item);
+    setSlashForm({ command: item.command, prompt: item.prompt, agent_ids: item.agent_ids || [] });
+    setSlashModalOpen(true);
+  };
+
+  const openSlashCreate = () => {
+    setSlashEditItem(null);
+    setSlashForm({ command: '', prompt: '', agent_ids: [] });
+    setSlashModalOpen(true);
   };
 
   // ---- No-org actions ----
@@ -749,6 +824,80 @@ export default function Organization() {
                 </div>
               )}
 
+              {/* ---- Slash Commands (admin/owner) ---- */}
+              {['admin', 'owner'].includes(company.role) && (
+                <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
+                  <button onClick={() => setSlashOpen(!slashOpen)} className="w-full flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
+                        <Zap className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:slashCommands.title')}</h2>
+                        <p className="text-gray-500 text-sm">{t('organization:slashCommands.description')}</p>
+                      </div>
+                    </div>
+                    {slashOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                  </button>
+
+                  {slashOpen && (
+                    <div>
+                      <div className="flex justify-end mb-4">
+                        <button onClick={openSlashCreate}
+                          className="px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-semibold rounded-button shadow-card transition-all">
+                          + {t('organization:slashCommands.addButton')}
+                        </button>
+                      </div>
+
+                      {slashCommands.length === 0 ? (
+                        <p className="text-gray-400 text-sm text-center py-8">{t('organization:slashCommands.empty')}</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-gray-200 text-left">
+                                <th className="pb-3 font-medium text-gray-500">{t('organization:slashCommands.table.command')}</th>
+                                <th className="pb-3 font-medium text-gray-500">{t('organization:slashCommands.table.prompt')}</th>
+                                <th className="pb-3 font-medium text-gray-500">{t('organization:slashCommands.table.companions')}</th>
+                                <th className="pb-3 font-medium text-gray-500 w-24"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {slashCommands.map(cmd => (
+                                <tr key={cmd.id} className="border-b border-gray-100">
+                                  <td className="py-3 pr-4">
+                                    <code className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs font-semibold">/{cmd.command}</code>
+                                  </td>
+                                  <td className="py-3 pr-4 text-gray-600 max-w-xs truncate">{cmd.prompt}</td>
+                                  <td className="py-3 pr-4">
+                                    <div className="flex flex-wrap gap-1">
+                                      {(cmd.agent_ids || []).map(aid => {
+                                        const ag = orgAgents.find(a => a.id === aid);
+                                        return ag ? (
+                                          <span key={aid} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs">{ag.name}</span>
+                                        ) : null;
+                                      })}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 text-right">
+                                    <button onClick={() => openSlashEdit(cmd)} className="text-gray-400 hover:text-purple-600 mr-2" title={t('organization:slashCommands.edit')}>
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => handleDeleteSlashCommand(cmd.id)} className="text-gray-400 hover:text-red-600" title={t('organization:slashCommands.delete')}>
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* ---- Org Agents (admin/owner) ---- */}
               {['admin', 'owner'].includes(company.role) && (
                 <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
@@ -896,6 +1045,88 @@ export default function Organization() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slash Command Modal */}
+      {slashModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-elevated w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-heading font-bold text-gray-900">
+                {slashEditItem ? t('organization:slashCommands.modal.editTitle') : t('organization:slashCommands.modal.createTitle')}
+              </h3>
+              <button onClick={() => setSlashModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('organization:slashCommands.modal.commandLabel')}</label>
+                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-purple-500">
+                  <span className="px-3 text-purple-600 font-bold bg-gray-50">/</span>
+                  <input type="text" className="flex-1 px-3 py-2 text-sm outline-none"
+                    placeholder={t('organization:slashCommands.modal.commandPlaceholder')}
+                    value={slashForm.command}
+                    onChange={e => setSlashForm(p => ({ ...p, command: e.target.value.replace(/[^a-zA-Z0-9_-]/g, '') }))} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('organization:slashCommands.modal.promptLabel')}</label>
+                <textarea className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                  rows={4}
+                  placeholder={t('organization:slashCommands.modal.promptPlaceholder')}
+                  value={slashForm.prompt}
+                  onChange={e => setSlashForm(p => ({ ...p, prompt: e.target.value }))} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('organization:slashCommands.modal.companionsLabel')}</label>
+                <div className="border border-gray-200 rounded-lg p-2 min-h-[40px] flex flex-wrap gap-1 items-center">
+                  {slashForm.agent_ids.map(aid => {
+                    const ag = orgAgents.find(a => a.id === aid);
+                    return ag ? (
+                      <span key={aid} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs flex items-center gap-1">
+                        {ag.name}
+                        <button onClick={() => setSlashForm(p => ({ ...p, agent_ids: p.agent_ids.filter(x => x !== aid) }))}
+                          className="text-blue-400 hover:text-red-500">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ) : null;
+                  })}
+                  <select
+                    className="text-sm text-gray-500 bg-transparent outline-none cursor-pointer"
+                    value=""
+                    onChange={e => {
+                      const id = parseInt(e.target.value);
+                      if (id && !slashForm.agent_ids.includes(id)) {
+                        setSlashForm(p => ({ ...p, agent_ids: [...p.agent_ids, id] }));
+                      }
+                    }}
+                  >
+                    <option value="">{t('organization:slashCommands.modal.addCompanion')}</option>
+                    {orgAgents.filter(a => !slashForm.agent_ids.includes(a.id)).map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setSlashModalOpen(false)}
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                {t('organization:slashCommands.modal.cancel')}
+              </button>
+              <button onClick={handleSaveSlashCommand} disabled={slashLoading}
+                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-semibold rounded-button shadow-card transition-all disabled:opacity-50">
+                {slashLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('organization:slashCommands.modal.save')}
+              </button>
             </div>
           </div>
         </div>
