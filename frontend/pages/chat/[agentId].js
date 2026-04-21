@@ -5,6 +5,7 @@ import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useAuth } from '../../hooks/useAuth';
 import api, { getApiUrl } from '../../lib/api';
+import toast from 'react-hot-toast';
 import {
   Pencil,
   Trash2,
@@ -97,6 +98,14 @@ export default function AgentChatPage() {
       router.push("/agents");
     }
   };
+  const loadSlashCommands = async (agId) => {
+    try {
+      const res = await api.get(`/api/companies/slash-commands?agent_id=${agId}`);
+      setSlashCommands(res.data.slash_commands || []);
+    } catch {
+      setSlashCommands([]);
+    }
+  };
   const { agentId } = router.query;
   const [agent, setAgent] = useState(null);
   const [conversations, setConversations] = useState([]);
@@ -107,6 +116,10 @@ export default function AgentChatPage() {
   const recognitionRef = useRef(null);
   const [transcript, setTranscript] = useState("");
   const [baseInput, setBaseInput] = useState("");
+  const [slashCommands, setSlashCommands] = useState([]);
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashFilter, setSlashFilter] = useState('');
+  const [slashSelectedIdx, setSlashSelectedIdx] = useState(0);
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
   const [creatingConv, setCreatingConv] = useState(false);
@@ -121,6 +134,7 @@ export default function AgentChatPage() {
     if (!authenticated && !authLoading) router.push("/login");
     if (authenticated && agentId) {
       loadAgent(agentId);
+      loadSlashCommands(agentId);
       loadConversations(agentId, true); // pass flag to auto-create if none
     }
     // Cleanup on unmount
@@ -211,8 +225,65 @@ const handleDeleteConversation = async (convId) => {
   } catch {}
 };
 
+  const handleSlashSelect = (cmd) => {
+    setInput('/' + cmd.command);
+    setShowSlashMenu(false);
+    setTimeout(() => {
+      sendSlashCommand(cmd);
+    }, 0);
+  };
+
+  const sendSlashCommand = async (cmd) => {
+    if (!selectedConv) return;
+    setLoading(true);
+    setInput('');
+
+    const userMsg = { role: 'user', content: '/' + cmd.command };
+    setMessages(prev => [...prev, userMsg]);
+
+    try {
+      await api.post(`/conversations/${selectedConv}/messages`, {
+        conversation_id: selectedConv,
+        role: 'user',
+        content: '/' + cmd.command,
+      });
+
+      const resHist = await api.get(`/conversations/${selectedConv}/messages`);
+      const history = resHist.data.map(m => ({ role: m.role, content: m.content }));
+
+      const resAsk = await api.post('/ask', {
+        question: cmd.prompt,
+        agent_id: agentId,
+        history: history,
+      });
+
+      const assistantMsg = { role: 'agent', content: resAsk.data.answer };
+      setMessages(prev => [...prev, assistantMsg]);
+
+      await api.post(`/conversations/${selectedConv}/messages`, {
+        conversation_id: selectedConv,
+        role: 'agent',
+        content: resAsk.data.answer,
+      });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const sendMessage = async () => {
     if ((!input.trim() && attachments.length === 0) || !selectedConv) return;
+    // Check if input is a slash command
+    if (input.startsWith('/')) {
+      const cmdName = input.slice(1).trim().toLowerCase();
+      const cmd = slashCommands.find(c => c.command.toLowerCase() === cmdName);
+      if (cmd) {
+        setShowSlashMenu(false);
+        sendSlashCommand(cmd);
+        return;
+      }
+    }
     // Ajoute immédiatement le message utilisateur dans le state
     let userMsgContent = input;
     let extractedText = "";
@@ -729,13 +800,60 @@ const handleDeleteConversation = async (convId) => {
             <div className="flex items-end w-full gap-2">
               {/* Zone de texte */}
               <div className="flex-1 relative">
+                {showSlashMenu && (() => {
+                  const filtered = slashCommands.filter(c => c.command.toLowerCase().startsWith(slashFilter));
+                  return filtered.length > 0 ? (
+                    <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-elevated overflow-hidden z-50">
+                      <div className="px-3 py-2 border-b border-gray-100">
+                        <span className="text-xs text-gray-400 font-medium">Commandes disponibles</span>
+                      </div>
+                      <div className="py-1">
+                        {filtered.map((cmd, idx) => (
+                          <button key={cmd.id} onClick={() => handleSlashSelect(cmd)}
+                            className={`w-full flex items-center px-3 py-2.5 text-left transition-colors ${idx === slashSelectedIdx ? 'bg-purple-50' : 'hover:bg-gray-50'}`}>
+                            <code className="text-purple-600 font-semibold text-sm min-w-[100px]">/{cmd.command}</code>
+                            <span className="text-gray-400 text-sm truncate">{cmd.prompt}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
                 <input
                   type="text"
                   className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-input focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:opacity-50 disabled:bg-gray-50"
                   placeholder={selectedConv ? t('chat:input.placeholder') : t('chat:input.placeholderNoConversation')}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setInput(val);
+                    if (val.startsWith('/') && val.length >= 1) {
+                      setSlashFilter(val.slice(1).toLowerCase());
+                      setShowSlashMenu(true);
+                      setSlashSelectedIdx(0);
+                    } else {
+                      setShowSlashMenu(false);
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (showSlashMenu) {
+                      const filtered = slashCommands.filter(c => c.command.toLowerCase().startsWith(slashFilter));
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setSlashSelectedIdx(i => Math.min(i + 1, filtered.length - 1));
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setSlashSelectedIdx(i => Math.max(i - 1, 0));
+                      } else if (e.key === 'Enter' && filtered.length > 0) {
+                        e.preventDefault();
+                        handleSlashSelect(filtered[slashSelectedIdx]);
+                      } else if (e.key === 'Escape') {
+                        setShowSlashMenu(false);
+                      }
+                    } else if (e.key === 'Enter' && !e.shiftKey) {
+                      sendMessage();
+                    }
+                  }}
                   disabled={loading || !selectedConv}
                 />
                 {listening && (
