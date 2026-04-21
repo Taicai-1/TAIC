@@ -74,6 +74,9 @@ class Company(Base):
     _slack_signing_secret = Column("slack_signing_secret", Text, nullable=True)
     slack_team_id = Column(String(64), nullable=True)
 
+    # Slash commands for prompt shortcuts
+    slash_commands = Column(Text, nullable=True)  # JSON: [{"id":"uuid","command":"name","prompt":"text","agent_ids":[1,2]}]
+
     # Encrypted property accessors
     @property
     def org_neo4j_uri(self):
