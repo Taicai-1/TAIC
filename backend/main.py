@@ -2338,7 +2338,9 @@ async def create_agent(
             neo4j_depth=int(neo4j_depth) if neo4j_depth else 1,
             weekly_recap_enabled=weekly_recap_enabled.lower() in ("true", "1", "yes"),
             weekly_recap_prompt=weekly_recap_prompt if weekly_recap_prompt and weekly_recap_prompt.strip() else None,
-            weekly_recap_recipients=weekly_recap_recipients if weekly_recap_recipients and weekly_recap_recipients.strip() else None,
+            weekly_recap_recipients=weekly_recap_recipients
+            if weekly_recap_recipients and weekly_recap_recipients.strip()
+            else None,
             user_id=int(user_id),
             company_id=caller_company_id,
         )
@@ -2736,7 +2738,9 @@ async def update_agent(
         # Update Weekly Recap
         agent.weekly_recap_enabled = weekly_recap_enabled.lower() in ("true", "1", "yes")
         agent.weekly_recap_prompt = weekly_recap_prompt if weekly_recap_prompt and weekly_recap_prompt.strip() else None
-        agent.weekly_recap_recipients = weekly_recap_recipients if weekly_recap_recipients and weekly_recap_recipients.strip() else None
+        agent.weekly_recap_recipients = (
+            weekly_recap_recipients if weekly_recap_recipients and weekly_recap_recipients.strip() else None
+        )
 
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
 
