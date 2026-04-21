@@ -2491,6 +2491,12 @@ def _delete_agent_and_related_data(agent: Agent, owner_user_id: int, db: Session
     db.query(WeeklyRecapLog).filter(WeeklyRecapLog.agent_id == agent_id).delete()
     db.flush()
 
+    # Nullify notion_link_id on documents before deleting notion links
+    db.query(Document).filter(Document.agent_id == agent_id, Document.notion_link_id.isnot(None)).update(
+        {"notion_link_id": None}
+    )
+    db.flush()
+
     # Delete notion links
     db.query(NotionLink).filter(NotionLink.agent_id == agent_id).delete()
     db.flush()
