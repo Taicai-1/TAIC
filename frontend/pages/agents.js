@@ -4,7 +4,7 @@ import toast, { Toaster } from "react-hot-toast";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useAuth } from '../hooks/useAuth';
-import api from '../lib/api';
+import api, { getApiUrl } from '../lib/api';
 import {
   Bot,
   Plus,
@@ -554,7 +554,7 @@ export default function AgentsPage() {
             {agents.map((agent) => {
               const typeConfig = AGENT_TYPES[agent.type] || AGENT_TYPES.conversationnel;
               const IconComponent = typeConfig.icon;
-              const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+              const API_URL = getApiUrl();
               return (
                 <div
                   key={agent.id}
@@ -569,7 +569,7 @@ export default function AgentsPage() {
                       {agent.profile_photo ? (
                         <div className="relative z-10">
                           <img
-                            src={agent.profile_photo.startsWith('http') ? agent.profile_photo : `${API_URL}/profile_photos/${agent.profile_photo.replace(/^.*[\\/]/, '')}`}
+                            src={`${API_URL}/api/agent-photo/${agent.id}`}
                             alt={agent.name}
                             className="w-16 h-16 object-cover rounded-full border-4 border-white shadow-card ring-2 ring-gray-100"
                             onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}

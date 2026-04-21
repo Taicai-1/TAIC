@@ -461,7 +461,7 @@ export default function CompanionSettings() {
   const profilePhotoUrl = form.profile_photo
     ? URL.createObjectURL(form.profile_photo)
     : currentAgent.profile_photo
-      ? (currentAgent.profile_photo.startsWith('http') ? currentAgent.profile_photo : `${apiUrl}/profile_photos/${currentAgent.profile_photo.replace(/^.*[\\/]/, '')}`)
+      ? `${apiUrl}/api/agent-photo/${currentAgent.id}`
       : null;
 
   return (

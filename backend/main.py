@@ -400,6 +400,36 @@ if not os.path.exists("profile_photos"):
 app.mount("/profile_photos", StaticFiles(directory="profile_photos"), name="profile_photos")
 
 
+@app.get("/api/agent-photo/{agent_id}")
+async def get_agent_photo(agent_id: int, db: Session = Depends(get_db)):
+    """Proxy endpoint to serve agent profile photos from GCS."""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or not agent.profile_photo:
+        raise HTTPException(status_code=404, detail="No photo")
+
+    photo_url = agent.profile_photo
+    # If it's a GCS URL, download via service account and serve
+    if photo_url.startswith("https://storage.googleapis.com/"):
+        try:
+            GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
+            blob_name = photo_url.split(f"{GCS_BUCKET_NAME}/", 1)[-1]
+            client = storage.Client()
+            bucket = client.bucket(GCS_BUCKET_NAME)
+            blob = bucket.blob(blob_name)
+            content = blob.download_as_bytes()
+            content_type = blob.content_type or "image/jpeg"
+            return Response(
+                content=content,
+                media_type=content_type,
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+        except Exception:
+            logger.exception(f"Failed to fetch agent photo from GCS for agent {agent_id}")
+            raise HTTPException(status_code=404, detail="Photo not found in storage")
+
+    raise HTTPException(status_code=404, detail="Invalid photo URL")
+
+
 @app.post("/upload-url")
 async def upload_url(request: UrlUploadValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Ajoute une URL comme document/source pour le RAG"""

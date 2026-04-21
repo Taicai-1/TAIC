@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useAuth } from '../../hooks/useAuth';
-import api from '../../lib/api';
+import api, { getApiUrl } from '../../lib/api';
 import {
   Pencil,
   Trash2,
@@ -416,7 +416,7 @@ const handleDeleteConversation = async (convId) => {
             {agent.profile_photo && (
               <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white/30 shadow-elevated mb-3 ring-2 ring-white/20">
                 <img
-                  src={agent.profile_photo.startsWith('http') ? agent.profile_photo : `${process.env.NEXT_PUBLIC_API_URL}/profile_photos/${agent.profile_photo.replace(/^.*[\\/]/, '')}`}
+                  src={`${getApiUrl()}/api/agent-photo/${agent.id}`}
                   alt={agent.name}
                   width={80}
                   height={80}
