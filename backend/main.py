@@ -2487,6 +2487,10 @@ def _delete_agent_and_related_data(agent: Agent, owner_user_id: int, db: Session
         db.execute(text("DELETE FROM teams WHERE id = ANY(:team_ids)"), {"team_ids": team_ids})
         db.flush()
 
+    # Delete weekly recap logs
+    db.query(WeeklyRecapLog).filter(WeeklyRecapLog.agent_id == agent_id).delete()
+    db.flush()
+
     db.delete(agent)
 
 
