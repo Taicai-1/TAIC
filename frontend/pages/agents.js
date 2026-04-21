@@ -52,6 +52,7 @@ export default function AgentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
   const [emailTagInput, setEmailTagInput] = useState("");
+  const [photoPreview, setPhotoPreview] = useState(null);
   const [creating, setCreating] = useState(false);
   const [neo4jPersons, setNeo4jPersons] = useState([]);
   const [userCompany, setUserCompany] = useState(null);
@@ -216,6 +217,7 @@ export default function AgentsPage() {
           <button
             onClick={() => {
               setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
+              setPhotoPreview(null);
               setShowForm(true);
             }}
             className="group flex items-center justify-center px-8 py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-button hover:from-blue-700 hover:to-purple-700 transition-all font-semibold shadow-card hover:shadow-elevated"
@@ -422,10 +424,10 @@ export default function AgentsPage() {
               </div>
 
               <div className="flex flex-col items-center space-y-4 p-6 bg-gray-50 rounded-card border border-dashed border-gray-300">
-                {form.profile_photo ? (
+                {photoPreview ? (
                   <div className="relative group">
                     <img
-                      src={URL.createObjectURL(form.profile_photo)}
+                      src={photoPreview}
                       alt={t('agents:form.photo.preview')}
                       className="w-28 h-28 object-cover rounded-full border-4 border-blue-400 shadow-card ring-4 ring-blue-100"
                     />
@@ -444,7 +446,9 @@ export default function AgentsPage() {
                     className="hidden"
                     onChange={e => {
                       if (e.target.files && e.target.files[0]) {
-                        setForm(f => ({...f, profile_photo: e.target.files[0]}));
+                        const file = e.target.files[0];
+                        setForm(f => ({...f, profile_photo: file}));
+                        setPhotoPreview(URL.createObjectURL(file));
                       }
                     }}
                   />
@@ -456,6 +460,7 @@ export default function AgentsPage() {
               <button
                 onClick={() => {
                   setShowForm(false);
+                  setPhotoPreview(null);
                 }}
                 className="flex-1 px-6 py-3 text-gray-700 bg-white border border-gray-200 rounded-button hover:bg-gray-50 hover:border-gray-300 transition-all font-medium"
               >
@@ -495,6 +500,7 @@ export default function AgentsPage() {
                     });
                     toast.success(t('agents:toast.createSuccess'));
                     setShowForm(false);
+                    setPhotoPreview(null);
                     setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
                     loadAgents();
                   } catch (err) {
