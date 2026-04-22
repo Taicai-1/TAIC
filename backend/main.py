@@ -944,6 +944,7 @@ class ResendVerificationRequest(BaseModel):
 
 class SlashCommandItem(BaseModel):
     """Slash command with validation"""
+
     id: Optional[str] = None
     command: str
     prompt: str
@@ -5908,10 +5909,11 @@ async def update_slash_commands(
         raise HTTPException(status_code=404, detail="No company found")
 
     # Check role - use CompanyMembership model
-    membership = db.query(CompanyMembership).filter(
-        CompanyMembership.company_id == company_id,
-        CompanyMembership.user_id == int(user_id)
-    ).first()
+    membership = (
+        db.query(CompanyMembership)
+        .filter(CompanyMembership.company_id == company_id, CompanyMembership.user_id == int(user_id))
+        .first()
+    )
     if not membership or membership.role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Owner or admin required")
 
@@ -5933,12 +5935,14 @@ async def update_slash_commands(
             if not agent:
                 raise HTTPException(status_code=400, detail=f"Agent {aid} not found")
 
-        validated.append({
-            "id": sc.id or str(uuid4()),
-            "command": sc.command,
-            "prompt": sc.prompt,
-            "agent_ids": sc.agent_ids,
-        })
+        validated.append(
+            {
+                "id": sc.id or str(uuid4()),
+                "command": sc.command,
+                "prompt": sc.prompt,
+                "agent_ids": sc.agent_ids,
+            }
+        )
 
     company = db.query(Company).filter(Company.id == company_id).first()
     company.slash_commands = json.dumps(validated)

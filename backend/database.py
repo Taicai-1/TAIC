@@ -75,7 +75,9 @@ class Company(Base):
     slack_team_id = Column(String(64), nullable=True)
 
     # Slash commands for prompt shortcuts
-    slash_commands = Column(Text, nullable=True)  # JSON: [{"id":"uuid","command":"name","prompt":"text","agent_ids":[1,2]}]
+    slash_commands = Column(
+        Text, nullable=True
+    )  # JSON: [{"id":"uuid","command":"name","prompt":"text","agent_ids":[1,2]}]
 
     # Encrypted property accessors
     @property
