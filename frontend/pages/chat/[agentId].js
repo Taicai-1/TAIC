@@ -797,6 +797,17 @@ const handleDeleteConversation = async (convId) => {
               </div>
             )}
 
+            {slashCommands.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {slashCommands.map(cmd => (
+                  <button key={cmd.id} onClick={() => sendSlashCommand(cmd)} disabled={loading || !selectedConv}
+                    className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-full border border-purple-200 hover:border-purple-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    /{cmd.command}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-end w-full gap-2">
               {/* Zone de texte */}
               <div className="flex-1 relative">

@@ -1,0 +1,104 @@
+<h2>Section 3 : UI Settings — Tableau des Slash Commands</h2>
+<p class="subtitle">Nouvelle section dans les paramètres de l'organisation</p>
+
+<div class="mockup">
+  <div class="mockup-header">Paramètres Organisation → Prompt Engineering</div>
+  <div class="mockup-body" style="padding: 24px; background: #1a1a2e; color: #e0e0e0; font-family: system-ui, sans-serif;">
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <div>
+        <h3 style="margin: 0; color: #fff; font-size: 18px;">Raccourcis Prompts</h3>
+        <p style="margin: 4px 0 0; color: #888; font-size: 13px;">Configurez des commandes / pour envoyer des prompts prédéfinis</p>
+      </div>
+      <button class="mock-button" style="background: #6c5ce7; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;">+ Ajouter un raccourci</button>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <thead>
+        <tr style="border-bottom: 2px solid #333; text-align: left;">
+          <th style="padding: 10px 12px; color: #aaa; font-weight: 500; width: 35%;">Prompt</th>
+          <th style="padding: 10px 12px; color: #aaa; font-weight: 500; width: 20%;">Commande /</th>
+          <th style="padding: 10px 12px; color: #aaa; font-weight: 500; width: 35%;">Companions</th>
+          <th style="padding: 10px 12px; color: #aaa; font-weight: 500; width: 10%;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom: 1px solid #2a2a3e;">
+          <td style="padding: 12px; color: #ccc; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Analyse moi les tendances sur l'IA sur les 6 derniers mois et donne moi un résumé...</td>
+          <td style="padding: 12px;"><code style="background: #2d2d44; padding: 4px 10px; border-radius: 4px; color: #a29bfe; font-size: 13px;">/analyse</code></td>
+          <td style="padding: 12px;">
+            <span style="background: #2d3436; padding: 3px 8px; border-radius: 12px; font-size: 12px; color: #81ecec; margin-right: 4px;">Assistant RH</span>
+            <span style="background: #2d3436; padding: 3px 8px; border-radius: 12px; font-size: 12px; color: #81ecec; margin-right: 4px;">Veille Tech</span>
+          </td>
+          <td style="padding: 12px; text-align: center;">
+            <span style="cursor: pointer; color: #888; font-size: 16px;" title="Modifier">✏️</span>
+            <span style="cursor: pointer; color: #888; font-size: 16px; margin-left: 8px;" title="Supprimer">🗑️</span>
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid #2a2a3e;">
+          <td style="padding: 12px; color: #ccc; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Génère un rapport hebdomadaire des KPIs principaux avec les variations...</td>
+          <td style="padding: 12px;"><code style="background: #2d2d44; padding: 4px 10px; border-radius: 4px; color: #a29bfe; font-size: 13px;">/rapport</code></td>
+          <td style="padding: 12px;">
+            <span style="background: #2d3436; padding: 3px 8px; border-radius: 12px; font-size: 12px; color: #81ecec; margin-right: 4px;">Assistant Direction</span>
+          </td>
+          <td style="padding: 12px; text-align: center;">
+            <span style="cursor: pointer; color: #888; font-size: 16px;" title="Modifier">✏️</span>
+            <span style="cursor: pointer; color: #888; font-size: 16px; margin-left: 8px;" title="Supprimer">🗑️</span>
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid #2a2a3e;">
+          <td style="padding: 12px; color: #ccc; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Résume ce document en 5 points clés avec les informations essentielles...</td>
+          <td style="padding: 12px;"><code style="background: #2d2d44; padding: 4px 10px; border-radius: 4px; color: #a29bfe; font-size: 13px;">/resume</code></td>
+          <td style="padding: 12px;">
+            <span style="background: #2d3436; padding: 3px 8px; border-radius: 12px; font-size: 12px; color: #81ecec; margin-right: 4px;">Tous les companions</span>
+          </td>
+          <td style="padding: 12px; text-align: center;">
+            <span style="cursor: pointer; color: #888; font-size: 16px;" title="Modifier">✏️</span>
+            <span style="cursor: pointer; color: #888; font-size: 16px; margin-left: 8px;" title="Supprimer">🗑️</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div style="margin-top: 24px;">
+  <div class="mockup">
+    <div class="mockup-header">Modal d'ajout / édition d'un raccourci</div>
+    <div class="mockup-body" style="padding: 24px; background: #1a1a2e; color: #e0e0e0; font-family: system-ui, sans-serif;">
+
+      <div style="background: #16213e; border-radius: 12px; padding: 24px; max-width: 500px; margin: 0 auto; border: 1px solid #333;">
+        <h3 style="margin: 0 0 20px; color: #fff; font-size: 16px;">Nouveau raccourci</h3>
+
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; color: #aaa; font-size: 13px; margin-bottom: 6px;">Nom de la commande</label>
+          <div style="display: flex; align-items: center; background: #1a1a2e; border: 1px solid #444; border-radius: 6px; padding: 0;">
+            <span style="padding: 8px 4px 8px 12px; color: #6c5ce7; font-weight: bold;">/</span>
+            <input class="mock-input" placeholder="analyse" style="border: none; background: transparent; color: #fff; flex: 1; padding: 8px 12px 8px 0;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; color: #aaa; font-size: 13px; margin-bottom: 6px;">Prompt</label>
+          <div style="background: #1a1a2e; border: 1px solid #444; border-radius: 6px; padding: 12px; min-height: 80px; color: #888; font-size: 13px;">
+            Analyse moi les tendances sur l'IA sur les 6 derniers mois...
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; color: #aaa; font-size: 13px; margin-bottom: 6px;">Companions avec accès</label>
+          <div style="background: #1a1a2e; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+            <span style="background: #2d3436; padding: 3px 8px; border-radius: 12px; font-size: 12px; color: #81ecec;">Assistant RH <span style="margin-left: 4px; cursor: pointer;">×</span></span>
+            <span style="background: #2d3436; padding: 3px 8px; border-radius: 12px; font-size: 12px; color: #81ecec;">Veille Tech <span style="margin-left: 4px; cursor: pointer;">×</span></span>
+            <span style="color: #666; font-size: 13px; cursor: pointer;">+ Ajouter</span>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button style="background: transparent; border: 1px solid #444; color: #aaa; padding: 8px 16px; border-radius: 6px; cursor: pointer;">Annuler</button>
+          <button style="background: #6c5ce7; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
