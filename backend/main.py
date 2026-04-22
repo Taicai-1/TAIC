@@ -3262,9 +3262,7 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
             ingested_link_ids.add(d.notion_link_id)
 
     # Drive links
-    drive_links = (
-        db.query(DriveLink).filter(DriveLink.agent_id == agent_id).order_by(DriveLink.created_at.desc()).all()
-    )
+    drive_links = db.query(DriveLink).filter(DriveLink.agent_id == agent_id).order_by(DriveLink.created_at.desc()).all()
 
     return {
         "agent_name": agent.name,
@@ -3649,9 +3647,9 @@ async def resync_drive_link(
     # Get already ingested file IDs
     existing_file_ids = set(
         row[0]
-        for row in db.query(Document.drive_file_id).filter(
-            Document.drive_link_id == link_id, Document.drive_file_id.isnot(None)
-        ).all()
+        for row in db.query(Document.drive_file_id)
+        .filter(Document.drive_link_id == link_id, Document.drive_file_id.isnot(None))
+        .all()
     )
 
     new_files_added = 0

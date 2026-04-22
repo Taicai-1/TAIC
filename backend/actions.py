@@ -55,19 +55,18 @@ def _get_google_credentials(agent_id: Optional[int], db: Optional[Session] = Non
 
         # 1) Shared Secret Manager secret (global override) — prefer this for all agents.
         #    Set DEFAULT_GOOGLE_SECRET_NAME or SHARED_GOOGLE_SECRET_NAME in the environment to configure it.
-        shared_secret = (
-            os.getenv("DEFAULT_GOOGLE_SECRET_NAME") or os.getenv("SHARED_GOOGLE_SECRET_NAME") or "agent-52-sa-key"
-        )
-        payload = _read_secret_from_secretmanager(shared_secret)
-        if payload:
-            try:
-                creds_info = json.loads(payload)
-                logger.info(
-                    f"Loaded service account JSON from shared Secret Manager '{shared_secret}' for agent {agent_id}"
-                )
-            except Exception:
-                creds_info = payload
-                logger.info(f"Loaded shared secret '{shared_secret}' for agent {agent_id} (non-JSON payload)")
+        shared_secret = os.getenv("DEFAULT_GOOGLE_SECRET_NAME") or os.getenv("SHARED_GOOGLE_SECRET_NAME")
+        if shared_secret:
+            payload = _read_secret_from_secretmanager(shared_secret)
+            if payload:
+                try:
+                    creds_info = json.loads(payload)
+                    logger.info(
+                        f"Loaded service account JSON from shared Secret Manager '{shared_secret}' for agent {agent_id}"
+                    )
+                except Exception:
+                    creds_info = payload
+                    logger.info(f"Loaded shared secret '{shared_secret}' for agent {agent_id} (non-JSON payload)")
 
         # 2) If no shared secret found, fallback to per-agent secret names for backwards compatibility
         if creds_info is None and agent_id is not None:
@@ -207,10 +206,23 @@ def _get_google_credentials(agent_id: Optional[int], db: Optional[Session] = Non
                     return creds
                 else:
                     logger.debug("Service account found but not JSON dict; cannot build Credentials from it")
-                    return None
             except Exception as e:
                 logger.debug(f"Failed to create Google credentials object: {e}")
-                return None
+
+        # 5) Fallback: Application Default Credentials (Cloud Run SA via Workload Identity)
+        try:
+            import google.auth
+
+            SCOPES = [
+                "https://www.googleapis.com/auth/documents",
+                "https://www.googleapis.com/auth/drive",
+                "https://www.googleapis.com/auth/spreadsheets",
+            ]
+            creds, project = google.auth.default(scopes=SCOPES)
+            logger.info(f"Using Application Default Credentials (project={project})")
+            return creds
+        except Exception as e:
+            logger.debug(f"ADC fallback failed: {e}")
 
     except Exception as e:
         logger.debug(f"_get_google_credentials unexpected error: {e}")
