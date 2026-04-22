@@ -800,10 +800,21 @@ const handleDeleteConversation = async (convId) => {
             {slashCommands.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2">
                 {slashCommands.map(cmd => (
-                  <button key={cmd.id} onClick={() => sendSlashCommand(cmd)} disabled={loading || !selectedConv}
-                    className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-full border border-purple-200 hover:border-purple-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                    /{cmd.command}
-                  </button>
+                  <div key={cmd.id} className="relative flex items-center gap-0">
+                    <button onClick={() => sendSlashCommand(cmd)} disabled={loading || !selectedConv}
+                      className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-l-full border border-purple-200 hover:border-purple-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                      /{cmd.command}
+                    </button>
+                    <div className="group relative">
+                      <span className="flex items-center justify-center w-6 h-full py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-400 hover:text-purple-600 text-[10px] font-bold rounded-r-full border border-l-0 border-purple-200 cursor-help transition-all">
+                        i
+                      </span>
+                      <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50">
+                        <p className="line-clamp-4">{cmd.prompt}</p>
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
