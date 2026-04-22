@@ -354,11 +354,14 @@ class Document(Base):
     gcs_url = Column(String(512), nullable=True)  # URL du fichier dans le bucket GCS
     document_type = Column(String(20), nullable=False, default="rag", server_default="rag")  # 'rag' or 'traceability'
     notion_link_id = Column(Integer, ForeignKey("notion_links.id"), nullable=True, index=True)
+    drive_link_id = Column(Integer, ForeignKey("drive_links.id"), nullable=True, index=True)
+    drive_file_id = Column(String(128), nullable=True, index=True)
 
     # Relations
     owner = relationship("User", back_populates="documents")
     agent = relationship("Agent", back_populates="documents")
     notion_link = relationship("NotionLink")
+    drive_link = relationship("DriveLink")
     # Relation avec les chunks
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
 
@@ -453,6 +456,19 @@ class NotionLink(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     notion_resource_id = Column(String(64), nullable=False)
     resource_type = Column(String(20), nullable=False)  # 'page' or 'database'
+    label = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    agent = relationship("Agent")
+
+
+class DriveLink(Base):
+    __tablename__ = "drive_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    drive_folder_id = Column(String(128), nullable=False)
     label = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -594,6 +610,8 @@ def ensure_columns():
         ("conversations", "user_id", "INTEGER REFERENCES users(id)"),
         ("agent_shares", "can_edit", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("documents", "notion_link_id", "INTEGER REFERENCES notion_links(id)"),
+        ("documents", "drive_link_id", "INTEGER REFERENCES drive_links(id)"),
+        ("documents", "drive_file_id", "VARCHAR(128)"),
         # Email verification & OAuth
         ("users", "email_verified", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("users", "oauth_provider", "VARCHAR(20)"),

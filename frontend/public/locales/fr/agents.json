@@ -121,6 +121,16 @@
     "ingestButton": "Ajouter au RAG",
     "ingested": "Dans les sources"
   },
+  "drive": {
+    "title": "Google Drive ({{count}})",
+    "subtitle": "Synchronisez un dossier Google Drive",
+    "urlPlaceholder": "https://drive.google.com/drive/folders/...",
+    "addButton": "Ajouter",
+    "syncButton": "Synchroniser",
+    "resyncButton": "Resynchroniser",
+    "noLinks": "Aucun dossier Drive lié",
+    "filesIngested": "fichiers synchronisés"
+  },
   "traceabilityDocs": {
     "title": "Documents de traçabilité ({{count}})",
     "dragDrop": "Glissez-déposez vos documents de traçabilité",
@@ -160,6 +170,13 @@
     "notionResyncSuccess": "Document Notion mis à jour ({{chunks}} chunks)",
     "notionResyncError": "Erreur lors de la mise à jour du document Notion",
     "notionAlreadyIngested": "Ce contenu Notion a déjà été ingéré",
+    "driveLinkAdded": "Dossier Google Drive lié avec succès",
+    "driveLinkError": "Erreur lors de l'ajout du dossier Drive",
+    "driveLinkDeleted": "Dossier Drive supprimé",
+    "driveIngestSuccess": "{{files}} fichiers synchronisés ({{chunks}} chunks)",
+    "driveIngestError": "Erreur lors de la synchronisation Drive",
+    "driveResyncSuccess": "{{files}} nouveaux fichiers ajoutés ({{chunks}} chunks)",
+    "driveResyncError": "Erreur lors de la resynchronisation Drive",
     "recapSendSuccess": "Recap envoyé à {{email}}",
     "recapSendNoData": "Aucune donnée cette semaine pour générer un recap",
     "recapSendError": "Erreur lors de l'envoi du recap"
@@ -176,6 +193,7 @@
     "ragDocsDesc": "Documents utilisés pour la recherche augmentée (RAG)",
     "traceabilityDesc": "Documents de suivi pour le recap hebdomadaire",
     "notionDesc": "Pages et bases Notion liées à ce companion",
+    "driveDesc": "Synchronisez un dossier Google Drive avec ce companion",
     "statusPrivateDesc": "Accessible uniquement par vous"
   },
   "badges": {

@@ -4,7 +4,7 @@ import toast, { Toaster } from "react-hot-toast";
 import {
   ArrowLeft, Bot, MessageCircle, Save, Camera, Trash2, Plus,
   Upload, Loader2, FileText, Database, Link, Zap, Users, TrendingUp,
-  LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw
+  LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive
 } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -81,6 +81,12 @@ export default function CompanionSettings() {
   const [ingestingNotionLinkId, setIngestingNotionLinkId] = useState(null);
   const [resyncingDocId, setResyncingDocId] = useState(null);
 
+  // Google Drive
+  const [driveLinks, setDriveLinks] = useState([]);
+  const [driveInput, setDriveInput] = useState("");
+  const [addingDriveLink, setAddingDriveLink] = useState(false);
+  const [syncingDriveLinkId, setSyncingDriveLinkId] = useState(null);
+
   // Slack
   const [slackConfig, setSlackConfig] = useState({ is_configured: false, team_id: '', bot_user_id: '', masked_token: '', masked_secret: '' });
   const [slackForm, setSlackForm] = useState({ bot_token: '', signing_secret: '' });
@@ -149,6 +155,13 @@ export default function CompanionSettings() {
       const res = await api.get(`/api/agents/${agentId}/notion-links`);
       setNotionLinks(res.data.links || []);
     } catch { setNotionLinks([]); }
+  }, []);
+
+  const loadDriveLinks = useCallback(async (agentId) => {
+    try {
+      const res = await api.get(`/api/agents/${agentId}/drive-links`);
+      setDriveLinks(res.data.links || []);
+    } catch { setDriveLinks([]); }
   }, []);
 
   const loadNeo4jData = useCallback(async () => {
@@ -231,6 +244,7 @@ export default function CompanionSettings() {
       loadAgentData(urlAgentId);
       loadTraceabilityDocs(urlAgentId);
       loadNotionLinks(urlAgentId);
+      loadDriveLinks(urlAgentId);
       loadNeo4jData();
       loadSlackConfig(urlAgentId);
     } else if (authenticated && router.isReady) {
@@ -418,6 +432,49 @@ export default function CompanionSettings() {
         toast.error(error.response?.data?.detail || t('agents:toast.notionIngestError'));
       }
     } finally { setIngestingNotionLinkId(null); }
+  };
+
+  const addDriveLink = async () => {
+    if (!driveInput.trim()) return;
+    setAddingDriveLink(true);
+    try {
+      await api.post(`/api/agents/${currentAgent.id}/drive-links`, { url: driveInput });
+      toast.success(t('agents:toast.driveLinkAdded'));
+      setDriveInput("");
+      await loadDriveLinks(currentAgent.id);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('agents:toast.driveLinkError'));
+    } finally { setAddingDriveLink(false); }
+  };
+
+  const deleteDriveLink = async (linkId) => {
+    try {
+      await api.delete(`/api/agents/${currentAgent.id}/drive-links/${linkId}`);
+      toast.success(t('agents:toast.driveLinkDeleted'));
+      await Promise.all([loadDriveLinks(currentAgent.id), refreshAgentDocuments()]);
+    } catch { toast.error(t('agents:toast.deleteError')); }
+  };
+
+  const ingestDriveLink = async (linkId) => {
+    setSyncingDriveLinkId(linkId);
+    try {
+      const res = await api.post(`/api/agents/${currentAgent.id}/drive-links/${linkId}/ingest`, {});
+      toast.success(t('agents:toast.driveIngestSuccess', { files: res.data.files_processed, chunks: res.data.chunk_count }));
+      await Promise.all([loadDriveLinks(currentAgent.id), refreshAgentDocuments()]);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('agents:toast.driveIngestError'));
+    } finally { setSyncingDriveLinkId(null); }
+  };
+
+  const resyncDriveLink = async (linkId) => {
+    setSyncingDriveLinkId(linkId);
+    try {
+      const res = await api.post(`/api/agents/${currentAgent.id}/drive-links/${linkId}/resync`, {});
+      toast.success(t('agents:toast.driveResyncSuccess', { files: res.data.new_files_added, chunks: res.data.chunk_count }));
+      await Promise.all([loadDriveLinks(currentAgent.id), refreshAgentDocuments()]);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('agents:toast.driveResyncError'));
+    } finally { setSyncingDriveLinkId(null); }
   };
 
   const handleFileDrop = (e, type) => {
@@ -774,6 +831,9 @@ export default function CompanionSettings() {
                   {doc.notion_link_id && (
                     <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex-shrink-0">Notion</span>
                   )}
+                  {doc.drive_link_id && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex-shrink-0">Drive</span>
+                  )}
                 </div>
                 <div className="flex items-center space-x-1">
                   {doc.notion_link_id && (
@@ -1036,6 +1096,78 @@ export default function CompanionSettings() {
                     </button>
                   )}
                   <button onClick={() => deleteNotionLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Google Drive */}
+        <Section
+          icon={HardDrive}
+          title={t('agents:drive.title', { count: driveLinks.length })}
+          subtitle={t('agents:settings.driveDesc')}
+          color="bg-emerald-500"
+          defaultOpen={false}
+        >
+          {/* Add Drive folder form */}
+          <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200 mb-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="flex-1 px-4 py-2.5 border border-emerald-200 rounded-input focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all outline-none bg-white text-sm"
+                placeholder={t('agents:drive.urlPlaceholder')}
+                value={driveInput}
+                onChange={e => setDriveInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && driveInput.trim()) { e.preventDefault(); addDriveLink(); } }}
+              />
+              <button
+                type="button"
+                onClick={addDriveLink}
+                disabled={addingDriveLink || !driveInput.trim()}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {addingDriveLink ? <Loader2 className="w-4 h-4 animate-spin" /> : t('agents:drive.addButton')}
+              </button>
+            </div>
+          </div>
+
+          {/* Drive links list */}
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {driveLinks.length === 0 ? (
+              <div className="text-center py-6 text-gray-400">
+                <HardDrive className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">{t('agents:drive.noLinks')}</p>
+              </div>
+            ) : driveLinks.map(link => (
+              <div key={link.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-all group">
+                <div className="flex items-center space-x-3 flex-1 min-w-0">
+                  <HardDrive className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{link.label}</p>
+                    <p className="text-xs text-gray-500">
+                      {link.ingested_count > 0 ? `${link.ingested_count} ${t('agents:drive.filesIngested')}` : ''} {link.ingested_count > 0 ? '·' : ''} {new Date(link.created_at).toLocaleDateString('fr-FR')}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => link.ingested_count > 0 ? resyncDriveLink(link.id) : ingestDriveLink(link.id)}
+                    disabled={syncingDriveLinkId === link.id}
+                    className="flex items-center space-x-1 px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                  >
+                    {syncingDriveLinkId === link.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>{link.ingested_count > 0 ? t('agents:drive.resyncButton') : t('agents:drive.syncButton')}</span>
+                      </>
+                    )}
+                  </button>
+                  <button onClick={() => deleteDriveLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>

@@ -643,6 +643,8 @@ def ingest_text_content(
     gcs_url: str = None,
     notion_link_id: int = None,
     company_id: int = None,
+    drive_link_id: int = None,
+    drive_file_id: str = None,
 ) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
@@ -671,6 +673,8 @@ def ingest_text_content(
             company_id=company_id,
             gcs_url=gcs_url,
             notion_link_id=notion_link_id,
+            drive_link_id=drive_link_id,
+            drive_file_id=drive_file_id,
         )
         db.add(document)
         db.commit()

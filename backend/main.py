@@ -76,6 +76,7 @@ from database import (
     CompanyInvitation,
     WeeklyRecapLog,
     NotionLink,
+    DriveLink,
     AgentShare,
     SessionLocal,
 )
@@ -2213,6 +2214,7 @@ async def get_user_documents(user_id: str = Depends(verify_token), db: Session =
                     "created_at": doc.created_at.isoformat(),
                     "gcs_url": doc.gcs_url,
                     "notion_link_id": doc.notion_link_id,
+                    "drive_link_id": getattr(doc, "drive_link_id", None),
                 }
                 # Safely try to add agent_id if it exists
                 if hasattr(doc, "agent_id"):
@@ -2526,6 +2528,16 @@ def _delete_agent_and_related_data(agent: Agent, owner_user_id: int, db: Session
 
     # Delete notion links
     db.query(NotionLink).filter(NotionLink.agent_id == agent_id).delete()
+    db.flush()
+
+    # Nullify drive_link_id on documents before deleting drive links
+    db.query(Document).filter(Document.agent_id == agent_id, Document.drive_link_id.isnot(None)).update(
+        {"drive_link_id": None}
+    )
+    db.flush()
+
+    # Delete drive links
+    db.query(DriveLink).filter(DriveLink.agent_id == agent_id).delete()
     db.flush()
 
     db.delete(agent)
@@ -3249,6 +3261,11 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
         if d.notion_link_id:
             ingested_link_ids.add(d.notion_link_id)
 
+    # Drive links
+    drive_links = (
+        db.query(DriveLink).filter(DriveLink.agent_id == agent_id).order_by(DriveLink.created_at.desc()).all()
+    )
+
     return {
         "agent_name": agent.name,
         "documents": [
@@ -3258,6 +3275,7 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
                 "created_at": d.created_at.isoformat() if d.created_at else None,
                 "has_file": bool(d.gcs_url),
                 "notion_link_id": d.notion_link_id,
+                "drive_link_id": getattr(d, "drive_link_id", None),
             }
             for d in docs
         ],
@@ -3270,6 +3288,16 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
                 "ingested": nl.id in ingested_link_ids,
             }
             for nl in notion_links
+        ],
+        "drive_links": [
+            {
+                "id": dl.id,
+                "drive_folder_id": dl.drive_folder_id,
+                "label": dl.label,
+                "created_at": dl.created_at.isoformat() if dl.created_at else None,
+                "ingested_count": db.query(Document).filter(Document.drive_link_id == dl.id).count(),
+            }
+            for dl in drive_links
         ],
         "can_edit": can_edit,
     }
@@ -3429,6 +3457,237 @@ async def resync_notion_link(
         "chunk_count": chunk_count,
         "message": "Notion content re-synced successfully",
     }
+
+
+# ── Google Drive integration ──────────────────────────────────────────────
+
+
+@app.post("/api/agents/{agent_id}/drive-links")
+async def add_drive_link(
+    agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db), body: dict = Body(...)
+):
+    """Link a Google Drive folder to an agent."""
+    agent = _user_can_edit_agent(int(user_id), agent_id, db)
+
+    url = body.get("url", "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+
+    from google_drive_client import extract_drive_folder_id, fetch_folder_name
+
+    try:
+        folder_id = extract_drive_folder_id(url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        label = fetch_folder_name(folder_id, agent_id=agent_id, db=db)
+    except Exception as e:
+        logger.warning(f"Could not access Drive folder {folder_id}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot access this Drive folder. Make sure it is shared with the backend service account. ({e})",
+        )
+
+    link = DriveLink(
+        agent_id=agent_id,
+        company_id=_get_caller_company_id(user_id, db),
+        drive_folder_id=folder_id,
+        label=label,
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+
+    return {
+        "link": {
+            "id": link.id,
+            "drive_folder_id": link.drive_folder_id,
+            "label": link.label,
+            "created_at": link.created_at.isoformat(),
+        }
+    }
+
+
+@app.get("/api/agents/{agent_id}/drive-links")
+async def list_drive_links(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+    """List Google Drive links for an agent."""
+    _user_can_edit_agent(int(user_id), agent_id, db)
+
+    links = db.query(DriveLink).filter(DriveLink.agent_id == agent_id).order_by(DriveLink.created_at.desc()).all()
+
+    # Count ingested documents per link
+    result = []
+    for link in links:
+        ingested_count = db.query(Document).filter(Document.drive_link_id == link.id).count()
+        result.append(
+            {
+                "id": link.id,
+                "drive_folder_id": link.drive_folder_id,
+                "label": link.label,
+                "created_at": link.created_at.isoformat(),
+                "ingested_count": ingested_count,
+            }
+        )
+
+    return {"links": result}
+
+
+@app.delete("/api/agents/{agent_id}/drive-links/{link_id}")
+async def delete_drive_link(
+    agent_id: int, link_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Delete a Drive link and all its ingested documents."""
+    _user_can_edit_agent(int(user_id), agent_id, db)
+
+    link = db.query(DriveLink).filter(DriveLink.id == link_id, DriveLink.agent_id == agent_id).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Drive link not found")
+
+    # Delete all documents ingested from this link (cascades to chunks)
+    docs = db.query(Document).filter(Document.drive_link_id == link_id).all()
+    for doc in docs:
+        db.delete(doc)
+
+    db.delete(link)
+    db.commit()
+    return {"message": "Drive link deleted"}
+
+
+@app.post("/api/agents/{agent_id}/drive-links/{link_id}/ingest")
+async def ingest_drive_link(
+    agent_id: int, link_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Ingest all files from a Drive folder into the RAG pipeline."""
+    _user_can_edit_agent(int(user_id), agent_id, db)
+
+    link = db.query(DriveLink).filter(DriveLink.id == link_id, DriveLink.agent_id == agent_id).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Drive link not found")
+
+    from google_drive_client import get_drive_service, list_folder_files, extract_text_from_drive_file, SUPPORTED_MIMES
+    from rag_engine import ingest_text_content
+
+    try:
+        service = get_drive_service(agent_id=agent_id, db=db)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    user = get_cached_user(user_id, db)
+    user_company_id = user.company_id if user else None
+
+    try:
+        files = list_folder_files(link.drive_folder_id, agent_id=agent_id, db=db)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to list Drive folder: {e}")
+
+    files_processed = 0
+    files_skipped = 0
+    total_chunks = 0
+
+    for f in files:
+        if f["mimeType"] not in SUPPORTED_MIMES:
+            files_skipped += 1
+            continue
+
+        text = extract_text_from_drive_file(service, f["id"], f["name"], f["mimeType"])
+        if not text or not text.strip():
+            files_skipped += 1
+            continue
+
+        try:
+            safe_name = f["name"].replace("/", "_")[:100]
+            filename = f"drive_{safe_name}"
+
+            doc_id = ingest_text_content(
+                text_content=text,
+                filename=filename,
+                user_id=int(user_id),
+                agent_id=agent_id,
+                db=db,
+                drive_link_id=link.id,
+                drive_file_id=f["id"],
+                company_id=user_company_id,
+            )
+            doc = db.query(Document).filter(Document.id == doc_id).first()
+            total_chunks += len(doc.chunks) if doc else 0
+            files_processed += 1
+        except Exception as e:
+            logger.warning(f"Failed to ingest Drive file {f['name']}: {e}")
+            files_skipped += 1
+
+    return {"files_processed": files_processed, "files_skipped": files_skipped, "chunk_count": total_chunks}
+
+
+@app.post("/api/agents/{agent_id}/drive-links/{link_id}/resync")
+async def resync_drive_link(
+    agent_id: int, link_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Sync new files from a Drive folder (skip already ingested files)."""
+    _user_can_edit_agent(int(user_id), agent_id, db)
+
+    link = db.query(DriveLink).filter(DriveLink.id == link_id, DriveLink.agent_id == agent_id).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Drive link not found")
+
+    from google_drive_client import get_drive_service, list_folder_files, extract_text_from_drive_file, SUPPORTED_MIMES
+    from rag_engine import ingest_text_content
+
+    try:
+        service = get_drive_service(agent_id=agent_id, db=db)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    user = get_cached_user(user_id, db)
+    user_company_id = user.company_id if user else None
+
+    try:
+        files = list_folder_files(link.drive_folder_id, agent_id=agent_id, db=db)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to list Drive folder: {e}")
+
+    # Get already ingested file IDs
+    existing_file_ids = set(
+        row[0]
+        for row in db.query(Document.drive_file_id).filter(
+            Document.drive_link_id == link_id, Document.drive_file_id.isnot(None)
+        ).all()
+    )
+
+    new_files_added = 0
+    total_chunks = 0
+
+    for f in files:
+        if f["id"] in existing_file_ids:
+            continue
+        if f["mimeType"] not in SUPPORTED_MIMES:
+            continue
+
+        text = extract_text_from_drive_file(service, f["id"], f["name"], f["mimeType"])
+        if not text or not text.strip():
+            continue
+
+        try:
+            safe_name = f["name"].replace("/", "_")[:100]
+            filename = f"drive_{safe_name}"
+
+            doc_id = ingest_text_content(
+                text_content=text,
+                filename=filename,
+                user_id=int(user_id),
+                agent_id=agent_id,
+                db=db,
+                drive_link_id=link.id,
+                drive_file_id=f["id"],
+                company_id=user_company_id,
+            )
+            doc = db.query(Document).filter(Document.id == doc_id).first()
+            total_chunks += len(doc.chunks) if doc else 0
+            new_files_added += 1
+        except Exception as e:
+            logger.warning(f"Failed to ingest Drive file {f['name']} during resync: {e}")
+
+    return {"new_files_added": new_files_added, "chunk_count": total_chunks}
 
 
 ## Suppression des endpoints de génération de fichiers CSV et PDF
