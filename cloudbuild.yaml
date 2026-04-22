@@ -33,6 +33,8 @@ steps:
       - '10'
       - '--timeout'
       - '300'
+      - '--service-account'
+      - 'taic-drive-sa@applydi.iam.gserviceaccount.com'
       - '--vpc-connector'
       - 'redis-connector'
       - '--set-env-vars'
