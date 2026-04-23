@@ -866,7 +866,7 @@ export default function Organization() {
                               {slashCommands.map(cmd => (
                                 <tr key={cmd.id} className="border-b border-gray-100">
                                   <td className="py-3 pr-4">
-                                    <code className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs font-semibold">/{cmd.command}</code>
+                                    <code className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs font-semibold">{cmd.command}</code>
                                   </td>
                                   <td className="py-3 pr-4 text-gray-600 max-w-xs truncate">{cmd.prompt}</td>
                                   <td className="py-3 pr-4">

@@ -803,7 +803,7 @@ const handleDeleteConversation = async (convId) => {
                   <div key={cmd.id} className="relative flex items-center gap-0">
                     <button onClick={() => sendSlashCommand(cmd)} disabled={loading || !selectedConv}
                       className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-l-full border border-purple-200 hover:border-purple-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                      /{cmd.command}
+                      {cmd.command}
                     </button>
                     <div className="group relative">
                       <span className="flex items-center justify-center w-6 h-full py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-400 hover:text-purple-600 text-[10px] font-bold rounded-r-full border border-l-0 border-purple-200 cursor-help transition-all">
