@@ -356,6 +356,7 @@ class Document(Base):
     notion_link_id = Column(Integer, ForeignKey("notion_links.id"), nullable=True, index=True)
     drive_link_id = Column(Integer, ForeignKey("drive_links.id"), nullable=True, index=True)
     drive_file_id = Column(String(128), nullable=True, index=True)
+    source_url = Column(String(2048), nullable=True)
 
     # Relations
     owner = relationship("User", back_populates="documents")
