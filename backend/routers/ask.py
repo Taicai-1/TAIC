@@ -16,6 +16,7 @@ from database import get_db, User, Agent, Document, DocumentChunk, Conversation,
 from helpers.agent_helpers import resolve_model_id, _user_can_access_agent
 from helpers.rate_limiting import _check_api_rate_limit, _API_ASK_LIMIT
 from helpers.tenant import _get_caller_company_id
+from mistral_embeddings import get_embedding
 from rag_engine import get_answer, get_answer_with_files
 from redis_client import get_cached_user
 from utils import logger as app_logger, event_tracker

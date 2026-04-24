@@ -18,7 +18,7 @@ from auth import (
     verify_pre_2fa_token,
     verify_setup_token,
 )
-from database import get_db, User, Company, PasswordResetToken
+from database import get_db, User, Company, CompanyMembership, PasswordResetToken
 from email_service import (
     send_password_reset_email,
     send_verification_email,
@@ -41,6 +41,7 @@ from schemas.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
+from utils import event_tracker
 from validation import UserCreateValidated
 
 logger = logging.getLogger(__name__)
