@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, Document, AgentShare, SessionLocal
+from database import get_db, Document, DocumentChunk, AgentShare, SessionLocal
 from helpers.agent_helpers import _user_can_access_agent, _user_can_edit_agent
 from helpers.tenant import _get_caller_company_id
 from helpers.rate_limiting import _check_api_rate_limit, _API_UPLOAD_LIMIT
@@ -36,200 +36,160 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _fetch_and_parse_url(url: str) -> tuple[str, str]:
+    """Fetch a URL, parse HTML, and return (cleaned_text_content, filename).
+
+    Raises HTTPException on failure.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Cache-Control": "max-age=0",
+    }
+
+    import requests as http_requests
+
+    max_retries = 3
+    retry_delay = 2
+    html = None
+    last_error = None
+
+    def _is_safe_redirect(redirect_url: str) -> bool:
+        blocked_patterns = [
+            "localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.",
+            "172.16.", "172.17.", "172.18.", "172.19.", "172.20.",
+            "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+            "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
+            "172.31.", "169.254.", "[::1]", "[fc", "[fd",
+            "metadata.google.internal",
+        ]
+        return not any(pattern in redirect_url.lower() for pattern in blocked_patterns)
+
+    for attempt in range(max_retries):
+        try:
+            response = http_requests.get(url, headers=headers, timeout=20, allow_redirects=False, verify=True)
+            redirect_count = 0
+            while response.is_redirect and redirect_count < 5:
+                redirect_url = response.headers.get("Location", "")
+                if not redirect_url or not _is_safe_redirect(redirect_url):
+                    raise http_requests.exceptions.ConnectionError("Redirect to blocked destination")
+                response = http_requests.get(redirect_url, headers=headers, timeout=20, allow_redirects=False, verify=True)
+                redirect_count += 1
+            response.raise_for_status()
+            if response.encoding:
+                html = response.text
+            else:
+                response.encoding = response.apparent_encoding
+                html = response.text
+            break
+        except http_requests.exceptions.SSLError as e:
+            logger.warning(f"SSL error on attempt {attempt + 1} for {url}: {e}")
+            last_error = e
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+        except (http_requests.exceptions.Timeout, http_requests.exceptions.ConnectionError) as e:
+            logger.warning(f"Connection error on attempt {attempt + 1} for {url}: {e}")
+            last_error = e
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+        except http_requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP error for {url}: {e}")
+            last_error = e
+            break
+        except Exception as e:
+            logger.error(f"Unexpected error on attempt {attempt + 1} for {url}: {e}")
+            last_error = e
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+
+    if html is None:
+        error_msg = f"Failed to fetch URL after {max_retries} attempts"
+        if last_error:
+            error_msg += f": {str(last_error)}"
+        logger.error(error_msg)
+        raise HTTPException(status_code=400, detail="Unable to fetch the provided URL. Please check the URL and try again.")
+
+    from bs4 import BeautifulSoup
+
+    try:
+        from readability import Document as ReadabilityDocument
+        use_readability = True
+    except Exception:
+        use_readability = False
+
+    title = ""
+    meta_desc = ""
+    main_text = ""
+
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        if soup.title and soup.title.string:
+            title = soup.title.string.strip()
+        md = soup.find("meta", attrs={"name": "description"})
+        if md and md.get("content"):
+            meta_desc = md.get("content").strip()
+
+        if use_readability:
+            try:
+                doc = ReadabilityDocument(html)
+                main_html = doc.summary()
+                main_soup = BeautifulSoup(main_html, "lxml")
+                main_text = "\n".join(
+                    [p.get_text(separator=" ", strip=True) for p in main_soup.find_all(["p", "h1", "h2", "h3"])]
+                )
+            except Exception:
+                use_readability = False
+
+        if not main_text:
+            body = soup.body
+            if body:
+                for tag in body.find_all(["script", "style", "nav", "footer", "aside", "header", "form", "noscript"]):
+                    tag.decompose()
+                paragraphs = [
+                    p.get_text(separator=" ", strip=True)
+                    for p in body.find_all(["p", "h1", "h2", "h3"])
+                    if p.get_text(strip=True)
+                ]
+                main_text = "\n".join(paragraphs)
+
+        cleaned = []
+        if title:
+            cleaned.append(f"Title: {title}")
+        if meta_desc:
+            cleaned.append(f"Description: {meta_desc}")
+        if main_text:
+            cleaned.append("Content:\n" + main_text)
+
+        content = "\n\n".join(cleaned)
+        if not content.strip():
+            content = soup.get_text(separator="\n", strip=True)
+
+    except Exception as e:
+        logger.warning(f"Failed to parse HTML for useful content, falling back to raw. Error: {e}")
+        content = html
+
+    filename = url.split("//")[-1][:100].replace("/", "_") + ".txt"
+
+    max_chars = 200000
+    if len(content) > max_chars:
+        content = content[:max_chars]
+
+    return content, filename
+
+
 @router.post("/upload-url")
 async def upload_url(request: UrlUploadValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Ajoute une URL comme document/source pour le RAG"""
     try:
-        # Headers to mimic a real browser and avoid being blocked
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Cache-Control": "max-age=0",
-        }
+        content, filename = _fetch_and_parse_url(request.url)
 
-        import requests
-
-        # Télécharger le contenu de l'URL avec retry logic
-        max_retries = 3
-        retry_delay = 2
-        html = None
-        last_error = None
-
-        def _is_safe_redirect(url: str) -> bool:
-            """Check that a redirect URL doesn't point to internal/private networks."""
-            from urllib.parse import urlparse
-
-            blocked_patterns = [
-                "localhost",
-                "127.0.0.1",
-                "0.0.0.0",
-                "192.168.",
-                "10.",
-                "172.16.",
-                "172.17.",
-                "172.18.",
-                "172.19.",
-                "172.20.",
-                "172.21.",
-                "172.22.",
-                "172.23.",
-                "172.24.",
-                "172.25.",
-                "172.26.",
-                "172.27.",
-                "172.28.",
-                "172.29.",
-                "172.30.",
-                "172.31.",
-                "169.254.",
-                "[::1]",
-                "[fc",
-                "[fd",
-                "metadata.google.internal",
-            ]
-            return not any(pattern in url.lower() for pattern in blocked_patterns)
-
-        for attempt in range(max_retries):
-            try:
-                response = requests.get(request.url, headers=headers, timeout=20, allow_redirects=False, verify=True)
-                # Manually follow redirects with SSRF validation (max 5 hops)
-                redirect_count = 0
-                while response.is_redirect and redirect_count < 5:
-                    redirect_url = response.headers.get("Location", "")
-                    if not redirect_url or not _is_safe_redirect(redirect_url):
-                        raise requests.exceptions.ConnectionError("Redirect to blocked destination")
-                    response = requests.get(
-                        redirect_url, headers=headers, timeout=20, allow_redirects=False, verify=True
-                    )
-                    redirect_count += 1
-                response.raise_for_status()
-                # Try to get encoding from response headers or detect it
-                if response.encoding:
-                    html = response.text
-                else:
-                    response.encoding = response.apparent_encoding
-                    html = response.text
-                break
-            except requests.exceptions.SSLError as e:
-                logger.warning(f"SSL error on attempt {attempt + 1} for {request.url}: {e}")
-                last_error = e
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    # Try without SSL verification on last attempt
-                    # Security: Removed insecure verify=False fallback to prevent MITM attacks
-                    # If SSL verification fails, the request should fail rather than be vulnerable
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                logger.warning(f"Connection error on attempt {attempt + 1} for {request.url}: {e}")
-                last_error = e
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-            except requests.exceptions.HTTPError as e:
-                logger.error(f"HTTP error for {request.url}: {e}")
-                last_error = e
-                break
-            except Exception as e:
-                logger.error(f"Unexpected error on attempt {attempt + 1} for {request.url}: {e}")
-                last_error = e
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-
-        if html is None:
-            error_msg = f"Failed to fetch URL after {max_retries} attempts"
-            if last_error:
-                error_msg += f": {str(last_error)}"
-            logger.error(error_msg)
-            raise HTTPException(
-                status_code=400, detail="Unable to fetch the provided URL. Please check the URL and try again."
-            )
-
-        # Extraire uniquement les informations utiles : titre, meta description et contenu principal
-        from bs4 import BeautifulSoup
-
-        try:
-            from readability import Document as ReadabilityDocument
-
-            use_readability = True
-        except Exception:
-            use_readability = False
-
-        title = ""
-        meta_desc = ""
-        main_text = ""
-
-        try:
-            soup = BeautifulSoup(html, "lxml")
-            # Title
-            if soup.title and soup.title.string:
-                title = soup.title.string.strip()
-            # Meta description
-            md = soup.find("meta", attrs={"name": "description"})
-            if md and md.get("content"):
-                meta_desc = md.get("content").strip()
-
-            # Try Readability first (better extraction of main article)
-            if use_readability:
-                try:
-                    doc = ReadabilityDocument(html)
-                    main_html = doc.summary()
-                    main_soup = BeautifulSoup(main_html, "lxml")
-                    # Get visible text
-                    main_text = "\n".join(
-                        [p.get_text(separator=" ", strip=True) for p in main_soup.find_all(["p", "h1", "h2", "h3"])]
-                    )
-                except Exception:
-                    use_readability = False
-
-            # Fallback: extract visible text from body, but filter out navigation/footer links
-            if not main_text:
-                body = soup.body
-                if body:
-                    # Remove scripts, styles, nav, footer, aside
-                    for tag in body.find_all(
-                        ["script", "style", "nav", "footer", "aside", "header", "form", "noscript"]
-                    ):
-                        tag.decompose()
-                    # Collect paragraphs and headings
-                    paragraphs = [
-                        p.get_text(separator=" ", strip=True)
-                        for p in body.find_all(["p", "h1", "h2", "h3"])
-                        if p.get_text(strip=True)
-                    ]
-                    main_text = "\n".join(paragraphs)
-
-            # Build a cleaned text that contains only useful metadata + main content (limit length)
-            cleaned = []
-            if title:
-                cleaned.append(f"Title: {title}")
-            if meta_desc:
-                cleaned.append(f"Description: {meta_desc}")
-            if main_text:
-                cleaned.append("Content:\n" + main_text)
-
-            content = "\n\n".join(cleaned)
-            if not content.strip():
-                # If nothing meaningful found, fallback to raw text (but cleaned)
-                content = soup.get_text(separator="\n", strip=True)
-
-        except Exception as e:
-            logger.warning(f"Failed to parse HTML for useful content, falling back to raw. Error: {e}")
-            content = html
-
-        # Shorten the filename
-        filename = request.url.split("//")[-1][:100].replace("/", "_") + ".txt"
-
-        # Truncate content to a reasonable length to avoid huge token usage (e.g., 200k chars)
-        max_chars = 200000
-        if len(content) > max_chars:
-            content = content[:max_chars]
-
-        # Indexer le document comme pour un upload classique (send cleaned text)
         doc_id = process_document_for_user(
             filename,
             content.encode("utf-8", errors="ignore"),
@@ -239,13 +199,114 @@ async def upload_url(request: UrlUploadValidated, user_id: str = Depends(verify_
             company_id=_get_caller_company_id(user_id, db),
         )
 
+        # Store the source URL on the document
+        doc = db.query(Document).filter(Document.id == doc_id).first()
+        if doc:
+            doc.source_url = request.url
+            db.commit()
+
         logger.info(f"URL ajoutée pour user {user_id}, agent {request.agent_id}: {request.url}")
         event_tracker.track_document_upload(int(user_id), request.url, len(content))
 
         return {"url": request.url, "document_id": doc_id, "agent_id": request.agent_id, "status": "uploaded"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Erreur lors de l'ajout d'URL: {e}")
         raise HTTPException(status_code=500, detail="Erreur lors de l'ajout de l'URL")
+
+
+@router.post("/documents/{document_id}/refresh-url")
+async def refresh_document_url(document_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+    """Re-fetch a URL-sourced document and re-embed its content."""
+    try:
+        uid = int(user_id)
+
+        # Find document and verify access
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Check ownership or edit access via AgentShare
+        is_owner = document.user_id == uid
+        if not is_owner and document.agent_id:
+            share = (
+                db.query(AgentShare)
+                .filter(AgentShare.agent_id == document.agent_id, AgentShare.user_id == uid, AgentShare.can_edit == True)
+                .first()
+            )
+            if not share:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif not is_owner:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Verify this document has a source URL
+        if not document.source_url:
+            raise HTTPException(status_code=400, detail="This document has no source URL to refresh")
+
+        # Re-fetch and parse the URL
+        content, filename = _fetch_and_parse_url(document.source_url)
+
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="No content could be extracted from the URL")
+
+        # Delete old chunks
+        db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
+
+        # Update document content
+        document.content = content
+        document.filename = filename
+        db.commit()
+
+        # Re-chunk and re-embed
+        from file_loader import chunk_text
+        from mistral_embeddings import get_embedding_fast
+        import numpy as np
+
+        chunks = chunk_text(content)
+
+        def split_for_embedding(chunk, max_tokens=8192):
+            chunk = chunk.replace("\x00", "")
+            max_chars = max_tokens * 4
+            return [chunk[i : i + max_chars] for i in range(0, len(chunk), max_chars)]
+
+        for i, chunk in enumerate(chunks):
+            sub_chunks = split_for_embedding(chunk, 8192)
+            embeddings = []
+            for sub in sub_chunks:
+                embedding = get_embedding_fast(sub)
+                embeddings.append(embedding)
+            if embeddings:
+                avg_embedding = list(np.mean(np.array(embeddings), axis=0))
+            else:
+                raise ValueError("No sub-chunks produced for embedding")
+            doc_chunk = DocumentChunk(
+                document_id=document_id,
+                company_id=document.company_id,
+                chunk_text=chunk,
+                embedding_vec=avg_embedding,
+                chunk_index=i,
+            )
+            db.add(doc_chunk)
+
+        db.commit()
+
+        logger.info(f"Document {document_id} refreshed from URL: {document.source_url} ({len(chunks)} chunks)")
+        event_tracker.track_user_action(uid, f"url_refresh:{document.source_url}")
+
+        return {
+            "document_id": document_id,
+            "status": "refreshed",
+            "source_url": document.source_url,
+            "chunks": len(chunks),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error refreshing document {document_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error refreshing URL content")
 
 
 @router.post("/upload")
@@ -637,6 +698,7 @@ async def get_user_documents(user_id: str = Depends(verify_token), db: Session =
                     "gcs_url": doc.gcs_url,
                     "notion_link_id": doc.notion_link_id,
                     "drive_link_id": getattr(doc, "drive_link_id", None),
+                    "source_url": getattr(doc, "source_url", None),
                 }
                 # Safely try to add agent_id if it exists
                 if hasattr(doc, "agent_id"):
