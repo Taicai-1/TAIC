@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 import traceback
 from datetime import datetime
 
@@ -23,6 +24,7 @@ from validation import QuestionRequestValidated
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 @router.post("/ask")
 async def ask_question(
@@ -480,5 +482,3 @@ _ACTIONNABLE_REMOVED = """
         else:
             # Non-actionnable agents: do not attempt function-calling or action execution; return the original answer
 """
-
-

@@ -3,16 +3,19 @@
 import json
 import logging
 import os
-from datetime import datetime
+import traceback
+from datetime import datetime, timedelta
+from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from auth import verify_token, hash_password, create_access_token
 from database import (
     get_db,
+    engine,
     User,
     Agent,
     AgentShare,
@@ -20,7 +23,13 @@ from database import (
     CompanyCreationRequest,
     CompanyMembership,
     CompanyInvitation,
+    Document,
 )
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "jeremy@taic.co")
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8080").rstrip("/")
+FRONTEND_PUBLIC_URL = os.getenv("FRONTEND_URL", "https://taic.ai").rstrip("/")
 from email_service import (
     send_invitation_email,
     send_agent_share_email,
@@ -36,6 +45,7 @@ from schemas.organization import SlashCommandItem
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 @router.post("/api/companies/request")
 async def create_company_request(
@@ -1151,4 +1161,3 @@ async def list_neo4j_persons(user_id: str = Depends(verify_token), db: Session =
     except Exception as e:
         logger.warning(f"Failed to list Neo4j persons: {e}")
         return {"persons": []}
-

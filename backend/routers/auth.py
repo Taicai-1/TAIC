@@ -18,7 +18,7 @@ from auth import (
     verify_pre_2fa_token,
     verify_setup_token,
 )
-from database import get_db, User, PasswordResetToken
+from database import get_db, User, Company, PasswordResetToken
 from email_service import (
     send_password_reset_email,
     send_verification_email,
@@ -45,6 +45,7 @@ from validation import UserCreateValidated
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 @router.post("/register")
 async def register(user: UserCreateValidated, request: Request, db: Session = Depends(get_db)):
@@ -566,7 +567,6 @@ async def logout(response: Response):
     return {"message": "Logged out successfully"}
 
 
-
 @router.post("/forgot-password")
 async def forgot_password(req: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
     # Rate limiting: prevent abuse of password reset
@@ -637,4 +637,3 @@ async def reset_password(req: ResetPasswordRequest, request: Request, db: Sessio
 
     logger.info(f"Password reset successful for user {user.email}")
     return {"message": "Mot de passe réinitialisé avec succès"}
-

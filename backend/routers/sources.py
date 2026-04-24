@@ -11,14 +11,15 @@ from google.cloud import storage
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, Agent, Document, DocumentChunk, NotionLink, DriveLink
-from helpers.agent_helpers import _user_can_edit_agent
+from database import get_db, Agent, AgentShare, Document, DocumentChunk, NotionLink, DriveLink
+from helpers.agent_helpers import _user_can_access_agent, _user_can_edit_agent
 from helpers.tenant import _get_caller_company_id
 from redis_client import get_cached_user
 from validation import sanitize_filename
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 @router.post("/api/agents/{agent_id}/traceability-docs")
 async def upload_traceability_doc(
@@ -746,4 +747,3 @@ async def resync_drive_link(
             logger.warning(f"Failed to ingest Drive file {f['name']} during resync: {e}")
 
     return {"new_files_added": new_files_added, "chunk_count": total_chunks}
-
