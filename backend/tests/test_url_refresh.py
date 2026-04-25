@@ -1,8 +1,39 @@
 """Unit tests for URL refresh feature validation logic."""
 
+import sys
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi import HTTPException
+
+
+# Mock heavy modules before importing routers.documents
+# database.py triggers create_engine() with PostgreSQL-only args (pool_size, max_overflow)
+# which fails with SQLite in CI. We also mock GCS, rag_engine, redis, etc.
+_mock_db_module = MagicMock()
+_mock_db_module.get_db = MagicMock()
+_mock_db_module.Document = MagicMock()
+_mock_db_module.DocumentChunk = MagicMock()
+_mock_db_module.AgentShare = MagicMock()
+_mock_db_module.SessionLocal = MagicMock()
+
+_modules_to_mock = {
+    "database": _mock_db_module,
+    "helpers.agent_helpers": MagicMock(),
+    "helpers.tenant": MagicMock(),
+    "helpers.rate_limiting": MagicMock(),
+    "rag_engine": MagicMock(),
+    "redis_client": MagicMock(),
+    "utils": MagicMock(),
+    "google.cloud": MagicMock(),
+    "google.cloud.storage": MagicMock(),
+}
+
+for mod_name, mock_mod in _modules_to_mock.items():
+    if mod_name not in sys.modules:
+        sys.modules[mod_name] = mock_mod
+
+# validation must NOT be mocked — FastAPI needs real Pydantic models
+# auth must NOT be mocked — verify_token is a real Depends
 
 
 class TestFetchAndParseUrl:
@@ -52,6 +83,7 @@ class TestFetchAndParseUrl:
         with patch("requests.get", return_value=mock_response):
             content, filename = _fetch_and_parse_url(long_url)
 
+        # Filename should be max 100 chars from URL + ".txt"
         assert len(filename) <= 105
         assert "/" not in filename
 
