@@ -7,6 +7,9 @@ import {
   Download,
   Loader2,
   File,
+  Globe,
+  RefreshCw,
+  Plus,
 } from "lucide-react";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../hooks/useAuth";
@@ -37,6 +40,10 @@ export default function SourcesPage() {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [canEdit, setCanEdit] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [addingUrl, setAddingUrl] = useState(false);
+  const [refreshingDocId, setRefreshingDocId] = useState(null);
 
   useEffect(() => {
     if (!authenticated || !agentId) return;
@@ -54,6 +61,7 @@ export default function SourcesPage() {
       const res = await api.get(`/api/agents/${id}/sources`);
       setAgentName(res.data.agent_name || "");
       setDocuments(res.data.documents || []);
+      setCanEdit(res.data.can_edit || false);
     } catch {
       showToast(t("errors:generic", "Error loading sources"), "error");
     } finally {
@@ -81,6 +89,36 @@ export default function SourcesPage() {
       }
     } catch {
       showToast(t("sources:toast.downloadError"), "error");
+    }
+  };
+
+  const handleAddUrl = async (e) => {
+    e.preventDefault();
+    if (!urlInput.trim() || addingUrl) return;
+    try {
+      setAddingUrl(true);
+      await api.post("/upload-url", { url: urlInput.trim(), agent_id: parseInt(agentId) });
+      showToast(t("sources:toast.urlAddSuccess"));
+      setUrlInput("");
+      loadSources(agentId);
+    } catch {
+      showToast(t("sources:toast.urlAddError"), "error");
+    } finally {
+      setAddingUrl(false);
+    }
+  };
+
+  const handleRefreshUrl = async (docId) => {
+    if (refreshingDocId) return;
+    try {
+      setRefreshingDocId(docId);
+      const res = await api.post(`/documents/${docId}/refresh-url`);
+      showToast(t("sources:toast.urlRefreshSuccess", { chunks: res.data.chunks }));
+      loadSources(agentId);
+    } catch {
+      showToast(t("sources:toast.urlRefreshError"), "error");
+    } finally {
+      setRefreshingDocId(null);
     }
   };
 
@@ -114,6 +152,40 @@ export default function SourcesPage() {
         {/* Agent name subtitle */}
         {agentName && <p className="text-sm text-gray-500 mb-6">{agentName}</p>}
 
+        {/* URL Input */}
+        {canEdit && (
+          <form onSubmit={handleAddUrl} className="mb-6 flex items-center space-x-2">
+            <div className="flex-1 relative">
+              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder={t("sources:url.placeholder")}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-button text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={addingUrl}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!urlInput.trim() || addingUrl}
+              className="flex items-center space-x-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-button transition-colors"
+            >
+              {addingUrl ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{t("sources:url.adding")}</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  <span>{t("sources:url.add")}</span>
+                </>
+              )}
+            </button>
+          </form>
+        )}
+
         {/* RAG Documents */}
         <section>
           <h2 className="text-lg font-semibold font-heading mb-4 flex items-center space-x-2">
@@ -132,15 +204,22 @@ export default function SourcesPage() {
               {documents.map((doc) => {
                 const ext = getFileExtension(doc.filename);
                 const isNotion = !!doc.notion_link_id;
+                const isUrl = !!doc.source_url;
                 return (
                   <div
                     key={doc.id}
                     className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-card shadow-subtle hover:shadow-card transition-all"
                   >
                     <div className="flex items-center space-x-3 min-w-0">
-                      <File className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      {isUrl ? (
+                        <Globe className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                      ) : (
+                        <File className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      )}
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{doc.filename}</p>
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {isUrl ? doc.source_url : doc.filename}
+                        </p>
                         <p className="text-xs text-gray-500">
                           {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ""}
                         </p>
@@ -149,6 +228,10 @@ export default function SourcesPage() {
                         <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700 border border-purple-200 flex-shrink-0">
                           {t("sources:documents.fromNotion")}
                         </span>
+                      ) : isUrl ? (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200 flex-shrink-0">
+                          {t("sources:documents.fromUrl")}
+                        </span>
                       ) : (
                         <span className={`px-2 py-0.5 text-xs rounded-full flex-shrink-0 ${getBadgeColor(ext)}`}>
                           {ext}
@@ -156,6 +239,20 @@ export default function SourcesPage() {
                       )}
                     </div>
                     <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                      {isUrl && canEdit && (
+                        <button
+                          onClick={() => handleRefreshUrl(doc.id)}
+                          disabled={refreshingDocId === doc.id}
+                          className="flex items-center space-x-1 px-3 py-1.5 text-xs bg-green-50 hover:bg-green-100 disabled:bg-gray-100 text-green-700 disabled:text-gray-400 rounded-button transition-colors border border-green-200 disabled:border-gray-200"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${refreshingDocId === doc.id ? "animate-spin" : ""}`} />
+                          <span>
+                            {refreshingDocId === doc.id
+                              ? t("sources:url.refreshing")
+                              : t("sources:url.refresh")}
+                          </span>
+                        </button>
+                      )}
                       {doc.has_file && (
                         <button
                           onClick={() => handleDownload(doc.id, doc.filename)}
