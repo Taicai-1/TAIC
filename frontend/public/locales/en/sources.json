@@ -9,7 +9,8 @@
     "empty": "No RAG documents for this agent",
     "download": "Download",
     "open": "Open",
-    "fromNotion": "Notion"
+    "fromNotion": "Notion",
+    "fromUrl": "URL"
   },
   "notion": {
     "empty": "No Notion sources linked",
@@ -19,11 +20,22 @@
     "page": "Page",
     "database": "Database"
   },
+  "url": {
+    "placeholder": "https://example.com/page",
+    "add": "Add",
+    "adding": "Adding...",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing..."
+  },
   "toast": {
     "ingestSuccess": "Notion content ingested successfully ({{chunks}} chunks)",
     "ingestError": "Error ingesting Notion content",
     "alreadyIngested": "This Notion content has already been ingested",
-    "downloadError": "Error downloading file"
+    "downloadError": "Error downloading file",
+    "urlAddSuccess": "URL added successfully",
+    "urlAddError": "Error adding URL",
+    "urlRefreshSuccess": "Content refreshed successfully ({{chunks}} chunks)",
+    "urlRefreshError": "Error refreshing URL content"
   },
   "loading": "Loading sources..."
 }

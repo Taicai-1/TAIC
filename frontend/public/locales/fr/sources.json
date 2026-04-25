@@ -9,7 +9,8 @@
     "empty": "Aucun document RAG pour cet agent",
     "download": "Télécharger",
     "open": "Ouvrir",
-    "fromNotion": "Notion"
+    "fromNotion": "Notion",
+    "fromUrl": "URL"
   },
   "notion": {
     "empty": "Aucune source Notion liée",
@@ -19,11 +20,22 @@
     "page": "Page",
     "database": "Base de données"
   },
+  "url": {
+    "placeholder": "https://example.com/page",
+    "add": "Ajouter",
+    "adding": "Ajout en cours...",
+    "refresh": "Rafraîchir",
+    "refreshing": "Rafraîchissement..."
+  },
   "toast": {
     "ingestSuccess": "Contenu Notion ingéré avec succès ({{chunks}} chunks)",
     "ingestError": "Erreur lors de l'ingestion Notion",
     "alreadyIngested": "Ce contenu Notion a déjà été ingéré",
-    "downloadError": "Erreur lors du téléchargement"
+    "downloadError": "Erreur lors du téléchargement",
+    "urlAddSuccess": "URL ajoutée avec succès",
+    "urlAddError": "Erreur lors de l'ajout de l'URL",
+    "urlRefreshSuccess": "Contenu mis à jour avec succès ({{chunks}} chunks)",
+    "urlRefreshError": "Erreur lors du rafraîchissement de l'URL"
   },
   "loading": "Chargement des sources..."
 }
