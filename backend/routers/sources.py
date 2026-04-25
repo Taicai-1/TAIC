@@ -335,6 +335,7 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
                 "has_file": bool(d.gcs_url),
                 "notion_link_id": d.notion_link_id,
                 "drive_link_id": getattr(d, "drive_link_id", None),
+                "source_url": getattr(d, "source_url", None),
             }
             for d in docs
         ],
