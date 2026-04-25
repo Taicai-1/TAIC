@@ -63,11 +63,31 @@ def _fetch_and_parse_url(url: str) -> tuple[str, str]:
 
     def _is_safe_redirect(redirect_url: str) -> bool:
         blocked_patterns = [
-            "localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.",
-            "172.16.", "172.17.", "172.18.", "172.19.", "172.20.",
-            "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-            "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
-            "172.31.", "169.254.", "[::1]", "[fc", "[fd",
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "192.168.",
+            "10.",
+            "172.16.",
+            "172.17.",
+            "172.18.",
+            "172.19.",
+            "172.20.",
+            "172.21.",
+            "172.22.",
+            "172.23.",
+            "172.24.",
+            "172.25.",
+            "172.26.",
+            "172.27.",
+            "172.28.",
+            "172.29.",
+            "172.30.",
+            "172.31.",
+            "169.254.",
+            "[::1]",
+            "[fc",
+            "[fd",
             "metadata.google.internal",
         ]
         return not any(pattern in redirect_url.lower() for pattern in blocked_patterns)
@@ -80,7 +100,9 @@ def _fetch_and_parse_url(url: str) -> tuple[str, str]:
                 redirect_url = response.headers.get("Location", "")
                 if not redirect_url or not _is_safe_redirect(redirect_url):
                     raise http_requests.exceptions.ConnectionError("Redirect to blocked destination")
-                response = http_requests.get(redirect_url, headers=headers, timeout=20, allow_redirects=False, verify=True)
+                response = http_requests.get(
+                    redirect_url, headers=headers, timeout=20, allow_redirects=False, verify=True
+                )
                 redirect_count += 1
             response.raise_for_status()
             if response.encoding:
@@ -114,12 +136,15 @@ def _fetch_and_parse_url(url: str) -> tuple[str, str]:
         if last_error:
             error_msg += f": {str(last_error)}"
         logger.error(error_msg)
-        raise HTTPException(status_code=400, detail="Unable to fetch the provided URL. Please check the URL and try again.")
+        raise HTTPException(
+            status_code=400, detail="Unable to fetch the provided URL. Please check the URL and try again."
+        )
 
     from bs4 import BeautifulSoup
 
     try:
         from readability import Document as ReadabilityDocument
+
         use_readability = True
     except Exception:
         use_readability = False
@@ -232,7 +257,9 @@ async def refresh_document_url(document_id: int, user_id: str = Depends(verify_t
         if not is_owner and document.agent_id:
             share = (
                 db.query(AgentShare)
-                .filter(AgentShare.agent_id == document.agent_id, AgentShare.user_id == uid, AgentShare.can_edit == True)
+                .filter(
+                    AgentShare.agent_id == document.agent_id, AgentShare.user_id == uid, AgentShare.can_edit == True
+                )
                 .first()
             )
             if not share:
