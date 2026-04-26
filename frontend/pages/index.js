@@ -4,7 +4,7 @@ import toast, { Toaster } from "react-hot-toast";
 import {
   ArrowLeft, Bot, MessageCircle, Save, Camera, Trash2, Plus,
   Upload, Loader2, FileText, Database, Link, Zap, Users, TrendingUp,
-  LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive
+  LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive, Globe
 } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -67,6 +67,9 @@ export default function CompanionSettings() {
   const [agentDocuments, setAgentDocuments] = useState([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [addingUrl, setAddingUrl] = useState(false);
+  const [refreshingDocId, setRefreshingDocId] = useState(null);
 
   // Traceability docs
   const [traceabilityDocs, setTraceabilityDocs] = useState([]);
@@ -346,6 +349,32 @@ export default function CompanionSettings() {
       toast.success(t('agents:toast.documentDeleted'));
       setAgentDocuments(prev => prev.filter(d => d.id !== docId));
     } catch { toast.error(t('agents:toast.deleteError')); }
+  };
+
+  const handleAddUrl = async () => {
+    if (!urlInput.trim() || !currentAgent) return;
+    setAddingUrl(true);
+    try {
+      await api.post("/upload-url", { url: urlInput.trim(), agent_id: currentAgent.id });
+      toast.success(t('agents:toast.urlAddSuccess', 'URL ajoutée avec succès'));
+      setUrlInput("");
+      const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
+      setAgentDocuments(res.data.documents || []);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('agents:toast.urlAddError', "Erreur lors de l'ajout de l'URL"));
+    } finally { setAddingUrl(false); }
+  };
+
+  const handleRefreshUrl = async (docId) => {
+    setRefreshingDocId(docId);
+    try {
+      await api.post(`/documents/${docId}/refresh-url`);
+      toast.success(t('agents:toast.urlRefreshSuccess', 'Contenu URL mis à jour'));
+      const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
+      setAgentDocuments(res.data.documents || []);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('agents:toast.urlRefreshError', 'Erreur lors du rafraîchissement'));
+    } finally { setRefreshingDocId(null); }
   };
 
   const uploadTraceabilityDoc = async (file) => {
@@ -813,6 +842,26 @@ export default function CompanionSettings() {
             </label>
           </div>
 
+          {/* URL input */}
+          <div className="flex items-center gap-2 mb-4">
+            <Globe className="w-5 h-5 text-purple-500 flex-shrink-0" />
+            <input
+              type="url"
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+              placeholder={t('agents:url.placeholder', 'https://example.com/page')}
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddUrl(); }}
+            />
+            <button
+              onClick={handleAddUrl}
+              disabled={addingUrl || !urlInput.trim()}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              {addingUrl ? <><Loader2 className="w-4 h-4 animate-spin" /><span>{t('agents:url.adding', 'Ajout...')}</span></> : <><Plus className="w-4 h-4" /><span>{t('agents:url.add', 'Ajouter URL')}</span></>}
+            </button>
+          </div>
+
           {/* Documents list */}
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {agentDocuments.length === 0 ? (
@@ -823,11 +872,14 @@ export default function CompanionSettings() {
             ) : agentDocuments.map(doc => (
               <div key={doc.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-purple-300 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  <FileText className="w-5 h-5 text-purple-600 flex-shrink-0" />
+                  {doc.source_url ? <Globe className="w-5 h-5 text-blue-600 flex-shrink-0" /> : <FileText className="w-5 h-5 text-purple-600 flex-shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{doc.filename}</p>
                     <p className="text-xs text-gray-500">{new Date(doc.created_at).toLocaleDateString('fr-FR')}</p>
                   </div>
+                  {doc.source_url && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-600 border border-blue-200 flex-shrink-0">URL</span>
+                  )}
                   {doc.notion_link_id && (
                     <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex-shrink-0">Notion</span>
                   )}
@@ -836,6 +888,16 @@ export default function CompanionSettings() {
                   )}
                 </div>
                 <div className="flex items-center space-x-1">
+                  {doc.source_url && (
+                    <button
+                      onClick={() => handleRefreshUrl(doc.id)}
+                      disabled={refreshingDocId === doc.id}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
+                      title={t('agents:url.refresh', 'Rafraîchir')}
+                    >
+                      {refreshingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> : <RefreshCw className="w-4 h-4" />}
+                    </button>
+                  )}
                   {doc.notion_link_id && (
                     <button
                       onClick={() => resyncNotionDoc(doc)}

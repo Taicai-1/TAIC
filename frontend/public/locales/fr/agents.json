@@ -179,7 +179,17 @@
     "driveResyncError": "Erreur lors de la resynchronisation Drive",
     "recapSendSuccess": "Recap envoyé à {{email}}",
     "recapSendNoData": "Aucune donnée cette semaine pour générer un recap",
-    "recapSendError": "Erreur lors de l'envoi du recap"
+    "recapSendError": "Erreur lors de l'envoi du recap",
+    "urlAddSuccess": "URL ajoutée avec succès",
+    "urlAddError": "Erreur lors de l'ajout de l'URL",
+    "urlRefreshSuccess": "Contenu URL mis à jour",
+    "urlRefreshError": "Erreur lors du rafraîchissement de l'URL"
+  },
+  "url": {
+    "placeholder": "https://example.com/page",
+    "add": "Ajouter URL",
+    "adding": "Ajout...",
+    "refresh": "Rafraîchir le contenu URL"
   },
   "settings": {
     "openChat": "Ouvrir le chat",
