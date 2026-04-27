@@ -123,6 +123,10 @@ export default function AgentChatPage() {
   const [slashSelectedIdx, setSlashSelectedIdx] = useState(0);
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const isNearBottomRef = useRef(true);
+  const tokenBufferRef = useRef('');
+  const flushRafRef = useRef(null);
   const abortRef = useRef(null);
   const [creatingConv, setCreatingConv] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState(null);
@@ -151,6 +155,12 @@ export default function AgentChatPage() {
         if (abortRef.current) {
           abortRef.current.abort();
           abortRef.current = null;
+        }
+      } catch (e) {}
+      try {
+        if (flushRafRef.current) {
+          cancelAnimationFrame(flushRafRef.current);
+          flushRafRef.current = null;
         }
       } catch (e) {}
     };
@@ -280,8 +290,28 @@ const handleDeleteConversation = async (convId) => {
     }
   };
 
+  // --- Streaming scroll helpers ---
+  const scrollToBottom = (smooth = false) => {
+    if (!isNearBottomRef.current) return;
+    const el = chatContainerRef.current;
+    if (!el) return;
+    if (smooth) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
+  };
+
+  const handleChatScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  };
+
   const sendMessage = async () => {
     if ((!input.trim() && attachments.length === 0) || !selectedConv) return;
+    // Always scroll to see the response after sending
+    isNearBottomRef.current = true;
     // Check if input is a slash command
     if (input.startsWith('/')) {
       const cmdName = input.slice(1).trim().toLowerCase();
@@ -364,17 +394,34 @@ const handleDeleteConversation = async (convId) => {
           history: history
         }, {
           onToken: (text) => {
-            iaAnswer += text;
-            setMessages(prev => prev.map((m, i) =>
-              i === streamingMsgIdx.current ? { ...m, content: iaAnswer } : m
-            ));
+            tokenBufferRef.current += text;
+            if (!flushRafRef.current) {
+              flushRafRef.current = requestAnimationFrame(() => {
+                flushRafRef.current = null;
+                const buffered = tokenBufferRef.current;
+                tokenBufferRef.current = '';
+                iaAnswer += buffered;
+                setMessages(prev => prev.map((m, i) =>
+                  i === streamingMsgIdx.current ? { ...m, content: iaAnswer } : m
+                ));
+                scrollToBottom(false);
+              });
+            }
           },
           onDone: (data) => {
+            // Cancel pending flush and apply remaining buffer
+            if (flushRafRef.current) {
+              cancelAnimationFrame(flushRafRef.current);
+              flushRafRef.current = null;
+            }
+            iaAnswer += tokenBufferRef.current;
+            tokenBufferRef.current = '';
             iaAnswer = data.full_text || iaAnswer;
             setMessages(prev => prev.map((m, i) =>
               i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
             ));
             streamSuccess = true;
+            scrollToBottom(true);
           },
           onError: () => {
             // Will fallback to /ask below
@@ -466,8 +513,11 @@ const handleDeleteConversation = async (convId) => {
   };
 
   useEffect(() => {
+    // Only auto-scroll on message count changes (new message added, conversation loaded)
+    // NOT on streaming content updates (which only change content, not length)
+    isNearBottomRef.current = true;
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-  }, [messages]);
+  }, [messages.length]);
 
   // Fonctions de reconnaissance vocale
   const startListening = () => {
@@ -695,7 +745,7 @@ const handleDeleteConversation = async (convId) => {
         </div>
 
         {/* Chat area - Version améliorée */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col space-y-4">{selectedConv ? (
+        <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col space-y-4">{selectedConv ? (
             <>
           {messages.map((msg, idx) => {
             const isLastAgentMsg =

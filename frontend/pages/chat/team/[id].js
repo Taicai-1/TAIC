@@ -24,6 +24,10 @@ export default function TeamChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const isNearBottomRef = useRef(true);
+  const tokenBufferRef = useRef('');
+  const flushRafRef = useRef(null);
   const abortRef = useRef(null);
   const [creatingConv, setCreatingConv] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState(null);
@@ -134,8 +138,27 @@ export default function TeamChatPage() {
     }
   };
 
+  // --- Streaming scroll helpers ---
+  const scrollToBottom = (smooth = false) => {
+    if (!isNearBottomRef.current) return;
+    const el = chatContainerRef.current;
+    if (!el) return;
+    if (smooth) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
+  };
+
+  const handleChatScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || !selectedConv) return;
+    isNearBottomRef.current = true;
     const userMsg = { role: "user", content: input };
     setMessages(prev => [...prev, userMsg]);
     setPendingUserMessage(userMsg);
@@ -177,17 +200,33 @@ export default function TeamChatPage() {
           history: history
         }, {
           onToken: (text) => {
-            iaAnswer += text;
-            setMessages(prev => prev.map((m, i) =>
-              i === streamingMsgIdx.current ? { ...m, content: iaAnswer } : m
-            ));
+            tokenBufferRef.current += text;
+            if (!flushRafRef.current) {
+              flushRafRef.current = requestAnimationFrame(() => {
+                flushRafRef.current = null;
+                const buffered = tokenBufferRef.current;
+                tokenBufferRef.current = '';
+                iaAnswer += buffered;
+                setMessages(prev => prev.map((m, i) =>
+                  i === streamingMsgIdx.current ? { ...m, content: iaAnswer } : m
+                ));
+                scrollToBottom(false);
+              });
+            }
           },
           onDone: (data) => {
+            if (flushRafRef.current) {
+              cancelAnimationFrame(flushRafRef.current);
+              flushRafRef.current = null;
+            }
+            iaAnswer += tokenBufferRef.current;
+            tokenBufferRef.current = '';
             iaAnswer = data.full_text || iaAnswer;
             setMessages(prev => prev.map((m, i) =>
               i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
             ));
             streamSuccess = true;
+            scrollToBottom(true);
           },
           onError: () => {}
         }, controller.signal);
@@ -265,8 +304,9 @@ export default function TeamChatPage() {
   };
 
   useEffect(() => {
+    isNearBottomRef.current = true;
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-  }, [messages]);
+  }, [messages.length]);
 
   if (!team) {
     return (
@@ -416,7 +456,7 @@ export default function TeamChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-screen">
         {/* Chat Messages */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-8 space-y-6">
+        <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-4 md:px-8 py-8 space-y-6">
           {messages.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="relative mb-6">
