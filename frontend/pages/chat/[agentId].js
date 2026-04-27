@@ -5,6 +5,7 @@ import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useAuth } from '../../hooks/useAuth';
 import api, { getApiUrl } from '../../lib/api';
+import { streamAsk } from '../../lib/streamingFetch';
 import toast from 'react-hot-toast';
 import {
   Pencil,
@@ -122,6 +123,7 @@ export default function AgentChatPage() {
   const [slashSelectedIdx, setSlashSelectedIdx] = useState(0);
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
+  const abortRef = useRef(null);
   const [creatingConv, setCreatingConv] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState(null);
   const [editedTitle, setEditedTitle] = useState("");
@@ -143,6 +145,12 @@ export default function AgentChatPage() {
         if (recognitionRef.current) {
           recognitionRef.current.stop();
           recognitionRef.current = null;
+        }
+      } catch (e) {}
+      try {
+        if (abortRef.current) {
+          abortRef.current.abort();
+          abortRef.current = null;
         }
       } catch (e) {}
     };
@@ -335,71 +343,118 @@ const handleDeleteConversation = async (convId) => {
         await loadConversations(agentId, false, false);
       }
 
-      // Appel à l'API /ask pour générer la réponse IA
-      const resAsk = await api.post('/ask', {
-        question: finalPrompt,
-        agent_id: agentId,
-        history: history
-      });
-      const iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
-
-      // Ajoute la réponse IA comme message d'agent côté backend
-      const agentMsgRes = await api.post(`/conversations/${selectedConv}/messages`, {
-        conversation_id: selectedConv,
-        role: "agent",
-        content: iaAnswer
+      // Add a placeholder agent message for streaming
+      const streamingMsgIdx = { current: null };
+      setMessages(prev => {
+        streamingMsgIdx.current = prev.length;
+        return [...prev, { role: "agent", content: "", streaming: true }];
       });
 
-      // Ajoute la réponse IA aux messages locaux immédiatement
-      const agentMsg = {
-        id: agentMsgRes.data.message_id,
-        role: "agent",
-        content: iaAnswer
-      };
-      setMessages(prev => [...prev, agentMsg]);
+      // Try streaming first, fallback to /ask on error
+      let streamSuccess = false;
+      let iaAnswer = "";
 
-      // Handle any action_results returned by the /ask endpoint and persist them as system messages
-      const actionResults = resAsk.data.action_results || [];
-      for (const ar of actionResults) {
-        try {
-          let content = "";
-          if (ar && ar.result) {
-            if (ar.result.status === "ok" && ar.result.result) {
-              const r = ar.result.result;
-              if (r.url) {
-                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${r.url}`;
-              } else if (r.document_id) {
-                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${t('chat:messages.documentId')} ${r.document_id}`;
-              } else if (r.path) {
-                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${t('chat:messages.fileCreated')} ${r.path}`;
-              } else {
-                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(r)}`;
-              }
-            } else if (ar.result.status === "error") {
-              content = `${t('chat:messages.actionError', { action: ar.action })}: ${ar.result.error || JSON.stringify(ar.result)}`;
-            } else {
-              content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(ar.result)}`;
-            }
-          } else {
-            content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(ar)}`;
+      try {
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        await streamAsk('/ask-stream', {
+          question: finalPrompt,
+          agent_id: agentId,
+          history: history
+        }, {
+          onToken: (text) => {
+            iaAnswer += text;
+            setMessages(prev => prev.map((m, i) =>
+              i === streamingMsgIdx.current ? { ...m, content: iaAnswer } : m
+            ));
+          },
+          onDone: (data) => {
+            iaAnswer = data.full_text || iaAnswer;
+            setMessages(prev => prev.map((m, i) =>
+              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+            ));
+            streamSuccess = true;
+          },
+          onError: () => {
+            // Will fallback to /ask below
           }
+        }, controller.signal);
 
-          const systemMsgRes = await api.post(`/conversations/${selectedConv}/messages`, {
-            conversation_id: selectedConv,
-            role: "system",
-            content: content
-          });
-
-          // Ajoute le message système aux messages locaux
-          setMessages(prev => [...prev, {
-            id: systemMsgRes.data.message_id,
-            role: "system",
-            content: content
-          }]);
-        } catch (e) {}
+        abortRef.current = null;
+      } catch {
+        // Streaming failed, will fallback
       }
 
-      // Recharge juste la liste des conversations pour mettre à jour les titres (sans re-sélectionner)
+      // Fallback to non-streaming /ask
+      if (!streamSuccess) {
+        try {
+          const resAsk = await api.post('/ask', {
+            question: finalPrompt,
+            agent_id: agentId,
+            history: history
+          });
+          iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
+          setMessages(prev => prev.map((m, i) =>
+            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+          ));
+
+          // Handle action_results from /ask
+          const actionResults = resAsk.data.action_results || [];
+          for (const ar of actionResults) {
+            try {
+              let content = "";
+              if (ar && ar.result) {
+                if (ar.result.status === "ok" && ar.result.result) {
+                  const r = ar.result.result;
+                  if (r.url) {
+                    content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${r.url}`;
+                  } else if (r.document_id) {
+                    content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${t('chat:messages.documentId')} ${r.document_id}`;
+                  } else if (r.path) {
+                    content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${t('chat:messages.fileCreated')} ${r.path}`;
+                  } else {
+                    content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(r)}`;
+                  }
+                } else if (ar.result.status === "error") {
+                  content = `${t('chat:messages.actionError', { action: ar.action })}: ${ar.result.error || JSON.stringify(ar.result)}`;
+                } else {
+                  content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(ar.result)}`;
+                }
+              } else {
+                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(ar)}`;
+              }
+
+              const systemMsgRes = await api.post(`/conversations/${selectedConv}/messages`, {
+                conversation_id: selectedConv,
+                role: "system",
+                content: content
+              });
+              setMessages(prev => [...prev, { id: systemMsgRes.data.message_id, role: "system", content }]);
+            } catch (e) {}
+          }
+        } catch {
+          iaAnswer = t('chat:messages.aiError');
+          setMessages(prev => prev.map((m, i) =>
+            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+          ));
+        }
+      }
+
+      // Save the agent message to backend
+      try {
+        const agentMsgRes = await api.post(`/conversations/${selectedConv}/messages`, {
+          conversation_id: selectedConv,
+          role: "agent",
+          content: iaAnswer
+        });
+        // Update with server-assigned id
+        setMessages(prev => prev.map((m, i) =>
+          i === streamingMsgIdx.current ? { ...m, id: agentMsgRes.data.message_id } : m
+        ));
+      } catch (e) {}
+
+      // Refresh conversation list for updated titles
       await loadConversations(agentId, false, false);
     } catch (e) {
       const errorMsg = { role: "agent", content: t('chat:messages.aiError') };
@@ -701,7 +756,10 @@ const handleDeleteConversation = async (convId) => {
                     // Default rendering for user/agent/system messages without URL
                     <>
                       {msg.role === "agent" ? (
-                        <MarkdownText>{msg.content}</MarkdownText>
+                        <>
+                          <MarkdownText>{msg.content}</MarkdownText>
+                          {msg.streaming && <span className="inline-block w-2 h-5 bg-blue-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
+                        </>
                       ) : (
                         <div className="leading-relaxed whitespace-pre-line">{msg.content}</div>
                       )}
@@ -731,8 +789,8 @@ const handleDeleteConversation = async (convId) => {
             );
           })}
 
-          {/* Indicateur de typing amélioré */}
-          {loading && ((messages.length > 0 && messages[messages.length-1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
+          {/* Indicateur de typing amélioré - hide when streaming message is visible */}
+          {loading && !messages.some(m => m.streaming) && ((messages.length > 0 && messages[messages.length-1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
             <div className="flex justify-start animate-fade-in">
               <div className="rounded-2xl px-5 py-4 shadow-subtle max-w-[70%] bg-white text-gray-900 rounded-bl-none border border-gray-200 flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-blue-100">

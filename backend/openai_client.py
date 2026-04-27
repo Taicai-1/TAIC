@@ -10,18 +10,30 @@ try:
     from gemini_client import generate_text as gemini_generate_text
 except Exception:
     gemini_generate_text = None
+try:
+    from gemini_client import generate_text_stream as gemini_generate_text_stream
+except Exception:
+    gemini_generate_text_stream = None
 
 # Optional import for Mistral client
 try:
     from mistral_client import generate_text as mistral_generate_text
 except Exception:
     mistral_generate_text = None
+try:
+    from mistral_client import generate_text_stream as mistral_generate_text_stream
+except Exception:
+    mistral_generate_text_stream = None
 
 # Optional import for Perplexity client
 try:
     from perplexity_client import generate_text as perplexity_generate_text
 except Exception:
     perplexity_generate_text = None
+try:
+    from perplexity_client import generate_text_stream as perplexity_generate_text_stream
+except Exception:
+    perplexity_generate_text_stream = None
 
 
 def _messages_to_prompt(messages: list) -> str:
@@ -262,6 +274,77 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
             else:
                 logger.error("All chat response attempts failed")
                 raise e
+
+
+def get_chat_response_stream(messages: list, model_id: str = None, gemini_only: bool = False):
+    """Stream chat response tokens from the appropriate LLM provider.
+
+    Same routing logic as get_chat_response() but yields text chunks
+    instead of returning the full response.
+    """
+    model = model_id if model_id else DEFAULT_MODEL
+    max_tokens = DEFAULT_MAX_TOKENS
+
+    # Route to Gemini
+    if isinstance(model, str) and model.startswith("gemini:"):
+        if gemini_generate_text_stream:
+            model_short = model.split(":", 1)[1]
+            prompt = _messages_to_prompt(messages)
+            try:
+                yield from gemini_generate_text_stream(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
+                return
+            except Exception as e:
+                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
+                if bool(gemini_only) or env_gemini_only:
+                    raise
+                logger.warning(f"Gemini stream failed (falling back to OpenAI): {e}")
+                model = DEFAULT_MODEL
+        else:
+            logger.warning(f"Gemini stream client not available; falling back to OpenAI ({DEFAULT_MODEL}).")
+            model = DEFAULT_MODEL
+
+    # Route to Mistral
+    if isinstance(model, str) and model.startswith("mistral:"):
+        if mistral_generate_text_stream:
+            model_short = model.split(":", 1)[1]
+            prompt = _messages_to_prompt(messages)
+            try:
+                yield from mistral_generate_text_stream(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
+                return
+            except Exception as e:
+                logger.error(f"Mistral stream failed: {e}, falling back to OpenAI")
+                if gemini_only:
+                    raise
+                model = DEFAULT_MODEL
+        else:
+            logger.warning(f"Mistral stream client not available; falling back to OpenAI ({DEFAULT_MODEL}).")
+            model = DEFAULT_MODEL
+
+    # Route to Perplexity
+    if isinstance(model, str) and model.startswith("perplexity:"):
+        if perplexity_generate_text_stream:
+            model_short = model.split(":", 1)[1]
+            prompt = _messages_to_prompt(messages)
+            try:
+                yield from perplexity_generate_text_stream(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
+                return
+            except Exception as e:
+                logger.error(f"Perplexity stream failed: {e}, falling back to OpenAI")
+                if gemini_only:
+                    raise
+                model = DEFAULT_MODEL
+        else:
+            logger.warning(f"Perplexity stream client not available; falling back to OpenAI ({DEFAULT_MODEL}).")
+            model = DEFAULT_MODEL
+
+    # Default: OpenAI streaming
+    logger.info(f"[LLM STREAM] OpenAI ({model}) - sending streaming request")
+    response = client.chat.completions.create(
+        model=model, messages=messages, max_tokens=max_tokens, temperature=0.7, stream=True
+    )
+    for chunk in response:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
 
 def get_chat_response_structured(

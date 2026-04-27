@@ -110,3 +110,49 @@ def generate_text(
 
     logger.warning(f"Unexpected Perplexity response shape: {response}")
     return str(response)
+
+
+def generate_text_stream(
+    prompt: str,
+    model_name: str = "sonar",
+    temperature: float = 0.7,
+    max_tokens: int = 16000,
+):
+    """Generate text using the Perplexity API in streaming mode (OpenAI-compatible).
+
+    Yields text chunks. Citations are appended at the end if available.
+    """
+    if isinstance(model_name, str) and model_name.startswith("perplexity:"):
+        model_short = model_name.split(":", 1)[1]
+    else:
+        model_short = model_name or ""
+
+    ms_lower = model_short.lower() if isinstance(model_short, str) else ""
+    if ms_lower in ALIASES:
+        model_short = ALIASES[ms_lower]
+
+    client = _get_client()
+    logger.info(f"Calling Perplexity chat stream: model={model_short}")
+
+    stream = client.chat.completions.create(
+        model=model_short,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=True,
+    )
+
+    citations = None
+    for chunk in stream:
+        # Capture citations from the last chunk if available
+        if hasattr(chunk, "citations") and chunk.citations:
+            citations = chunk.citations
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+
+    # Yield citations at the end if present
+    if citations and isinstance(citations, list):
+        sources = "\n\n**Sources :**\n"
+        for i, url in enumerate(citations, 1):
+            sources += f"- [{i}. {url}]({url})\n"
+        yield sources

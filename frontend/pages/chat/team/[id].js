@@ -9,6 +9,7 @@ import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useAuth } from '../../../hooks/useAuth';
 import api from '../../../lib/api';
+import { streamAsk } from '../../../lib/streamingFetch';
 
 export default function TeamChatPage() {
   const { t } = useTranslation(['chat', 'teams', 'common', 'errors']);
@@ -23,6 +24,7 @@ export default function TeamChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
+  const abortRef = useRef(null);
   const [creatingConv, setCreatingConv] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState(null);
   const [editedTitle, setEditedTitle] = useState("");
@@ -154,48 +156,103 @@ export default function TeamChatPage() {
       });
       const resHist = await api.get(`/conversations/${selectedConv}/messages`);
       const history = resHist.data.map(m => ({ role: m.role, content: m.content }));
-      const resAsk = await api.post(`/ask`, {
-        question: userMessage,
-        team_id: teamId,
-        history: history
+
+      // Add a placeholder agent message for streaming
+      const streamingMsgIdx = { current: null };
+      setMessages(prev => {
+        streamingMsgIdx.current = prev.length;
+        return [...prev, { role: "agent", content: "", streaming: true }];
       });
-      const iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
-      await api.post(`/conversations/${selectedConv}/messages`, {
-        conversation_id: selectedConv,
-        role: "agent",
-        content: iaAnswer
-      });
-      const actionResults = resAsk.data.action_results || [];
-      for (const ar of actionResults) {
-        try {
-          let content = "";
-          if (ar && ar.result) {
-            if (ar.result.status === "ok" && ar.result.result) {
-              const r = ar.result.result;
-              if (r.url) {
-                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${r.url}`;
-              } else if (r.document_id) {
-                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${t('chat:messages.documentId')} ${r.document_id}`;
-              } else if (r.path) {
-                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${t('chat:messages.fileCreated')} ${r.path}`;
-              } else {
-                content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(r)}`;
-              }
-            } else if (ar.result.status === "error") {
-              content = `${t('chat:messages.actionError', { action: ar.action })}: ${ar.result.error || JSON.stringify(ar.result)}`;
-            } else {
-              content = `Action ${ar.action}: ${JSON.stringify(ar.result)}`;
-            }
-          } else {
-            content = `Action ${ar.action}: ${JSON.stringify(ar)}`;
-          }
-          await api.post(`/conversations/${selectedConv}/messages`, {
-            conversation_id: selectedConv,
-            role: "system",
-            content: content
-          });
-        } catch (e) {}
+
+      let streamSuccess = false;
+      let iaAnswer = "";
+
+      try {
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        await streamAsk('/ask-stream', {
+          question: userMessage,
+          team_id: teamId,
+          history: history
+        }, {
+          onToken: (text) => {
+            iaAnswer += text;
+            setMessages(prev => prev.map((m, i) =>
+              i === streamingMsgIdx.current ? { ...m, content: iaAnswer } : m
+            ));
+          },
+          onDone: (data) => {
+            iaAnswer = data.full_text || iaAnswer;
+            setMessages(prev => prev.map((m, i) =>
+              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+            ));
+            streamSuccess = true;
+          },
+          onError: () => {}
+        }, controller.signal);
+
+        abortRef.current = null;
+      } catch {
+        // Streaming failed, will fallback
       }
+
+      // Fallback to non-streaming /ask
+      if (!streamSuccess) {
+        try {
+          const resAsk = await api.post('/ask', {
+            question: userMessage,
+            team_id: teamId,
+            history: history
+          });
+          iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
+          setMessages(prev => prev.map((m, i) =>
+            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+          ));
+
+          const actionResults = resAsk.data.action_results || [];
+          for (const ar of actionResults) {
+            try {
+              let content = "";
+              if (ar && ar.result) {
+                if (ar.result.status === "ok" && ar.result.result) {
+                  const r = ar.result.result;
+                  if (r.url) content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${r.url}`;
+                  else if (r.document_id) content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${t('chat:messages.documentId')} ${r.document_id}`;
+                  else if (r.path) content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${t('chat:messages.fileCreated')} ${r.path}`;
+                  else content = `${t('chat:messages.actionExecuted', { action: ar.action })}: ${JSON.stringify(r)}`;
+                } else if (ar.result.status === "error") {
+                  content = `${t('chat:messages.actionError', { action: ar.action })}: ${ar.result.error || JSON.stringify(ar.result)}`;
+                } else {
+                  content = `Action ${ar.action}: ${JSON.stringify(ar.result)}`;
+                }
+              } else {
+                content = `Action ${ar.action}: ${JSON.stringify(ar)}`;
+              }
+              await api.post(`/conversations/${selectedConv}/messages`, {
+                conversation_id: selectedConv,
+                role: "system",
+                content: content
+              });
+            } catch (e) {}
+          }
+        } catch {
+          iaAnswer = t('chat:messages.aiError');
+          setMessages(prev => prev.map((m, i) =>
+            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+          ));
+        }
+      }
+
+      // Save agent message to backend
+      try {
+        await api.post(`/conversations/${selectedConv}/messages`, {
+          conversation_id: selectedConv,
+          role: "agent",
+          content: iaAnswer
+        });
+      } catch (e) {}
+
       await selectConversation(selectedConv);
     } catch (e) {
       toast.error(t('teams:chat.sendError'));
@@ -420,6 +477,7 @@ export default function TeamChatPage() {
                       >
                         {msg.content}
                       </ReactMarkdown>
+                      {msg.streaming && <span className="inline-block w-2 h-5 bg-blue-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
                     </div>
                     {isLastAgentMsg && (
                       <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
@@ -449,7 +507,7 @@ export default function TeamChatPage() {
               );
             })
           )}
-          {loading && ((messages.length > 0 && messages[messages.length - 1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
+          {loading && !messages.some(m => m.streaming) && ((messages.length > 0 && messages[messages.length - 1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
             <div className="flex justify-start animate-fade-in">
               <div className="rounded-2xl px-5 py-4 shadow-subtle max-w-[75%] bg-white text-gray-900 rounded-bl-none border border-gray-100 flex items-center gap-3">
                 <Bot className="w-6 h-6 text-blue-600 animate-pulse" />

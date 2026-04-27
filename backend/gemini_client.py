@@ -293,6 +293,111 @@ def generate_text(
         ) from e
 
 
+def generate_text_stream(
+    prompt: str,
+    model_name: str = "gemini-2.0-flash",
+    temperature: float = 0.7,
+    max_tokens: int = 16000,
+    timeout: int = 120,
+):
+    """Stream text from Vertex AI Gemini using the :streamGenerateContent SSE endpoint.
+
+    Yields text chunks as they arrive.
+    """
+    import json as _json
+
+    if isinstance(model_name, str) and model_name.startswith("gemini:"):
+        model_short = model_name.split(":", 1)[1]
+    else:
+        model_short = model_name or ""
+
+    ALIASES = {
+        "flash-lite": "gemini-2.0-flash",
+        "gemini-flash-lite": "gemini-2.0-flash",
+        "gemini-2.0-flash": "gemini-2.0-flash",
+        "chat-bison@001": "chat-bison@001",
+        "default": os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.0-flash"),
+        "": os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.0-flash"),
+    }
+
+    if isinstance(model_short, str):
+        ms_lower = model_short.lower()
+        if ms_lower in ALIASES:
+            model_short = ALIASES[ms_lower]
+
+    project, location = _get_project_and_location()
+
+    import google.auth
+    from google.auth.transport.requests import AuthorizedSession
+
+    credentials, proj = google.auth.default()
+    if not project:
+        project = proj
+
+    if not credentials:
+        raise Exception("No application default credentials available")
+
+    session = AuthorizedSession(credentials)
+
+    ALIAS_MAP = {
+        "gemini-2.0-flash-lite": "gemini-2.0-flash-lite-001",
+        "gemini-2.0-flash": "gemini-2.0-flash-001",
+        "gemini-1.5-flash": "gemini-1.5-flash@001",
+        "gemini-2.5-flash": "gemini-2.0-flash-001",
+    }
+
+    resolved_model = ALIAS_MAP.get(model_short, model_short)
+    if (
+        resolved_model
+        and resolved_model.lower().startswith("gemini")
+        and "@" not in resolved_model
+        and "-" not in resolved_model
+    ):
+        resolved_model = f"{resolved_model}@001"
+
+    predict_project = project or proj or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not predict_project:
+        raise RuntimeError("Unable to determine GCP project for Vertex streamGenerateContent URL")
+
+    url = (
+        f"https://{location}-aiplatform.googleapis.com/v1/projects/{predict_project}"
+        f"/locations/{location}/publishers/google/models/{resolved_model}"
+        f":streamGenerateContent?alt=sse"
+    )
+
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
+    }
+
+    logger.info(f"Calling Vertex streamGenerateContent: model={resolved_model}")
+
+    resp = session.post(url, json=body, timeout=timeout, stream=True)
+    resp.raise_for_status()
+
+    # Parse SSE lines from the streaming response
+    for line in resp.iter_lines():
+        if not line:
+            continue
+        decoded = line.decode("utf-8") if isinstance(line, bytes) else line
+        if decoded.startswith("data: "):
+            json_str = decoded[6:]
+            try:
+                data = _json.loads(json_str)
+                candidates = data.get("candidates")
+                if isinstance(candidates, list) and len(candidates) > 0:
+                    cont = candidates[0].get("content")
+                    if isinstance(cont, dict):
+                        parts = cont.get("parts")
+                        if isinstance(parts, list) and len(parts) > 0:
+                            text = parts[0].get("text")
+                            if text:
+                                yield text
+            except Exception as e:
+                logger.debug(f"Could not parse Gemini SSE chunk: {e}")
+                continue
+
+
 def generate_raw(
     prompt: str,
     model_name: str = "gemini-2.0-flash",

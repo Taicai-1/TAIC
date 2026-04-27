@@ -105,3 +105,38 @@ def generate_text(
 
     logger.warning(f"Unexpected Mistral response shape: {response}")
     return str(response)
+
+
+def generate_text_stream(
+    prompt: str,
+    model_name: str = "mistral-small-latest",
+    temperature: float = 0.7,
+    max_tokens: int = 16000,
+):
+    """Generate text using the Mistral API in streaming mode.
+
+    Yields text chunks as they arrive from the API.
+    """
+    if isinstance(model_name, str) and model_name.startswith("mistral:"):
+        model_short = model_name.split(":", 1)[1]
+    else:
+        model_short = model_name or ""
+
+    ms_lower = model_short.lower() if isinstance(model_short, str) else ""
+    if ms_lower in ALIASES:
+        model_short = ALIASES[ms_lower]
+
+    client = _get_client()
+    logger.info(f"Calling Mistral chat stream: model={model_short}")
+
+    stream = client.chat.stream(
+        model=model_short,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+    for event in stream:
+        chunk = event.data.choices[0].delta.content
+        if chunk:
+            yield chunk

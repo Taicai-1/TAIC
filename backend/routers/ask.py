@@ -17,7 +17,7 @@ from helpers.agent_helpers import resolve_model_id, _user_can_access_agent
 from helpers.rate_limiting import _check_api_rate_limit, _API_ASK_LIMIT
 from helpers.tenant import _get_caller_company_id
 from mistral_embeddings import get_embedding
-from rag_engine import get_answer, get_answer_with_files
+from rag_engine import get_answer, get_answer_with_files, get_answer_stream
 from redis_client import get_cached_user
 from utils import logger as app_logger, event_tracker
 from utils_ai import normalize_model_output, extract_json_object_from_text
@@ -175,6 +175,150 @@ async def ask_question(
     except Exception as e:
         logger.error(f"Error answering question for user {user_id}: {e}")
         return {"answer": "Désolé, une erreur s'est produite lors du traitement de votre question. Veuillez réessayer."}
+
+
+@router.post("/ask-stream")
+async def ask_question_stream(
+    request: QuestionRequestValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Streaming version of /ask. Returns Server-Sent Events with token-by-token response."""
+    from streaming_response import sse_event
+
+    if not _check_api_rate_limit(user_id, "ask", _API_ASK_LIMIT):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+
+    # Retrieve conversation history
+    history = []
+    if hasattr(request, "conversation_id") and request.conversation_id:
+        msgs = (
+            db.query(Message)
+            .filter(Message.conversation_id == request.conversation_id)
+            .order_by(Message.created_at.asc())
+            .all()
+        )
+        history = [{"role": m.role, "content": m.content} for m in msgs]
+    elif hasattr(request, "history") and request.history:
+        history = request.history
+
+    def event_generator():
+        try:
+            agent = None
+            model_id = None
+
+            if request.agent_id:
+                agent = _user_can_access_agent(int(user_id), request.agent_id, db)
+                model_id = agent.finetuned_model_id or resolve_model_id(agent)
+                question_finale = request.question
+                prompt = f"Sachant le contexte et la discussion en cours, réponds à cette question : {question_finale}"
+                yield from get_answer_stream(
+                    prompt,
+                    int(user_id),
+                    db,
+                    selected_doc_ids=request.selected_documents,
+                    agent_id=request.agent_id,
+                    history=history,
+                    model_id=model_id,
+                    company_id=agent.company_id,
+                )
+            elif request.team_id:
+                import numpy as np
+
+                team = db.query(Team).filter(Team.id == request.team_id).first()
+                if not team:
+                    yield sse_event("error", {"message": "Team not found", "code": "not_found"})
+                    return
+                if team.user_id != int(user_id):
+                    yield sse_event("error", {"message": "Access denied", "code": "forbidden"})
+                    return
+                leader = db.query(Agent).filter(Agent.id == team.leader_agent_id).first()
+                if not leader:
+                    yield sse_event("error", {"message": "Leader agent not found", "code": "not_found"})
+                    return
+
+                all_sub_agent_ids = []
+                if team.action_agent_ids:
+                    try:
+                        action_ids = (
+                            json.loads(team.action_agent_ids)
+                            if isinstance(team.action_agent_ids, str)
+                            else team.action_agent_ids
+                        )
+                        all_sub_agent_ids.extend(action_ids)
+                    except Exception:
+                        pass
+
+                sub_agents = []
+                if all_sub_agent_ids:
+                    sub_agents = db.query(Agent).filter(Agent.id.in_(all_sub_agent_ids)).all()
+
+                best_agent = None
+                best_score = -1
+
+                if sub_agents:
+                    try:
+                        prompt_embedding = get_embedding(request.question)
+                        for a in sub_agents:
+                            if not a.embedding:
+                                continue
+                            try:
+                                emb = np.array(json.loads(a.embedding))
+                                score = float(
+                                    np.dot(prompt_embedding, emb)
+                                    / (np.linalg.norm(prompt_embedding) * np.linalg.norm(emb))
+                                )
+                                if score > best_score:
+                                    best_score = score
+                                    best_agent = a
+                            except Exception:
+                                continue
+                    except Exception as e:
+                        logger.warning(f"Error during semantic matching: {e}")
+
+                if not best_agent:
+                    best_agent = leader
+
+                if best_agent.finetuned_model_id:
+                    model_id = best_agent.finetuned_model_id
+                else:
+                    atype = getattr(best_agent, "type", "conversationnel")
+                    if atype == "recherche_live":
+                        model_id = os.getenv("PERPLEXITY_MODEL", "perplexity:sonar")
+                    else:
+                        model_id = os.getenv("MISTRAL_MODEL", "mistral:mistral-small-latest")
+
+                prompt = f"Sachant le contexte et la discussion en cours, réponds à cette question : {request.question}"
+
+                # If using a sub-agent, prepend routing info
+                if best_agent.id != leader.id:
+                    prefix = f"Pour répondre à votre question, j'ai fait appel à l'agent {best_agent.name}. Voici sa réponse :\n"
+                    yield sse_event("token", {"t": prefix})
+
+                yield from get_answer_stream(
+                    prompt,
+                    int(user_id),
+                    db,
+                    selected_doc_ids=request.selected_documents,
+                    agent_id=best_agent.id,
+                    history=history,
+                    model_id=model_id,
+                    company_id=best_agent.company_id,
+                )
+            else:
+                yield sse_event("error", {"message": "Aucun agent ou équipe valide fourni.", "code": "bad_request"})
+
+        except Exception as e:
+            logger.error(f"Error in ask-stream: {e}")
+            yield sse_event("error", {"message": str(e), "code": "llm_error"})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 _ACTIONNABLE_REMOVED = """

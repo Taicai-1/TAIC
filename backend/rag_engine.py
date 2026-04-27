@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.orm import Session
 from mistral_embeddings import get_embedding, get_embedding_fast
-from openai_client import get_chat_response
+from openai_client import get_chat_response, get_chat_response_stream
 from database import Document, DocumentChunk, User, Agent
 from file_loader import load_text_from_pdf, chunk_text
 from file_generator import FileGenerator
@@ -430,6 +430,203 @@ def get_answer(
     except Exception as e:
         logger.error(f"Error getting answer: {e}")
         raise Exception(f"Erreur lors du traitement de votre question avec l'API OpenAI : {str(e)}")
+
+
+def get_answer_stream(
+    question: str,
+    user_id: int,
+    db: Session,
+    selected_doc_ids: List[int] = None,
+    agent_id: int = None,
+    history: list = None,
+    model_id: str = None,
+    company_id: int = None,
+):
+    """Streaming version of get_answer(). Yields SSE-formatted events.
+
+    The RAG pipeline (embedding, vector search, context assembly) runs synchronously.
+    Only the final LLM generation is streamed token-by-token.
+    """
+    from streaming_response import sse_event
+
+    try:
+        # --- Document retrieval (same as get_answer) ---
+        if selected_doc_ids:
+            q = db.query(Document).filter(Document.id.in_(selected_doc_ids))
+            if agent_id:
+                q = q.filter(Document.agent_id == agent_id)
+            else:
+                q = q.filter(Document.user_id == user_id)
+            q = q.filter(Document.document_type != "traceability")
+            user_docs = q.all()
+        else:
+            if agent_id:
+                user_docs = (
+                    db.query(Document)
+                    .filter(Document.agent_id == agent_id, Document.document_type != "traceability")
+                    .all()
+                )
+            else:
+                user_docs = (
+                    db.query(Document)
+                    .filter(Document.user_id == user_id, Document.document_type != "traceability")
+                    .all()
+                )
+
+        # Detect document mention
+        mentioned_doc_id = None
+        if user_docs and not selected_doc_ids:
+            mentioned_doc_id = detect_document_mention(question, user_docs)
+            if mentioned_doc_id:
+                selected_doc_ids = [mentioned_doc_id]
+                user_docs = [doc for doc in user_docs if doc.id == mentioned_doc_id]
+
+        # Agent context
+        agent = None
+        contexte_agent = ""
+        if agent_id:
+            agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            agent = db.query(Agent).filter(Agent.user_id == user_id).first()
+        contexte_agent = agent.contexte if agent and agent.contexte else ""
+
+        # Visuel agents: no streaming (image generation), yield complete response
+        if agent and getattr(agent, "type", "") == "visuel":
+            style_prefix = f"{agent.contexte.strip()}. " if (agent.contexte or "").strip() else ""
+            image_bytes = generate_image(style_prefix + question)
+            image_url = upload_generated_image(image_bytes, agent.id)
+            full = f"![Image générée]({image_url})"
+            yield sse_event("token", {"t": full})
+            yield sse_event("done", {"full_text": full})
+            return
+
+        # Neo4j context
+        if agent and getattr(agent, "neo4j_enabled", False) and getattr(agent, "neo4j_person_name", None):
+            try:
+                from neo4j_client import get_person_context_cached
+
+                owner = db.query(User).filter(User.id == agent.user_id).first()
+                if owner and owner.company_id:
+                    neo4j_context = get_person_context_cached(
+                        owner.company_id, agent.neo4j_person_name, agent.neo4j_depth or 1
+                    )
+                    if neo4j_context:
+                        contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
+            except Exception as e:
+                logger.warning(f"Neo4j context retrieval failed (continuing without): {e}")
+
+        # Available docs list
+        available_docs_list = ""
+        if user_docs:
+            available_docs_list = "\n\nDocuments disponibles dans ma base de connaissances:\n"
+            for doc in user_docs:
+                doc_name = doc.filename.replace(".pdf", "").replace(".txt", "").replace(".doc", "").replace(".docx", "")
+                available_docs_list += f"- {doc_name}\n"
+
+        # --- Build messages ---
+        if not user_docs:
+            if selected_doc_ids:
+                msg = "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection."
+                yield sse_event("token", {"t": msg})
+                yield sse_event("done", {"full_text": msg})
+                return
+
+            messages = []
+            system_content = contexte_agent if contexte_agent else ""
+            if system_content:
+                messages.append({"role": "system", "content": system_content})
+            if history:
+                for msg in history[-10:]:
+                    role = msg.get("role", "user")
+                    if role == "agent":
+                        role = "assistant"
+                    elif role == "system":
+                        continue
+                    messages.append({"role": role, "content": msg.get("content", "")})
+            if not history or history[-1].get("content", "") != question:
+                messages.append({"role": "user", "content": question})
+        else:
+            # RAG: embedding + search
+            query_embedding = get_embedding(question)
+            top_k = 20 if mentioned_doc_id else 8
+            context_results = search_similar_texts_for_user(
+                query_embedding, user_id, db, top_k=top_k,
+                selected_doc_ids=selected_doc_ids, agent_id=agent_id, company_id=company_id,
+            )
+
+            context_by_document = {}
+            for result in context_results:
+                doc_name = result["document_name"]
+                if doc_name not in context_by_document:
+                    context_by_document[doc_name] = []
+                context_by_document[doc_name].append(result["text"])
+
+            MAX_CONTEXT_CHARS = 50000
+            enhanced_context = ""
+            for doc_name, contexts in context_by_document.items():
+                section = f"\n--- Extraits du document '{doc_name}' ---\n"
+                for i, context in enumerate(contexts, 1):
+                    section += f"Extrait {i}: {context}\n"
+                if len(enhanced_context) + len(section) > MAX_CONTEXT_CHARS:
+                    enhanced_context += "\n[...contexte tronqué pour respecter les limites...]"
+                    break
+                enhanced_context += section
+
+            messages = []
+            system_content = ""
+            if contexte_agent:
+                system_content = contexte_agent
+            if available_docs_list:
+                system_content = (system_content + available_docs_list) if system_content else available_docs_list.strip()
+            if enhanced_context:
+                rag_section = f"\n\nExtraits de documents pertinents :\n{enhanced_context}"
+                system_content = (system_content + rag_section) if system_content else f"Extraits de documents pertinents :\n{enhanced_context}"
+            if system_content:
+                messages.append({"role": "system", "content": system_content})
+
+            if history:
+                for msg in history[-10:]:
+                    role = msg.get("role", "user")
+                    if role == "agent":
+                        role = "assistant"
+                    elif role == "system":
+                        continue
+                    messages.append({"role": role, "content": msg.get("content", "")})
+            if not history or history[-1].get("content", "") != question:
+                messages.append({"role": "user", "content": question})
+
+        # --- Check RAG cache ---
+        doc_ids_for_cache = selected_doc_ids or ([d.id for d in user_docs] if user_docs else [])
+        agent_type_str = getattr(agent, "type", "conversationnel") if agent else "conversationnel"
+        cache_key = _rag_cache_key(user_id, question, doc_ids_for_cache, agent_type_str)
+        cached = _get_rag_cache(cache_key)
+        if cached is not None:
+            logger.info("Stream: returning cached answer")
+            cached_text = cached if isinstance(cached, str) else cached.get("answer", str(cached))
+            yield sse_event("token", {"t": cached_text})
+            yield sse_event("done", {"full_text": cached_text})
+            return
+
+        # --- Stream from LLM ---
+        gemini_only_flag = False
+        try:
+            gemini_only_flag = bool(agent and getattr(agent, "type", "") == "actionnable")
+        except Exception:
+            pass
+
+        full_text = ""
+        for chunk in get_chat_response_stream(messages, model_id=model_id, gemini_only=gemini_only_flag):
+            full_text += chunk
+            yield sse_event("token", {"t": chunk})
+
+        yield sse_event("done", {"full_text": full_text})
+
+        # Cache the result
+        _set_rag_cache(cache_key, full_text)
+
+    except Exception as e:
+        logger.error(f"Error in get_answer_stream: {e}")
+        yield sse_event("error", {"message": str(e), "code": "llm_error"})
 
 
 def search_similar_texts_for_user(
