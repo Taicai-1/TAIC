@@ -580,9 +580,9 @@ const handleDeleteConversation = async (convId) => {
   );
 
   return (
-    <div className="min-h-screen flex flex-row bg-gray-50">
+    <div className="h-screen flex flex-row bg-gray-50 overflow-hidden">
       {/* Colonne gauche : liste des conversations - Version améliorée */}
-      <div className="w-80 min-w-[18rem] max-w-xs flex flex-col border-r border-gray-200 bg-white shadow-subtle">
+      <div className="w-80 min-w-[18rem] max-w-xs h-full flex flex-col border-r border-gray-200 bg-white shadow-subtle overflow-hidden">
         {/* Header avec profil agent */}
         <div className="p-6 border-b border-gray-200 bg-gradient-to-br from-blue-600 via-purple-600 to-blue-600 relative overflow-hidden">
           {/* Subtle overlay */}

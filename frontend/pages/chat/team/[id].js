@@ -320,12 +320,12 @@ export default function TeamChatPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-gray-50">
+    <div className="h-screen flex flex-col md:flex-row bg-gray-50 overflow-hidden">
 
       <Toaster position="top-right" />
 
       {/* Sidebar: Conversations */}
-      <div className="w-full md:w-80 md:min-w-[20rem] md:max-w-xs flex flex-col bg-white border-r border-gray-200 shadow-card">
+      <div className="w-full md:w-80 md:min-w-[20rem] md:max-w-xs h-full flex flex-col bg-white border-r border-gray-200 shadow-card overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 p-6 shadow-card border-b border-purple-700">
           <div className="flex items-center justify-between mb-4">
