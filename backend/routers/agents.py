@@ -325,27 +325,33 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
 async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """List teams for the current user."""
     try:
-        # Return teams created by the current user
         teams = db.query(Team).filter(Team.user_id == int(user_id)).order_by(Team.created_at.desc()).all()
-        out = []
+
+        # Batch-load all referenced agent IDs across all teams (avoids N+1)
+        all_agent_ids = set()
         for t in teams:
-            # Try to resolve leader and action agent names for convenience
-            leader_name = None
-            action_agent_names = []
-            try:
-                leader = db.query(Agent).filter(Agent.id == t.leader_agent_id).first()
-                if leader:
-                    leader_name = leader.name
-            except Exception:
-                leader_name = None
+            all_agent_ids.add(t.leader_agent_id)
             try:
                 ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
-                for aid in ids:
-                    a = db.query(Agent).filter(Agent.id == int(aid)).first()
-                    if a:
-                        action_agent_names.append(a.name)
-            except Exception:
-                action_agent_names = []
+                all_agent_ids.update(int(aid) for aid in ids)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
+        agent_lookup = {}
+        if all_agent_ids:
+            agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
+            agent_lookup = {a.id: a.name for a in agents}
+
+        out = []
+        for t in teams:
+            leader_name = agent_lookup.get(t.leader_agent_id)
+            action_ids = []
+            action_agent_names = []
+            try:
+                action_ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
+                action_agent_names = [agent_lookup[int(aid)] for aid in action_ids if int(aid) in agent_lookup]
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
 
             out.append(
                 {
@@ -354,7 +360,7 @@ async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends
                     "contexte": t.contexte,
                     "leader_agent_id": t.leader_agent_id,
                     "leader_name": leader_name,
-                    "action_agent_ids": json.loads(t.action_agent_ids) if t.action_agent_ids else [],
+                    "action_agent_ids": action_ids,
                     "action_agent_names": action_agent_names,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
                 }
@@ -437,22 +443,23 @@ async def get_team(team_id: int, user_id: str = Depends(verify_token), db: Sessi
         t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
         if not t:
             raise HTTPException(status_code=404, detail="Team not found")
-        leader_name = None
+
+        # Batch-load leader + action agents in one query (avoids N+1)
+        all_agent_ids = {t.leader_agent_id}
+        action_ids = []
         try:
-            leader = db.query(Agent).filter(Agent.id == t.leader_agent_id).first()
-            if leader:
-                leader_name = leader.name
-        except Exception:
-            leader_name = None
-        action_agent_names = []
-        try:
-            ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
-            for aid in ids:
-                a = db.query(Agent).filter(Agent.id == int(aid)).first()
-                if a:
-                    action_agent_names.append(a.name)
-        except Exception:
-            action_agent_names = []
+            action_ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
+            all_agent_ids.update(int(aid) for aid in action_ids)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+        agent_lookup = {}
+        if all_agent_ids:
+            agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
+            agent_lookup = {a.id: a.name for a in agents}
+
+        leader_name = agent_lookup.get(t.leader_agent_id)
+        action_agent_names = [agent_lookup[int(aid)] for aid in action_ids if int(aid) in agent_lookup]
 
         return {
             "team": {
@@ -461,7 +468,7 @@ async def get_team(team_id: int, user_id: str = Depends(verify_token), db: Sessi
                 "contexte": t.contexte,
                 "leader_agent_id": t.leader_agent_id,
                 "leader_name": leader_name,
-                "action_agent_ids": json.loads(t.action_agent_ids) if t.action_agent_ids else [],
+                "action_agent_ids": action_ids,
                 "action_agent_names": action_agent_names,
                 "created_at": t.created_at.isoformat() if t.created_at else None,
             }

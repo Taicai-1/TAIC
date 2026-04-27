@@ -20,9 +20,7 @@ from database import (
     SessionLocal,
     User,
     engine,
-    ensure_columns,
     ensure_pgvector,
-    init_db,
     migrate_existing_company_memberships,
     set_current_company_id,
 )
@@ -169,14 +167,21 @@ app.mount("/profile_photos", StaticFiles(directory="profile_photos"), name="prof
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database and create tables on startup."""
+    """Initialize database and run Alembic migrations on startup."""
     try:
         logger.info("Initializing database...")
-        init_db()
-        logger.info("Creating database tables...")
+        # Create tables for brand-new databases (Alembic needs the schema to exist)
         Base.metadata.create_all(bind=engine)
-        ensure_columns()
+        # pgvector extension must exist before Alembic migrations touch embedding columns
         ensure_pgvector()
+        # Run Alembic migrations to apply any pending schema changes
+        from alembic.config import Config as AlembicConfig
+        from alembic import command as alembic_command
+
+        alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+        alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
+        alembic_command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations applied successfully")
         migrate_existing_company_memberships()
         logger.info("Database initialization completed successfully")
     except Exception as e:

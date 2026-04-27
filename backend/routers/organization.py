@@ -558,17 +558,20 @@ async def list_company_members(user_id: str = Depends(verify_token), db: Session
 
     membership = require_role(int(user_id), db, "admin")
 
-    members = (
-        db.query(CompanyMembership, User)
+    # Subquery for agent counts per user (avoids N+1 COUNT per member)
+    agent_count_sq = db.query(Agent.user_id, func.count(Agent.id).label("cnt")).group_by(Agent.user_id).subquery()
+
+    rows = (
+        db.query(CompanyMembership, User, func.coalesce(agent_count_sq.c.cnt, 0))
         .join(User, CompanyMembership.user_id == User.id)
+        .outerjoin(agent_count_sq, User.id == agent_count_sq.c.user_id)
         .filter(CompanyMembership.company_id == membership.company_id)
         .order_by(CompanyMembership.joined_at.asc())
         .all()
     )
 
     result = []
-    for m, u in members:
-        agent_count = db.query(Agent).filter(Agent.user_id == u.id).count()
+    for m, u, agent_count in rows:
         result.append(
             {
                 "id": m.id,
@@ -810,18 +813,28 @@ async def list_company_agents(user_id: str = Depends(verify_token), db: Session 
         for m in db.query(CompanyMembership).filter(CompanyMembership.company_id == membership.company_id).all()
     ]
 
-    agents = (
-        db.query(Agent, User)
+    from sqlalchemy import func
+
+    # Single query with subquery counts (avoids N+1 per-agent COUNT queries)
+    doc_count_sq = (
+        db.query(Document.agent_id, func.count(Document.id).label("cnt")).group_by(Document.agent_id).subquery()
+    )
+    share_count_sq = (
+        db.query(AgentShare.agent_id, func.count(AgentShare.id).label("cnt")).group_by(AgentShare.agent_id).subquery()
+    )
+
+    rows = (
+        db.query(Agent, User, func.coalesce(doc_count_sq.c.cnt, 0), func.coalesce(share_count_sq.c.cnt, 0))
         .join(User, Agent.user_id == User.id)
+        .outerjoin(doc_count_sq, Agent.id == doc_count_sq.c.agent_id)
+        .outerjoin(share_count_sq, Agent.id == share_count_sq.c.agent_id)
         .filter(Agent.user_id.in_(member_ids))
         .order_by(Agent.created_at.desc())
         .all()
     )
 
     result = []
-    for agent, owner in agents:
-        doc_count = db.query(Document).filter(Document.agent_id == agent.id).count()
-        share_count = db.query(AgentShare).filter(AgentShare.agent_id == agent.id).count()
+    for agent, owner, doc_count, share_count in rows:
         result.append(
             {
                 "id": agent.id,
@@ -1118,16 +1131,26 @@ async def update_slash_commands(
     # Validate each item
     seen_commands = set()
     validated = []
+
+    # Batch-fetch all referenced agent IDs to validate existence (avoids N+1)
+    all_agent_ids = set()
+    parsed_items = []
     for item in items:
         sc = SlashCommandItem(**item)
+        parsed_items.append(sc)
+        all_agent_ids.update(sc.agent_ids)
+
+    existing_agent_ids = set()
+    if all_agent_ids:
+        existing_agent_ids = {row[0] for row in db.query(Agent.id).filter(Agent.id.in_(all_agent_ids)).all()}
+
+    for sc in parsed_items:
         if sc.command in seen_commands:
             raise HTTPException(status_code=400, detail=f"Duplicate command: {sc.command}")
         seen_commands.add(sc.command)
 
-        # Validate agent_ids exist
         for aid in sc.agent_ids:
-            agent = db.query(Agent).filter(Agent.id == aid).first()
-            if not agent:
+            if aid not in existing_agent_ids:
                 raise HTTPException(status_code=400, detail=f"Agent {aid} not found")
 
         validated.append(

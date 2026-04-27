@@ -35,3 +35,4 @@ redis
 neo4j
 pyotp
 qrcode[pil]
+alembic

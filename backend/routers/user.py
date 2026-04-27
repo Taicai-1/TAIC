@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from auth import verify_token, verify_password, hash_password
 from database import get_db, User, Agent, Document, Conversation, Message, Team, PasswordResetToken
@@ -63,12 +63,10 @@ async def export_user_data(user_id: str = Depends(verify_token), db: Session = D
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Get all user agents
-        agents = db.query(Agent).filter(Agent.user_id == int(user_id)).all()
+        # Get all user agents with documents eagerly loaded (avoids N+1)
+        agents = db.query(Agent).options(selectinload(Agent.documents)).filter(Agent.user_id == int(user_id)).all()
         agents_data = []
         for agent in agents:
-            # Get documents for this agent
-            documents = db.query(Document).filter(Document.agent_id == agent.id).all()
             agents_data.append(
                 {
                     "id": agent.id,
@@ -78,23 +76,27 @@ async def export_user_data(user_id: str = Depends(verify_token), db: Session = D
                     "contexte": agent.contexte,
                     "biographie": agent.biographie,
                     "created_at": agent.created_at.isoformat() if agent.created_at else None,
-                    "documents_count": len(documents),
+                    "documents_count": len(agent.documents),
                     "documents": [
                         {
                             "id": doc.id,
                             "filename": doc.filename,
                             "created_at": doc.created_at.isoformat() if doc.created_at else None,
                         }
-                        for doc in documents
+                        for doc in agent.documents
                     ],
                 }
             )
 
-        # Get all conversations
-        conversations = db.query(Conversation).filter(Conversation.agent_id.in_([a.id for a in agents])).all()
+        # Get all conversations with messages eagerly loaded (avoids N+1)
+        conversations = (
+            db.query(Conversation)
+            .options(selectinload(Conversation.messages))
+            .filter(Conversation.agent_id.in_([a.id for a in agents]))
+            .all()
+        )
         conversations_data = []
         for conv in conversations:
-            messages = db.query(Message).filter(Message.conversation_id == conv.id).all()
             conversations_data.append(
                 {
                     "id": conv.id,
@@ -108,7 +110,7 @@ async def export_user_data(user_id: str = Depends(verify_token), db: Session = D
                             "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
                             "feedback": msg.feedback,
                         }
-                        for msg in messages
+                        for msg in conv.messages
                     ],
                 }
             )

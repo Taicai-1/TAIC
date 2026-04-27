@@ -35,25 +35,34 @@ def extract_email_tags_from_title(title: str) -> List[str]:
 
 
 def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
-    """Trouve tous les agents dont email_tags contient au moins un des tags"""
+    """Trouve tous les agents dont email_tags contient au moins un des tags.
+
+    Uses PostgreSQL jsonb_array_elements_text to filter at DB level
+    instead of loading all agents into Python.
+    """
     if not tags:
         return []
 
-    all_agents = db.query(Agent).filter(Agent.email_tags.isnot(None)).all()
-    matching_agents = []
+    from sqlalchemy import text, literal_column
 
-    for agent in all_agents:
-        try:
-            agent_tags = json.loads(agent.email_tags) if agent.email_tags else []
-            # Normaliser les tags de l'agent en lowercase
-            agent_tags_lower = [t.lower() for t in agent_tags]
-            # Vérifier si au moins un tag match
-            if any(tag.lower() in agent_tags_lower for tag in tags):
-                matching_agents.append(agent)
-        except (json.JSONDecodeError, TypeError):
-            continue
+    # Normalize search tags to lowercase
+    lower_tags = [t.lower() for t in tags]
 
-    return matching_agents
+    # Use PostgreSQL JSON filtering: cast email_tags to jsonb, expand array,
+    # then check if any element (lowered) matches any of the search tags.
+    agents = (
+        db.query(Agent)
+        .filter(
+            Agent.email_tags.isnot(None),
+            literal_column(
+                "EXISTS (SELECT 1 FROM jsonb_array_elements_text(email_tags::jsonb) AS t(tag) "
+                "WHERE lower(t.tag) = ANY(:tags))"
+            ),
+        )
+        .params(tags=lower_tags)
+        .all()
+    )
+    return agents
 
 
 def verify_email_api_key(request: Request) -> bool:

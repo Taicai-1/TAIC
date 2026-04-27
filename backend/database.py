@@ -371,7 +371,7 @@ class DocumentChunk(Base):
     __tablename__ = "document_chunks"
 
     id = Column(Integer, primary_key=True, index=True)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
     company_id = Column(
         Integer, ForeignKey("companies.id"), nullable=True, index=True
     )  # Tenant isolation (critical for RAG)
@@ -422,7 +422,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(Integer, primary_key=True, index=True)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
@@ -438,7 +438,7 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     role = Column(String(20), nullable=False)  # 'user' ou 'agent'
     content = Column(Text, nullable=False)
@@ -492,14 +492,22 @@ class WeeklyRecapLog(Base):
     user = relationship("User")
 
 
-# Create database engine with connection pooling
+# Create database engine with connection pooling (env-configurable for Cloud Run scaling)
 engine = create_engine(
     DATABASE_URL,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=int(os.getenv("DB_POOL_SIZE", "3")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
     pool_pre_ping=True,
-    pool_recycle=300,
+    pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "600")),
+    pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
     echo=False,  # Set to True for SQL debugging
+)
+logger.info(
+    "DB pool: size=%s overflow=%s recycle=%ss timeout=%ss",
+    engine.pool.size(),
+    engine.pool._max_overflow,
+    engine.pool._recycle,
+    engine.pool._timeout,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
