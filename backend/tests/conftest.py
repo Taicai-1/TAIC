@@ -6,10 +6,10 @@ import os
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-ci")
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/taic_test")
 os.environ.setdefault("ENVIRONMENT", "test")
-# Prevent real API calls
-os.environ.setdefault("OPENAI_API_KEY", "")
-os.environ.setdefault("MISTRAL_API_KEY", "")
-os.environ.setdefault("GEMINI_API_KEY", "")
+# Prevent real API calls - use dummy keys to satisfy module-level checks
+os.environ.setdefault("OPENAI_API_KEY", "sk-test-key-for-unit-tests")
+os.environ.setdefault("MISTRAL_API_KEY", "test-mistral-key")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 
 import pytest
 import pytest_asyncio
