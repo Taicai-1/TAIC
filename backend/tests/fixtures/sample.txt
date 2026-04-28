@@ -1,0 +1,19 @@
+TAIC Companion Test Document
+
+This is a sample document for testing the RAG pipeline.
+It contains multiple paragraphs to test chunking behavior.
+
+Section 1: Introduction
+The TAIC Companion platform enables enterprise AI chatbots using
+Retrieval-Augmented Generation. Users upload documents and create
+personalized AI agents.
+
+Section 2: Features
+- Document upload and processing
+- Multi-provider LLM support (OpenAI, Mistral, Gemini)
+- Vector search with FAISS
+- Conversation history
+
+Section 3: Architecture
+The backend uses FastAPI with SQLAlchemy ORM and PostgreSQL.
+The frontend uses Next.js 14 with React 18 and Tailwind CSS.
