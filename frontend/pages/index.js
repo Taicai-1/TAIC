@@ -552,19 +552,8 @@ export default function CompanionSettings() {
 
   return (
     <Layout
-      showBack
-      backHref="/agents"
       title={currentAgent?.name || ''}
       onLogout={logout}
-      actions={currentAgent && (
-        <button
-          onClick={() => router.push(`/chat/${currentAgent.id}`)}
-          className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all mr-2"
-        >
-          <MessageCircle className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('agents:settings.openChat')}</span>
-        </button>
-      )}
     >
       <Toaster position="top-right" />
 
@@ -635,8 +624,15 @@ export default function CompanionSettings() {
                 </div>
               </div>
 
-              {/* Save button - desktop */}
-              <div className="hidden sm:block flex-shrink-0">
+              {/* Save & Chat buttons - desktop */}
+              <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => router.push(`/chat/${currentAgent.id}`)}
+                  className="flex items-center space-x-2 px-6 py-3 bg-white text-gray-700 border border-gray-200 rounded-button hover:bg-gray-50 hover:border-gray-300 hover:text-primary-600 transition-all font-semibold shadow-subtle hover:shadow-card"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  <span>{t('agents:buttons.openChat', { defaultValue: 'Ouvrir le chat' })}</span>
+                </button>
                 <button
                   onClick={saveAgent}
                   disabled={saving}
@@ -1375,8 +1371,17 @@ export default function CompanionSettings() {
           )}
         </Section>
 
-        {/* Mobile Save Button */}
-        <div className="sm:hidden sticky bottom-4">
+        {/* Mobile Save & Chat Buttons */}
+        <div className="sm:hidden sticky bottom-4 flex flex-col gap-2">
+          {currentAgent?.id && (
+            <button
+              onClick={() => router.push(`/chat/${currentAgent.id}`)}
+              className="w-full flex items-center justify-center space-x-2 px-6 py-4 bg-white text-gray-700 border border-gray-200 rounded-button hover:bg-gray-50 hover:border-gray-300 hover:text-primary-600 transition-all font-semibold shadow-subtle hover:shadow-card"
+            >
+              <MessageCircle className="w-5 h-5" />
+              <span>{t('agents:buttons.openChat', { defaultValue: 'Ouvrir le chat' })}</span>
+            </button>
+          )}
           <button
             onClick={saveAgent}
             disabled={saving}

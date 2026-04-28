@@ -8,8 +8,6 @@ import api from '../lib/api';
 import {
   Bot,
   Plus,
-  ArrowRight,
-  Users,
   MessageCircle,
   Zap,
   FileText,
@@ -17,8 +15,7 @@ import {
   MessageSquarePlus,
   Send,
   X,
-  Image as ImageIcon,
-  Search
+  Image as ImageIcon
 } from "lucide-react";
 import Layout from '../components/Layout';
 import AgentCard from '../components/AgentCard';
@@ -40,7 +37,6 @@ export default function AgentsPage() {
   const [feedbackType, setFeedbackType] = useState("bug");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [sendingFeedback, setSendingFeedback] = useState(false);
-  const [search, setSearch] = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -168,16 +164,14 @@ export default function AgentsPage() {
     );
   }
 
-  const filtered = agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
-
   return (
     <Layout title={t('agents:pageTitle')} onFeedback={() => setShowFeedback(true)} onLogout={logout}>
       <Toaster position="top-right" />
 
-      {/* Create New Agent Button + Switch to Teams */}
+      {/* Create New Agent Button */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!hasNoOrg && (
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        {!hasNoOrg && agents.length > 0 && (
+        <div className="flex justify-end mb-6">
           <button
             onClick={() => {
               setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
@@ -188,15 +182,6 @@ export default function AgentsPage() {
           >
             <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform duration-300" />
             <span>{t('agents:buttons.createNew')}</span>
-          </button>
-          <button
-            onClick={() => router.push('/teams')}
-            className="group flex items-center justify-center px-8 py-3.5 bg-white text-gray-700 border border-gray-200 rounded-button hover:bg-gray-50 hover:border-gray-300 transition-all font-medium shadow-subtle hover:shadow-card"
-            title={t('agents:buttons.teamCompanionsTooltip')}
-          >
-            <Users className="w-5 h-5 mr-2" />
-            <span>{t('agents:buttons.teamCompanions')}</span>
-            <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
         )}
@@ -517,32 +502,33 @@ export default function AgentsPage() {
             ) : (
               <>
                 <h3 className="text-2xl font-heading font-bold text-gray-700 mb-2">{t('agents:empty.title')}</h3>
-                <p className="text-gray-500">{t('agents:empty.subtitle')}</p>
+                <p className="text-gray-500 mb-6">{t('agents:empty.subtitle')}</p>
+                <button
+                  onClick={() => {
+                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [] });
+                    setPhotoPreview(null);
+                    setShowForm(true);
+                  }}
+                  className="group inline-flex items-center justify-center px-8 py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-button transition-all font-semibold shadow-card hover:shadow-elevated"
+                >
+                  <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform duration-300" />
+                  <span>{t('agents:buttons.createNew')}</span>
+                </button>
               </>
             )}
           </div>
         ) : (
-          <>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-input w-64">
-                <Search className="w-4 h-4 text-gray-400" />
-                <input value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Rechercher un agent…"
-                  className="flex-1 text-sm bg-transparent outline-none" />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onChat={() => router.push(`/chat/${agent.id}`)}
-                  onEdit={() => router.push(`/?agentId=${agent.id}`)}
-                  onDelete={() => deleteAgent(agent.id)}
-                />
-              ))}
-            </div>
-          </>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {agents.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onChat={() => router.push(`/chat/${agent.id}`)}
+                onEdit={() => router.push(`/?agentId=${agent.id}`)}
+                onDelete={() => deleteAgent(agent.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
       )}

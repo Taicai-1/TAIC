@@ -129,27 +129,19 @@ export default function TeamsPage() {
   }
 
   return (
-    <Layout showBack backHref="/agents" title={t('teams:page.title')} onLogout={authLogout}>
+    <Layout title={t('teams:page.title')} onLogout={authLogout}>
       <Toaster position="top-right" />
 
       {/* Create New Team Button */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!hasNoOrg && (
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <div className="flex justify-end">
           <button
             onClick={() => { setForm({ name: "", contexte: "", leaderId: null, actionIds: [] }); setShowForm(true); }}
             className="group flex items-center justify-center px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-button hover:from-blue-700 hover:to-purple-700 transition-all font-semibold shadow-card hover:shadow-elevated"
           >
             <Plus className="w-6 h-6 mr-3 group-hover:rotate-90 transition-transform duration-300" />
             <span>{t('teams:buttons.createTeam')}</span>
-          </button>
-          <button
-            onClick={() => router.push('/agents')}
-            className="group flex items-center justify-center px-8 py-4 bg-white text-gray-700 border border-gray-200 rounded-button hover:bg-gray-50 hover:border-gray-300 transition-all font-medium shadow-card hover:shadow-elevated"
-            title={t('teams:tooltips.backToAgents')}
-          >
-            <ArrowRight className="w-5 h-5 mr-2 rotate-180 group-hover:-translate-x-1 transition-transform" />
-            <span>{t('teams:buttons.backToAgents')}</span>
           </button>
         </div>
         )}

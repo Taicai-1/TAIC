@@ -64,15 +64,9 @@ function AuthInput({ id, name, type = 'text', label, placeholder, Icon, value, o
   );
 }
 
-const FEATURES = [
-  'Agents IA spécialisés par métier',
-  'RAG sur vos documents internes',
-  'Connexion Notion & Google Drive',
-  'Équipes multi-agents partagées',
-];
-
 export default function Login() {
   const { t } = useTranslation(['auth', 'errors']);
+  const FEATURES = t('auth:brandPanel.features', { returnObjects: true, defaultValue: [] });
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ username: '', email: '', password: '', invite_code: '' });
   const [loading, setLoading] = useState(false);
@@ -191,14 +185,14 @@ export default function Login() {
         </div>
 
         <div className="relative z-10">
-          <h2 className="font-heading font-extrabold text-[38px] text-white leading-[1.15] tracking-tight mb-5">
-            Vos agents IA,<br />à portée de main
-          </h2>
+          <h2 className="font-heading font-extrabold text-[38px] text-white leading-[1.15] tracking-tight mb-5"
+            dangerouslySetInnerHTML={{ __html: t('auth:brandPanel.headline') }}
+          />
           <p className="text-[15px] text-white/60 leading-relaxed mb-10">
-            Créez, configurez et déployez des assistants intelligents pour toute votre organisation.
+            {t('auth:brandPanel.subtitle')}
           </p>
           <ul className="flex flex-col gap-3.5">
-            {FEATURES.map(f => (
+            {(Array.isArray(FEATURES) ? FEATURES : []).map(f => (
               <li key={f} className="flex items-center gap-3">
                 <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center shrink-0">
                   <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20,6 9,17 4,12"/></svg>
