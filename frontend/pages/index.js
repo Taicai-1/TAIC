@@ -881,7 +881,7 @@ export default function CompanionSettings() {
                     <span className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-600 border border-blue-200 flex-shrink-0">URL</span>
                   )}
                   {doc.notion_link_id && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex-shrink-0">Notion</span>
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-primary-50 text-indigo-600 border border-primary-100 flex-shrink-0">Notion</span>
                   )}
                   {doc.drive_link_id && (
                     <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex-shrink-0">Drive</span>
@@ -902,10 +902,10 @@ export default function CompanionSettings() {
                     <button
                       onClick={() => resyncNotionDoc(doc)}
                       disabled={resyncingDocId === doc.id}
-                      className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
+                      className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-primary-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
                       title={t('agents:buttons.resyncNotion')}
                     >
-                      {resyncingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> : <RefreshCw className="w-4 h-4" />}
+                      {resyncingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-primary-500" /> : <RefreshCw className="w-4 h-4" />}
                     </button>
                   )}
                   <button onClick={() => deleteDocument(doc.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
@@ -1083,14 +1083,14 @@ export default function CompanionSettings() {
           icon={Link}
           title={t('agents:notion.title', { count: notionLinks.length })}
           subtitle={t('agents:settings.notionDesc')}
-          color="bg-indigo-500"
+          color="bg-primary-500"
           defaultOpen={false}
         >
           {/* Add Notion link form */}
-          <div className="p-4 bg-gradient-to-br from-indigo-50 to-violet-50 rounded-button border border-indigo-200 mb-4">
+          <div className="p-4 bg-gradient-to-br from-primary-50 to-violet-50 rounded-button border border-primary-100 mb-4">
             <input
               type="text"
-              className="w-full px-4 py-2.5 border border-indigo-200 rounded-input focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all outline-none bg-white text-sm mb-3"
+              className="w-full px-4 py-2.5 border border-primary-100 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white text-sm mb-3"
               placeholder={t('agents:notion.placeholder')}
               value={notionInput}
               onChange={e => setNotionInput(e.target.value)}
@@ -1098,7 +1098,7 @@ export default function CompanionSettings() {
             />
             <div className="flex gap-2">
               <select
-                className="flex-1 px-3 py-2 border border-indigo-200 rounded-input focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all outline-none bg-white text-sm"
+                className="flex-1 px-3 py-2 border border-primary-100 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white text-sm"
                 value={notionType}
                 onChange={e => setNotionType(e.target.value)}
               >
@@ -1124,7 +1124,7 @@ export default function CompanionSettings() {
                 <p className="text-sm">{t('agents:notion.noLinks')}</p>
               </div>
             ) : notionLinks.map(link => (
-              <div key={link.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-indigo-300 transition-all group">
+              <div key={link.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-primary-100 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <Link className="w-5 h-5 text-indigo-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -1144,7 +1144,7 @@ export default function CompanionSettings() {
                     <button
                       onClick={() => ingestNotionLink(link.id)}
                       disabled={ingestingNotionLinkId === link.id}
-                      className="flex items-center space-x-1 px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                      className="flex items-center space-x-1 px-2 py-1 text-xs text-indigo-600 hover:bg-primary-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
                       title={t('agents:notion.ingestButton')}
                     >
                       {ingestingNotionLinkId === link.id ? (

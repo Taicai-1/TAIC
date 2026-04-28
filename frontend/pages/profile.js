@@ -550,7 +550,7 @@ export default function Profile() {
                 {/* Row 1: Activity over time (full width) */}
                 <div className="bg-white rounded-card border border-gray-100 p-5">
                   <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-indigo-500" />
+                    <TrendingUp className="w-4 h-4 text-primary-500" />
                     {t('profile:sections.analytics.activityOverTime')}
                   </h3>
                   <ResponsiveContainer width="100%" height={220}>
@@ -634,7 +634,7 @@ export default function Profile() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="bg-white rounded-card border border-gray-100 p-5">
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-indigo-500" />
+                      <MessageSquare className="w-4 h-4 text-primary-500" />
                       {t('profile:sections.analytics.conversationsPerAgent')}
                     </h3>
                     {analytics.conversations_per_agent.length > 0 ? (
