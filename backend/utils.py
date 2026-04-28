@@ -4,27 +4,16 @@ from datetime import datetime
 
 
 class Logger:
-    """Centralized logging configuration"""
+    """Thin wrapper around stdlib logging.
+
+    Delegates to logging.getLogger() which inherits the structured JSON
+    formatter configured in main.py.  No extra handlers are added here
+    to avoid duplicate log output.
+    """
 
     def __init__(self, name: str):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
-
-        # Create formatter
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
-        # Console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
-
-        # File handler for production
-        if os.getenv("ENVIRONMENT") == "production":
-            file_handler = logging.FileHandler("app.log")
-            file_handler.setLevel(logging.INFO)
-            file_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
 
     def info(self, message: str):
         self.logger.info(message)

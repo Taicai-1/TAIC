@@ -2,6 +2,8 @@
 
 Responsibilities kept here:
   - App creation, CORS, security headers, tenant-isolation middleware
+  - Centralized error handling (exception handlers)
+  - Structured JSON logging with request_id tracing
   - Static file mounts
   - Startup event (DB init)
   - Health-check endpoints (/, /health)
@@ -10,10 +12,18 @@ Responsibilities kept here:
 
 import logging
 import os
+import time
+import traceback
+import uuid
+
+from contextvars import ContextVar
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pythonjsonlogger import json as jsonlogger
 
 from database import (
     Base,
@@ -24,30 +34,63 @@ from database import (
     migrate_existing_company_memberships,
     set_current_company_id,
 )
-from utils import logger  # noqa: F811 – overridden below in prod
 
 # ---------------------------------------------------------------------------
-# Logging (Google Cloud Logging in production, basic otherwise)
+# Structured JSON logging
 # ---------------------------------------------------------------------------
-if os.getenv("GOOGLE_CLOUD_PROJECT"):
-    try:
-        from google.cloud import logging as cloud_logging
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
-        client = cloud_logging.Client()
-        client.setup_logging()
-        logger = logging.getLogger("app")
-    except ImportError:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s %(levelname)s %(name)s %(message)s",
-        )
-        logger = logging.getLogger("app")
-else:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+# Context variable for per-request tracing
+_request_id: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+class _RequestIdFilter(logging.Filter):
+    """Inject current request_id into every log record."""
+
+    def filter(self, record):
+        record.request_id = _request_id.get("-")
+        return True
+
+
+def _setup_logging():
+    """Configure structured JSON logging for all environments."""
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+
+    # Remove any existing handlers to avoid duplicates on reload
+    root.handlers.clear()
+
+    if os.getenv("GOOGLE_CLOUD_PROJECT"):
+        # Production on GCP: google-cloud-logging already emits JSON
+        try:
+            from google.cloud import logging as cloud_logging
+
+            client = cloud_logging.Client()
+            client.setup_logging()
+            # Add request_id filter to all handlers set up by GCP
+            rid_filter = _RequestIdFilter()
+            for h in root.handlers:
+                h.addFilter(rid_filter)
+            return
+        except ImportError:
+            pass  # Fall through to manual JSON setup
+
+    # All other environments: JSON via python-json-logger
+    handler = logging.StreamHandler()
+    formatter = jsonlogger.JsonFormatter(
+        fmt="%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s",
+        rename_fields={"asctime": "timestamp", "levelname": "severity"},
     )
-    logger = logging.getLogger("app")
+    if ENVIRONMENT == "development":
+        # Pretty-print JSON in dev for readability
+        formatter.json_indent = 2
+    handler.setFormatter(formatter)
+    handler.addFilter(_RequestIdFilter())
+    root.addHandler(handler)
+
+
+_setup_logging()
+logger = logging.getLogger("app")
 
 # ---------------------------------------------------------------------------
 # FastAPI application
@@ -56,8 +99,95 @@ app = FastAPI(title="TAIC Companion API", version="1.0.0")
 
 
 # ---------------------------------------------------------------------------
-# Tenant isolation middleware (sets company_id for RLS via contextvars)
+# Centralized exception handlers
 # ---------------------------------------------------------------------------
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return structured 422 for validation errors."""
+    errors = []
+    for err in exc.errors():
+        errors.append({
+            "field": ".".join(str(loc) for loc in err.get("loc", [])),
+            "message": err.get("msg", "Validation error"),
+            "type": err.get("type", ""),
+        })
+    logger.warning(
+        "Validation error on %s %s: %s",
+        request.method, request.url.path, errors,
+    )
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": True,
+            "status_code": 422,
+            "message": "Validation error",
+            "detail": errors,
+        },
+    )
+
+
+from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: E402
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Return structured JSON for all HTTP errors."""
+    logger.warning(
+        "HTTP %d on %s %s: %s",
+        exc.status_code, request.method, request.url.path, exc.detail,
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": True,
+            "status_code": exc.status_code,
+            "message": str(exc.detail) if exc.detail else "Error",
+            "detail": None,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catch-all for unhandled exceptions. Hides details in production."""
+    request_id = _request_id.get("-")
+    logger.error(
+        "Unhandled exception on %s %s [request_id=%s]: %s",
+        request.method, request.url.path, request_id, exc,
+        exc_info=True,
+    )
+    detail = None
+    if ENVIRONMENT == "development":
+        detail = {
+            "exception": type(exc).__name__,
+            "message": str(exc),
+            "traceback": traceback.format_exception(type(exc), exc, exc.__traceback__),
+        }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": True,
+            "status_code": 500,
+            "message": "Internal Server Error" if ENVIRONMENT != "development" else str(exc),
+            "detail": detail,
+            "request_id": request_id,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Request ID + tenant isolation middleware
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Assign a unique request_id to every request for log tracing."""
+    rid = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+    _request_id.set(rid)
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = rid
+    return response
+
+
 @app.middleware("http")
 async def tenant_isolation_middleware(request: Request, call_next):
     """Extract company_id from JWT and set it in contextvars for RLS."""
@@ -125,8 +255,6 @@ async def add_security_headers(request: Request, call_next):
 # ---------------------------------------------------------------------------
 # CORS configuration
 # ---------------------------------------------------------------------------
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-
 allowed_origins = [
     "https://taic.ai",
     "https://www.taic.ai",
@@ -199,8 +327,66 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "TAIC Companion API"}
+    """Health check with actual PostgreSQL and Redis connectivity tests."""
+    from redis_client import get_redis
+    from sqlalchemy import text
+
+    checks = {}
+
+    # -- PostgreSQL --
+    t0 = time.time()
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+            latency = round((time.time() - t0) * 1000, 1)
+            pool = engine.pool
+            checks["database"] = {
+                "status": "up",
+                "latency_ms": latency,
+                "pool": {
+                    "size": pool.size(),
+                    "checked_in": pool.checkedin(),
+                    "checked_out": pool.checkedout(),
+                    "overflow": pool.overflow(),
+                },
+            }
+        finally:
+            db.close()
+    except Exception as e:
+        latency = round((time.time() - t0) * 1000, 1)
+        checks["database"] = {"status": "down", "latency_ms": latency, "error": str(e)}
+
+    # -- Redis --
+    t0 = time.time()
+    try:
+        r = get_redis()
+        if r is not None:
+            r.ping()
+            latency = round((time.time() - t0) * 1000, 1)
+            checks["redis"] = {"status": "up", "latency_ms": latency}
+        else:
+            checks["redis"] = {"status": "unavailable", "latency_ms": 0}
+    except Exception as e:
+        latency = round((time.time() - t0) * 1000, 1)
+        checks["redis"] = {"status": "down", "latency_ms": latency, "error": str(e)}
+
+    # -- Overall status --
+    db_up = checks["database"]["status"] == "up"
+    redis_up = checks["redis"]["status"] == "up"
+
+    if db_up and redis_up:
+        overall = "healthy"
+    elif db_up:
+        overall = "degraded"
+    else:
+        overall = "unhealthy"
+
+    status_code = 200 if db_up else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": overall, "service": "TAIC Companion API", "checks": checks},
+    )
 
 
 # ---------------------------------------------------------------------------
