@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from auth import verify_token, verify_password, hash_password
@@ -14,6 +15,42 @@ from validation import ChangePasswordRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get("/api/user/summary")
+async def get_user_summary(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+    """Lightweight endpoint returning user info and count statistics for the profile page."""
+    uid = int(user_id)
+    user = get_cached_user(user_id, db)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    total_agents = db.query(func.count(Agent.id)).filter(Agent.user_id == uid).scalar() or 0
+    total_documents = db.query(func.count(Document.id)).filter(Document.user_id == uid).scalar() or 0
+    total_conversations = db.query(func.count(Conversation.id)).filter(Conversation.user_id == uid).scalar() or 0
+    total_messages = (
+        db.query(func.count(Message.id))
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .filter(Conversation.user_id == uid)
+        .scalar() or 0
+    )
+    total_teams = db.query(func.count(Team.id)).filter(Team.user_id == uid).scalar() or 0
+
+    return {
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        },
+        "statistics": {
+            "total_agents": total_agents,
+            "total_documents": total_documents,
+            "total_conversations": total_conversations,
+            "total_messages": total_messages,
+            "total_teams": total_teams,
+        },
+    }
 
 
 @router.post("/api/user/change-password")

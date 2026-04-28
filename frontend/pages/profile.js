@@ -71,7 +71,7 @@ export default function Profile() {
 
   const loadUserData = async () => {
     try {
-      const res = await api.get('/api/user/export-data');
+      const res = await api.get('/api/user/summary');
       setUser(res.data.user);
       setStats(res.data.statistics);
     } catch (error) {
