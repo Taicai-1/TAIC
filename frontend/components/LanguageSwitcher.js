@@ -42,12 +42,12 @@ export default function LanguageSwitcher() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 px-4 py-2.5 rounded-button bg-white hover:bg-white border border-gray-200 hover:border-blue-300 shadow-subtle hover:shadow-card transition-all duration-300 group"
+        className="flex items-center space-x-2 px-4 py-2.5 rounded-button bg-white hover:bg-white border border-gray-200 hover:border-primary-100 shadow-subtle hover:shadow-card transition-all duration-300 group"
         aria-label="Change language"
       >
-        <Globe className="w-5 h-5 text-blue-600 group-hover:text-blue-700 transition-colors" />
+        <Globe className="w-5 h-5 text-primary-600 group-hover:text-primary-700 transition-colors" />
         <span className="text-2xl group-hover:scale-110 transition-transform">{currentLang.flag}</span>
-        <span className="text-sm font-semibold text-gray-700 group-hover:text-blue-700 transition-colors">{currentLang.name}</span>
+        <span className="text-sm font-semibold text-gray-700 group-hover:text-primary-700 transition-colors">{currentLang.name}</span>
       </button>
 
       {isOpen && (
@@ -60,14 +60,14 @@ export default function LanguageSwitcher() {
                 e.stopPropagation()
                 changeLanguage(locale)
               }}
-              className={`w-full flex items-center space-x-3 px-4 py-3 hover:bg-blue-50 transition-all duration-200 ${
-                router.locale === locale ? 'bg-blue-50 border-l-4 border-blue-600' : ''
+              className={`w-full flex items-center space-x-3 px-4 py-3 hover:bg-primary-50 transition-all duration-200 ${
+                router.locale === locale ? 'bg-primary-50 border-l-4 border-primary-600' : ''
               }`}
             >
               <span className="text-2xl">{lang.flag}</span>
-              <span className={`text-sm font-medium ${router.locale === locale ? 'text-blue-700 font-semibold' : 'text-gray-700'}`}>{lang.name}</span>
+              <span className={`text-sm font-medium ${router.locale === locale ? 'text-primary-700 font-semibold' : 'text-gray-700'}`}>{lang.name}</span>
               {router.locale === locale && (
-                <span className="ml-auto text-blue-600 text-lg font-bold">✓</span>
+                <span className="ml-auto text-primary-600 text-lg font-bold">✓</span>
               )}
             </button>
           ))}

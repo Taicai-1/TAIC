@@ -68,7 +68,7 @@ export default function CreateTeamPage() {
 
   if (authLoading || loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
     </div>
   );
 
@@ -92,7 +92,7 @@ export default function CreateTeamPage() {
                 <input
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
                   placeholder={t('teams:form.teamName')}
                 />
               </div>
@@ -102,7 +102,7 @@ export default function CreateTeamPage() {
                 <textarea
                   value={contexte}
                   onChange={e => setContexte(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white resize-none"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-none"
                   placeholder={t('teams:form.teamContext')}
                   rows="3"
                 />
@@ -110,13 +110,13 @@ export default function CreateTeamPage() {
 
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                  <UserCircle className="w-4 h-4 mr-2 text-blue-600" />
+                  <UserCircle className="w-4 h-4 mr-2 text-primary-600" />
                   {t('teams:form.leaderLabel')}
                 </label>
                 <select
                   value={leaderId || ''}
                   onChange={e => setLeaderId(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
                 >
                   <option value="">{t('teams:form.leaderPlaceholder')}</option>
                   {convAgents.map(a => (
@@ -136,7 +136,7 @@ export default function CreateTeamPage() {
                       key={a.id}
                       className={`flex items-center gap-3 p-3 border rounded-button cursor-pointer transition-all ${
                         actionIds.includes(a.id)
-                          ? 'bg-blue-50 border-blue-300'
+                          ? 'bg-primary-50 border-primary-100'
                           : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
                     >
@@ -144,7 +144,7 @@ export default function CreateTeamPage() {
                         type="checkbox"
                         checked={actionIds.includes(a.id)}
                         onChange={() => toggleActionAgent(a.id)}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        className="w-4 h-4 text-primary-600 rounded focus:ring-2 focus:ring-primary-500"
                       />
                       <span className="text-sm font-medium text-gray-700">{a.name}</span>
                       {actionIds.includes(a.id) && (

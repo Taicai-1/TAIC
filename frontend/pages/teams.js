@@ -40,7 +40,7 @@ export default function TeamsPage() {
       key: 'conversationnel',
       name: t('teams:agentTypes.conversationnel.name'),
       icon: Users,
-      color: 'bg-blue-500',
+      color: 'bg-primary-500',
       description: t('teams:agentTypes.conversationnel.description')
     },
     actionnable: {
@@ -121,7 +121,7 @@ export default function TeamsPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary-600 mb-4"></div>
           <p className="text-gray-600 font-medium">{t('teams:page.loading')}</p>
         </div>
       </div>
@@ -165,13 +165,13 @@ export default function TeamsPage() {
               <div className="space-y-4">
                 <input
                   type="text"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
                   placeholder={t('teams:form.teamName')}
                   value={form.name}
                   onChange={e => setForm(f => ({...f, name: e.target.value}))}
                 />
                 <textarea
-                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white resize-none"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-none"
                   placeholder={t('teams:form.teamContext')}
                   value={form.contexte}
                   onChange={e => setForm(f => ({...f, contexte: e.target.value}))}
@@ -180,11 +180,11 @@ export default function TeamsPage() {
 
                 <div>
                   <label className="text-sm font-semibold mb-3 block text-gray-700 flex items-center">
-                    <UserCircle className="w-4 h-4 mr-2 text-blue-600" />
+                    <UserCircle className="w-4 h-4 mr-2 text-primary-600" />
                     {t('teams:form.leaderLabel')}
                   </label>
                   <select
-                    className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white font-medium"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white font-medium"
                     value={form.leaderId || ""}
                     onChange={e => setForm(f => ({...f, leaderId: e.target.value ? parseInt(e.target.value) : null}))}
                   >
@@ -202,7 +202,7 @@ export default function TeamsPage() {
                   </label>
                   <div className="space-y-2 max-h-40 overflow-y-auto p-3 bg-white/50 rounded-button border-2 border-gray-200">
                     {agents.filter(a => (a.type || 'conversationnel') === 'conversationnel').map(agent => (
-                      <label key={agent.id} className="flex items-center p-2 hover:bg-blue-50 rounded-sm transition-colors cursor-pointer group">
+                      <label key={agent.id} className="flex items-center p-2 hover:bg-primary-50 rounded-sm transition-colors cursor-pointer group">
                         <input
                           type="checkbox"
                           checked={form.actionIds.includes(agent.id)}
@@ -215,9 +215,9 @@ export default function TeamsPage() {
                                 : f.actionIds.filter(x => x !== id)
                             }));
                           }}
-                          className="mr-3 w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                          className="mr-3 w-5 h-5 text-primary-600 rounded focus:ring-2 focus:ring-primary-500"
                         />
-                        <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700 transition-colors">{agent.name}</span>
+                        <span className="text-sm font-medium text-gray-700 group-hover:text-primary-700 transition-colors">{agent.name}</span>
                         {form.actionIds.includes(agent.id) && (
                           <CheckCircle2 className="w-4 h-4 ml-auto text-green-500" />
                         )}

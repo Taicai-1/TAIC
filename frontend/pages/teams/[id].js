@@ -36,7 +36,7 @@ export default function TeamView() {
 
   if (authLoading || loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
     </div>
   );
 
@@ -66,7 +66,7 @@ export default function TeamView() {
             <div className="space-y-6">
               <div className="p-4 bg-gray-50 rounded-button border border-gray-100">
                 <div className="flex items-center space-x-2 mb-2">
-                  <UserCircle className="w-5 h-5 text-blue-600" />
+                  <UserCircle className="w-5 h-5 text-primary-600" />
                   <span className="text-sm font-semibold text-gray-700">{t('teams:detail.leaderAgent')}</span>
                 </div>
                 <p className="text-base font-medium text-gray-900 ml-7">{team.leader_name || team.leader_agent_id}</p>

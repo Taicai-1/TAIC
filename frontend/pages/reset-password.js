@@ -71,7 +71,7 @@ export default function ResetPassword() {
               </p>
             </div>
             <div className="flex items-center justify-center space-x-2">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
               <span className="text-gray-600 font-medium">{t('auth:resetPassword.redirecting')}</span>
             </div>
           </div>
@@ -126,7 +126,7 @@ export default function ResetPassword() {
           <div className="mt-6 text-center">
             <button
               onClick={() => router.push('/login')}
-              className="group inline-flex items-center text-blue-600 hover:text-purple-600 text-sm font-semibold transition-colors duration-300"
+              className="group inline-flex items-center text-primary-600 hover:text-purple-600 text-sm font-semibold transition-colors duration-300"
             >
               <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
               {t('auth:resetPassword.backToLogin')}

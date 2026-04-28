@@ -111,7 +111,7 @@ export default function Setup2FA() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center space-y-4">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+          <Loader2 className="w-12 h-12 text-primary-600 animate-spin" />
           <p className="text-xl font-semibold text-gray-700">{t('auth:twoFactor.settingUp')}</p>
         </div>
       </div>

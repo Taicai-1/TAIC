@@ -211,20 +211,20 @@ export default function AgentsPage() {
               <div className="space-y-4">
               <input
                 type="text"
-                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
+                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
                 placeholder={t('agents:form.name.placeholder')}
                 value={form.name}
                 onChange={e => setForm(f => ({...f, name: e.target.value}))}
               />
               <textarea
-                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white resize-none"
+                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-none"
                 placeholder={t('agents:form.context.placeholder')}
                 rows="3"
                 value={form.contexte}
                 onChange={e => setForm(f => ({...f, contexte: e.target.value}))}
               />
               <textarea
-                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white resize-none"
+                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-none"
                 placeholder={t('agents:form.biography.placeholder')}
                 rows="3"
                 value={form.biographie}
@@ -237,7 +237,7 @@ export default function AgentsPage() {
                 </label>
                 <select
                   id="model-choice-select"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white font-medium"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white font-medium"
                   value={form.type}
                   onChange={e => {
                     setForm(f => ({ ...f, type: e.target.value }));
@@ -393,14 +393,14 @@ export default function AgentsPage() {
                     <img
                       src={photoPreview}
                       alt=""
-                      className="w-28 h-28 object-cover rounded-full border-4 border-blue-400 shadow-card ring-4 ring-blue-100"
+                      className="w-28 h-28 object-cover rounded-full border-4 border-primary-500 shadow-card ring-4 ring-primary-100"
                       onError={() => setPhotoPreviewError(true)}
                     />
-                    <div className="absolute inset-0 bg-blue-600/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="absolute inset-0 bg-primary-600/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   </div>
                 ) : (
                   <div className="w-28 h-28 rounded-full border-4 border-dashed border-gray-300 flex items-center justify-center text-gray-400 bg-white shadow-subtle">
-                    {form.profile_photo ? <ImageIcon className="w-12 h-12 text-blue-400" /> : <Plus className="w-12 h-12" />}
+                    {form.profile_photo ? <ImageIcon className="w-12 h-12 text-primary-500" /> : <Plus className="w-12 h-12" />}
                   </div>
                 )}
                 <label className="group px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-button font-semibold cursor-pointer transition-all shadow-card hover:shadow-elevated flex items-center">
@@ -504,7 +504,7 @@ export default function AgentsPage() {
             <div className="relative inline-block">
               <Bot className="w-24 h-24 mx-auto text-gray-300 mb-6" />
               {!hasNoOrg && (
-                <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center animate-bounce">
+                <div className="absolute -top-2 -right-2 w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center animate-bounce">
                   <Plus className="w-5 h-5 text-white" />
                 </div>
               )}

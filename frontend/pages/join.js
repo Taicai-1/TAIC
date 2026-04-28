@@ -82,7 +82,7 @@ export default function JoinOrganization() {
         <div className="bg-white rounded-card shadow-card border border-gray-100 p-8 text-center">
           {status === 'loading' && (
             <>
-              <Loader2 className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-4" />
+              <Loader2 className="w-16 h-16 text-primary-600 animate-spin mx-auto mb-4" />
               <h2 className="text-xl font-heading font-bold text-gray-900 mb-2">Joining organization...</h2>
             </>
           )}
@@ -111,7 +111,7 @@ export default function JoinOrganization() {
               <h2 className="text-xl font-heading font-bold text-gray-900 mb-2">Unable to join</h2>
               <p className="text-gray-600 mb-4">{message}</p>
               <button onClick={() => router.push('/agents')}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-button transition-colors shadow-card hover:shadow-elevated">
+                className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-button transition-colors shadow-card hover:shadow-elevated">
                 Go to dashboard
               </button>
             </>
@@ -119,8 +119,8 @@ export default function JoinOrganization() {
 
           {status === 'login_required' && (
             <>
-              <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
-                <Building2 className="w-10 h-10 text-blue-600" />
+              <div className="w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-4">
+                <Building2 className="w-10 h-10 text-primary-600" />
               </div>
               <h2 className="text-xl font-heading font-bold text-gray-900 mb-2">Login required</h2>
               <p className="text-gray-600 mb-4">Please log in to accept this invitation. Redirecting...</p>

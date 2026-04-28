@@ -535,7 +535,7 @@ export default function CompanionSettings() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 text-primary-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-500 font-medium">{t('agents:loading')}</p>
         </div>
       </div>
@@ -587,11 +587,11 @@ export default function CompanionSettings() {
                   <img
                     src={profilePhotoUrl}
                     alt={form.name}
-                    className="w-32 h-32 rounded-card object-cover border-4 border-white shadow-elevated ring-4 ring-blue-100"
+                    className="w-32 h-32 rounded-card object-cover border-4 border-white shadow-elevated ring-4 ring-primary-100"
                     onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}
                   />
                 ) : (
-                  <div className={`w-32 h-32 rounded-card ${typeConfig.color} flex items-center justify-center border-4 border-white shadow-elevated ring-4 ring-blue-100`}>
+                  <div className={`w-32 h-32 rounded-card ${typeConfig.color} flex items-center justify-center border-4 border-white shadow-elevated ring-4 ring-primary-100`}>
                     <Bot className="w-16 h-16 text-white" />
                   </div>
                 )}
@@ -665,7 +665,7 @@ export default function CompanionSettings() {
             <div>
               <label className="text-sm font-semibold text-gray-700 mb-1 block">{t('agents:form.context.placeholder')}</label>
               <textarea
-                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white resize-y"
+                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-y"
                 rows="4"
                 value={form.contexte}
                 onChange={e => setForm(f => ({ ...f, contexte: e.target.value }))}
@@ -674,7 +674,7 @@ export default function CompanionSettings() {
             <div>
               <label className="text-sm font-semibold text-gray-700 mb-1 block">{t('agents:form.biography.placeholder')}</label>
               <textarea
-                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white resize-y"
+                className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-y"
                 rows="3"
                 value={form.biographie}
                 onChange={e => setForm(f => ({ ...f, biographie: e.target.value }))}
@@ -872,16 +872,16 @@ export default function CompanionSettings() {
             ) : agentDocuments.map(doc => (
               <div key={doc.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-purple-300 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  {doc.source_url ? <Globe className="w-5 h-5 text-blue-600 flex-shrink-0" /> : <FileText className="w-5 h-5 text-purple-600 flex-shrink-0" />}
+                  {doc.source_url ? <Globe className="w-5 h-5 text-primary-600 flex-shrink-0" /> : <FileText className="w-5 h-5 text-purple-600 flex-shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{doc.filename}</p>
                     <p className="text-xs text-gray-500">{new Date(doc.created_at).toLocaleDateString('fr-FR')}</p>
                   </div>
                   {doc.source_url && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-600 border border-blue-200 flex-shrink-0">URL</span>
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-primary-50 text-primary-600 border border-primary-100 flex-shrink-0">URL</span>
                   )}
                   {doc.notion_link_id && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-primary-50 text-indigo-600 border border-primary-100 flex-shrink-0">Notion</span>
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-primary-50 text-primary-600 border border-primary-100 flex-shrink-0">Notion</span>
                   )}
                   {doc.drive_link_id && (
                     <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex-shrink-0">Drive</span>
@@ -892,17 +892,17 @@ export default function CompanionSettings() {
                     <button
                       onClick={() => handleRefreshUrl(doc.id)}
                       disabled={refreshingDocId === doc.id}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
+                      className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
                       title={t('agents:url.refresh', 'Rafraîchir')}
                     >
-                      {refreshingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> : <RefreshCw className="w-4 h-4" />}
+                      {refreshingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-primary-500" /> : <RefreshCw className="w-4 h-4" />}
                     </button>
                   )}
                   {doc.notion_link_id && (
                     <button
                       onClick={() => resyncNotionDoc(doc)}
                       disabled={resyncingDocId === doc.id}
-                      className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-primary-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
+                      className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
                       title={t('agents:buttons.resyncNotion')}
                     >
                       {resyncingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-primary-500" /> : <RefreshCw className="w-4 h-4" />}
@@ -1109,7 +1109,7 @@ export default function CompanionSettings() {
                 type="button"
                 onClick={addNotionLink}
                 disabled={addingNotionLink || !notionInput.trim()}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-button hover:bg-indigo-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                className="px-4 py-2 bg-primary-600 text-white rounded-button hover:bg-primary-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
                 {addingNotionLink ? <Loader2 className="w-4 h-4 animate-spin" /> : t('agents:notion.addButton')}
               </button>
@@ -1126,7 +1126,7 @@ export default function CompanionSettings() {
             ) : notionLinks.map(link => (
               <div key={link.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-primary-100 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  <Link className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                  <Link className="w-5 h-5 text-primary-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{link.label}</p>
                     <p className="text-xs text-gray-500">
@@ -1144,7 +1144,7 @@ export default function CompanionSettings() {
                     <button
                       onClick={() => ingestNotionLink(link.id)}
                       disabled={ingestingNotionLinkId === link.id}
-                      className="flex items-center space-x-1 px-2 py-1 text-xs text-indigo-600 hover:bg-primary-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                      className="flex items-center space-x-1 px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
                       title={t('agents:notion.ingestButton')}
                     >
                       {ingestingNotionLinkId === link.id ? (

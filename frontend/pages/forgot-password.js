@@ -47,7 +47,7 @@ export default function ForgotPassword() {
       <div className="relative z-10 bg-white p-8 rounded-card shadow-card w-full max-w-md border border-gray-100 animate-fade-in">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 mb-4">
-            <Mail className="w-8 h-8 text-blue-600" />
+            <Mail className="w-8 h-8 text-primary-600" />
           </div>
           <h2 className="text-3xl font-heading font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
             {t('auth:forgotPassword.title')}
@@ -78,7 +78,7 @@ export default function ForgotPassword() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                <Mail className="w-4 h-4 mr-2 text-blue-600" />
+                <Mail className="w-4 h-4 mr-2 text-primary-600" />
                 {t('auth:forgotPassword.email.label')}
               </label>
               <div className="relative">
@@ -88,7 +88,7 @@ export default function ForgotPassword() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
-                  className="appearance-none block w-full px-4 py-3 pl-11 border border-gray-200 rounded-input bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
+                  className="appearance-none block w-full px-4 py-3 pl-11 border border-gray-200 rounded-input bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-300"
                 />
                 <div className="absolute left-3 top-1/2 -translate-y-1/2">
                   <Mail className="w-5 h-5 text-gray-400" />
@@ -99,7 +99,7 @@ export default function ForgotPassword() {
             <button
               type="submit"
               disabled={loading}
-              className="group w-full flex justify-center items-center py-4 px-6 border-none rounded-button shadow-card hover:shadow-elevated text-base font-bold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:from-blue-700 hover:via-purple-700 hover:to-pink-700 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+              className="group w-full flex justify-center items-center py-4 px-6 border-none rounded-button shadow-card hover:shadow-elevated text-base font-bold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:from-blue-700 hover:via-purple-700 hover:to-pink-700 focus:outline-none focus:ring-4 focus:ring-primary-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
             >
               {loading ? (
                 <div className="flex items-center">
@@ -121,7 +121,7 @@ export default function ForgotPassword() {
           <div className="mt-6 text-center">
             <button
               onClick={() => router.push('/login')}
-              className="group inline-flex items-center text-blue-600 hover:text-purple-600 text-sm font-semibold transition-colors duration-300"
+              className="group inline-flex items-center text-primary-600 hover:text-purple-600 text-sm font-semibold transition-colors duration-300"
             >
               <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
               {t('auth:forgotPassword.backToLogin')}

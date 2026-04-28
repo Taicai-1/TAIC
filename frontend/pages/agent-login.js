@@ -46,7 +46,7 @@ export default function AgentLogin() {
       <div className="bg-white p-8 rounded-card shadow-card w-full max-w-md border border-gray-100 animate-fade-in">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 mb-4 relative">
-            <Bot className="w-8 h-8 text-blue-600" />
+            <Bot className="w-8 h-8 text-primary-600" />
             <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse"></div>
           </div>
           <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2 flex items-center justify-center gap-2">
@@ -58,13 +58,13 @@ export default function AgentLogin() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-              <Mail className="w-4 h-4 mr-2 text-blue-600" />
+              <Mail className="w-4 h-4 mr-2 text-primary-600" />
               {t('auth:agentLogin.email.label')}
             </label>
             <div className="relative">
               <input
                 type="email"
-                className="appearance-none block w-full px-4 py-3 pl-11 border border-gray-200 rounded-input placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 bg-white"
+                className="appearance-none block w-full px-4 py-3 pl-11 border border-gray-200 rounded-input placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-300 bg-white"
                 placeholder={t('auth:agentLogin.email.placeholder')}
                 value={formData.email}
                 onChange={e => setFormData(f => ({ ...f, email: e.target.value }))}
@@ -98,7 +98,7 @@ export default function AgentLogin() {
 
           <button
             type="submit"
-            className="group w-full flex justify-center items-center py-4 px-6 border-none rounded-button shadow-card hover:shadow-elevated text-base font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="group w-full flex justify-center items-center py-4 px-6 border-none rounded-button shadow-card hover:shadow-elevated text-base font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-primary-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             disabled={loading}
           >
             {loading ? (
@@ -125,9 +125,9 @@ export default function AgentLogin() {
             </div>
           </div>
 
-          <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-button border border-blue-200">
+          <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-button border border-primary-100">
             <p className="text-xs text-center text-gray-600">
-              <span className="font-semibold text-blue-700">{t('auth:agentLogin.infoReserved')}</span> {t('auth:agentLogin.infoMessage')} <a href="/login" className="text-blue-600 hover:underline font-semibold">{t('auth:agentLogin.normalLoginLink')}</a>.
+              <span className="font-semibold text-primary-700">{t('auth:agentLogin.infoReserved')}</span> {t('auth:agentLogin.infoMessage')} <a href="/login" className="text-primary-600 hover:underline font-semibold">{t('auth:agentLogin.normalLoginLink')}</a>.
             </p>
           </div>
         </div>

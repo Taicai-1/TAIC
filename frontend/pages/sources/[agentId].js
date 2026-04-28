@@ -162,14 +162,14 @@ export default function SourcesPage() {
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 placeholder={t("sources:url.placeholder")}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-input text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-input text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 disabled={addingUrl}
               />
             </div>
             <button
               type="submit"
               disabled={!urlInput.trim() || addingUrl}
-              className="flex items-center space-x-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-button transition-colors"
+              className="flex items-center space-x-1.5 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-button transition-colors"
             >
               {addingUrl ? (
                 <>
@@ -189,7 +189,7 @@ export default function SourcesPage() {
         {/* RAG Documents */}
         <section>
           <h2 className="text-lg font-semibold font-heading mb-4 flex items-center space-x-2">
-            <FileText className="w-5 h-5 text-blue-600" />
+            <FileText className="w-5 h-5 text-primary-600" />
             <span>{t("sources:sections.documents")}</span>
             <span className="text-sm text-gray-400 font-normal">({documents.length})</span>
           </h2>
@@ -212,7 +212,7 @@ export default function SourcesPage() {
                   >
                     <div className="flex items-center space-x-3 min-w-0">
                       {isUrl ? (
-                        <Globe className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                        <Globe className="w-5 h-5 text-primary-500 flex-shrink-0" />
                       ) : (
                         <File className="w-5 h-5 text-gray-400 flex-shrink-0" />
                       )}
@@ -256,7 +256,7 @@ export default function SourcesPage() {
                       {doc.has_file && (
                         <button
                           onClick={() => handleDownload(doc.id, doc.filename)}
-                          className="flex items-center space-x-1 px-3 py-1.5 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-button transition-colors border border-blue-200"
+                          className="flex items-center space-x-1 px-3 py-1.5 text-xs bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-button transition-colors border border-primary-100"
                         >
                           <Download className="w-3.5 h-3.5" />
                           <span>{t("sources:documents.download")}</span>

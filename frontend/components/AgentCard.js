@@ -3,7 +3,7 @@ import { useTranslation } from 'next-i18next';
 import { getApiUrl } from '../lib/api';
 
 const TYPE_META = {
-  conversationnel: { label: 'Conversationnel', Icon: Users,      color: 'text-blue-600',   bg: 'bg-blue-50',   stripe: 'bg-blue-600'  },
+  conversationnel: { label: 'Conversationnel', Icon: Users,      color: 'text-primary-600',   bg: 'bg-primary-50',   stripe: 'bg-primary-600'  },
   recherche_live:  { label: 'Recherche Live',  Icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50', stripe: 'bg-violet-600' },
   visuel:          { label: 'Visuel',          Icon: ImageIcon,  color: 'text-pink-600',   bg: 'bg-pink-50',   stripe: 'bg-pink-600'   },
 };
@@ -38,7 +38,7 @@ export default function AgentCard({ agent, onChat, onEdit, onDelete }) {
           <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
             {(!agent.shared || agent.can_edit) && (
               <button onClick={onEdit} title={t('buttons.edit')}
-                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-sm transition-colors">
+                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-sm transition-colors">
                 <Settings className="w-4 h-4" />
               </button>
             )}

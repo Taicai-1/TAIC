@@ -54,8 +54,8 @@ export default function CookieBanner() {
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-[9999] p-4 animate-fade-in">
-      <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-elevated border border-gray-200 p-5 flex flex-col sm:flex-row items-center gap-4">
-        <Shield className="w-6 h-6 text-blue-600 flex-shrink-0 hidden sm:block" />
+      <div className="max-w-3xl mx-auto bg-white rounded-card shadow-elevated border border-gray-200 p-5 flex flex-col sm:flex-row items-center gap-4">
+        <Shield className="w-6 h-6 text-primary-600 flex-shrink-0 hidden sm:block" />
         <p className="text-sm text-gray-700 flex-1 text-center sm:text-left">
           {t('cookies.message')}
         </p>
@@ -68,7 +68,7 @@ export default function CookieBanner() {
           </button>
           <button
             onClick={handleAccept}
-            className="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-button hover:bg-blue-700 shadow-subtle hover:shadow-card transition-all duration-200"
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-primary-600 rounded-button hover:bg-primary-700 shadow-subtle hover:shadow-card transition-all duration-200"
           >
             {t('cookies.accept')}
           </button>

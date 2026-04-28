@@ -234,7 +234,7 @@ export default function Profile() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center space-y-4">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+          <Loader2 className="w-12 h-12 text-primary-600 animate-spin" />
           <p className="text-xl font-semibold text-gray-700">{t('profile:loading')}</p>
         </div>
       </div>
@@ -482,7 +482,7 @@ export default function Profile() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
               <div className="group bg-white/90 backdrop-blur-sm rounded-card shadow-elevated border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 rounded-button bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-card group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-button bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-card group-hover:scale-110 transition-transform">
                     <Bot className="w-6 h-6 text-white" />
                   </div>
                 </div>
@@ -653,7 +653,7 @@ export default function Profile() {
 
                   <div className="bg-white rounded-card border border-gray-100 p-5">
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                      <PieChartIcon className="w-4 h-4 text-blue-500" />
+                      <PieChartIcon className="w-4 h-4 text-primary-500" />
                       {t('profile:sections.analytics.userVsAgent')}
                     </h3>
                     {(analytics.role_distribution.user + analytics.role_distribution.agent) > 0 ? (
@@ -707,7 +707,7 @@ export default function Profile() {
           {/* GDPR Data Export Card */}
           <div className="bg-white rounded-card shadow-card border border-gray-200 p-8 mb-8 animate-fade-in animation-delay-400">
             <div className="flex items-start space-x-4 mb-6">
-              <div className="w-12 h-12 rounded-button bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center shadow-card flex-shrink-0">
+              <div className="w-12 h-12 rounded-button bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-card flex-shrink-0">
                 <Shield className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1">
@@ -720,7 +720,7 @@ export default function Profile() {
             <button
               onClick={handleExportData}
               disabled={exportLoading}
-              className="group w-full sm:w-auto flex items-center justify-center space-x-3 px-6 py-4 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-button shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="group w-full sm:w-auto flex items-center justify-center space-x-3 px-6 py-4 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-button shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {exportLoading ? (
                 <>

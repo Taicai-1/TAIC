@@ -453,7 +453,7 @@ export default function Organization() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+        <Loader2 className="w-12 h-12 text-primary-600 animate-spin" />
       </div>
     );
   }
@@ -541,17 +541,17 @@ export default function Organization() {
               {/* Join */}
               <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                 <div className="flex items-center space-x-3 mb-6">
-                  <div className="w-10 h-10 rounded-button bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-button bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
                     <UserPlus className="w-5 h-5 text-white" />
                   </div>
                   <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:noOrg.joinTitle')}</h2>
                 </div>
                 <input
-                  type="text" className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white mb-4"
+                  type="text" className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white mb-4"
                   placeholder={t('organization:noOrg.codePlaceholder')} value={joinCode} onChange={e => setJoinCode(e.target.value)}
                 />
                 <button onClick={handleJoin} disabled={actionLoading || !joinCode.trim()}
-                  className="w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-button shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                  className="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold rounded-button shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-all">
                   {actionLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : t('organization:noOrg.joinButton')}
                 </button>
               </div>
@@ -635,7 +635,7 @@ export default function Organization() {
                         <code className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-sm text-sm font-mono text-gray-600 truncate">
                           {company.invite_code}
                         </code>
-                        <button onClick={handleCopyInviteLink} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-sm transition-colors" title={t('organization:invitations.copyLink')}>
+                        <button onClick={handleCopyInviteLink} className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-sm transition-colors" title={t('organization:invitations.copyLink')}>
                           <Copy className="w-4 h-4" />
                         </button>
                         {company.role === 'owner' && (
@@ -659,7 +659,7 @@ export default function Organization() {
                 <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                   <button onClick={() => setMembersOpen(!membersOpen)} className="w-full flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-button bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-button bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
                         <Users className="w-5 h-5 text-white" />
                       </div>
                       <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:members.title')} ({members.length})</h2>
@@ -699,7 +699,7 @@ export default function Organization() {
                                       <select
                                         value={m.role}
                                         onChange={e => handleChangeRole(m.id, e.target.value)}
-                                        className="text-xs px-2 py-1 border border-gray-200 rounded-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        className="text-xs px-2 py-1 border border-gray-200 rounded-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                                       >
                                         <option value="member">{t('organization:members.member')}</option>
                                         <option value="admin">{t('organization:members.admin')}</option>
@@ -874,7 +874,7 @@ export default function Organization() {
                                       {(cmd.agent_ids || []).map(aid => {
                                         const ag = orgAgents.find(a => a.id === aid);
                                         return ag ? (
-                                          <span key={aid} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs">{ag.name}</span>
+                                          <span key={aid} className="bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full text-xs">{ag.name}</span>
                                         ) : null;
                                       })}
                                     </div>
@@ -939,13 +939,13 @@ export default function Organization() {
                                   </span>
                                 </td>
                                 <td className="py-3 px-2 text-center">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-700">
                                     <Users className="w-3 h-3 mr-1" />{a.shared_with_count || 0}
                                   </span>
                                 </td>
                                 <td className="py-3 px-2 text-right">
                                   <div className="flex items-center justify-end space-x-1">
-                                    <button onClick={() => openShareModal(a)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-sm transition-colors" title={t('organization:agents.share')}>
+                                    <button onClick={() => openShareModal(a)} className="p-1.5 text-primary-500 hover:text-primary-700 hover:bg-primary-50 rounded-sm transition-colors" title={t('organization:agents.share')}>
                                       <Share2 className="w-4 h-4" />
                                     </button>
                                     <button onClick={() => handleDeleteOrgAgent(a.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors" title={t('organization:agents.actions')}>
@@ -983,7 +983,7 @@ export default function Organization() {
               <select
                 value={shareTargetUserId}
                 onChange={e => setShareTargetUserId(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white text-sm"
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white text-sm"
               >
                 <option value="">{t('organization:agents.shareModal.selectUser')}</option>
                 {members
@@ -996,7 +996,7 @@ export default function Organization() {
               <button
                 onClick={handleShare}
                 disabled={!shareTargetUserId || shareLoading}
-                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-button shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm whitespace-nowrap"
+                className="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold rounded-button shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm whitespace-nowrap"
               >
                 {shareLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('organization:agents.shareModal.shareButton')}
               </button>
@@ -1006,7 +1006,7 @@ export default function Organization() {
                 type="checkbox"
                 checked={shareCanEdit}
                 onChange={e => setShareCanEdit(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
               <span className="text-sm text-gray-700">{t('organization:agents.shareModal.canEdit')}</span>
             </label>
@@ -1028,7 +1028,7 @@ export default function Organization() {
                         <label className="flex items-center gap-1 cursor-pointer select-none">
                           <div
                             onClick={() => handleToggleCanEdit(s.user_id, s.can_edit)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${s.can_edit ? 'bg-blue-600' : 'bg-gray-300'}`}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${s.can_edit ? 'bg-primary-600' : 'bg-gray-300'}`}
                           >
                             <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.can_edit ? 'translate-x-4' : 'translate-x-0.5'}`} />
                           </div>
@@ -1090,10 +1090,10 @@ export default function Organization() {
                   {slashForm.agent_ids.map(aid => {
                     const ag = orgAgents.find(a => a.id === aid);
                     return ag ? (
-                      <span key={aid} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs flex items-center gap-1">
+                      <span key={aid} className="bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full text-xs flex items-center gap-1">
                         {ag.name}
                         <button onClick={() => setSlashForm(p => ({ ...p, agent_ids: p.agent_ids.filter(x => x !== aid) }))}
-                          className="text-blue-400 hover:text-red-500">
+                          className="text-primary-500 hover:text-red-500">
                           <X className="w-3 h-3" />
                         </button>
                       </span>

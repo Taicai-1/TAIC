@@ -312,7 +312,7 @@ export default function TeamChatPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary-600 mb-4"></div>
           <p className="text-gray-600 font-medium">{t('teams:chat.loading')}</p>
         </div>
       </div>
@@ -343,7 +343,7 @@ export default function TeamChatPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold font-heading text-white">{team.name || `${t('common:navigation.teams')} ${teamId}`}</h1>
-              <p className="text-blue-100 text-sm">{t('teams:chat.teamChat')}</p>
+              <p className="text-primary-100 text-sm">{t('teams:chat.teamChat')}</p>
             </div>
           </div>
         </div>
@@ -395,7 +395,7 @@ export default function TeamChatPage() {
                 <div className="flex-1 min-w-0 conv-title" onClick={() => selectConversation(conv.id)}>
                   {editingTitleId === conv.id ? (
                     <input
-                      className="w-full px-3 py-2 border border-blue-300 rounded-input focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white text-gray-900"
+                      className="w-full px-3 py-2 border border-primary-100 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white text-gray-900"
                       value={editedTitle}
                       onChange={(e) => setEditedTitle(e.target.value)}
                       onBlur={() => handleEditTitle(conv.id)}
@@ -410,7 +410,7 @@ export default function TeamChatPage() {
                       <div className={`font-semibold truncate mb-1 ${selectedConv === conv.id ? 'text-white' : 'text-gray-900'}`}>
                         {conv.title || `${t('chat:sidebar.conversationNumber')} ${conversations.findIndex((c) => c.id === conv.id) + 1}`}
                       </div>
-                      <div className={`text-xs ${selectedConv === conv.id ? 'text-blue-100' : 'text-gray-500'}`}>
+                      <div className={`text-xs ${selectedConv === conv.id ? 'text-primary-100' : 'text-gray-500'}`}>
                         {new Date(conv.created_at).toLocaleDateString(router.locale || 'fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </>
@@ -421,7 +421,7 @@ export default function TeamChatPage() {
                     className={`p-2 rounded-sm transition-all ${
                       selectedConv === conv.id
                         ? 'bg-white/20 hover:bg-white/30 text-white'
-                        : 'bg-blue-50 hover:bg-blue-100 text-blue-600'
+                        : 'bg-primary-50 hover:bg-primary-100 text-primary-600'
                     }`}
                     title={t('chat:sidebar.renameTooltip')}
                     onClick={(e) => {
@@ -460,7 +460,7 @@ export default function TeamChatPage() {
           {messages.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="relative mb-6">
-                <Bot className="w-24 h-24 text-blue-300" />
+                <Bot className="w-24 h-24 text-primary-100" />
                 <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center animate-bounce">
                   <Sparkles className="w-5 h-5 text-white" />
                 </div>
@@ -517,7 +517,7 @@ export default function TeamChatPage() {
                       >
                         {msg.content}
                       </ReactMarkdown>
-                      {msg.streaming && <span className="inline-block w-2 h-5 bg-blue-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
+                      {msg.streaming && <span className="inline-block w-2 h-5 bg-primary-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
                     </div>
                     {isLastAgentMsg && (
                       <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
@@ -550,9 +550,9 @@ export default function TeamChatPage() {
           {loading && !messages.some(m => m.streaming) && ((messages.length > 0 && messages[messages.length - 1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
             <div className="flex justify-start animate-fade-in">
               <div className="rounded-card px-5 py-4 shadow-subtle max-w-[75%] bg-white text-gray-900 rounded-bl-none border border-gray-100 flex items-center gap-3">
-                <Bot className="w-6 h-6 text-blue-600 animate-pulse" />
+                <Bot className="w-6 h-6 text-primary-600 animate-pulse" />
                 <span className="italic text-gray-500 mr-2">{t('teams:chat.teamThinking')}</span>
-                <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                <span className="inline-block w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
                 <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
                 <span className="inline-block w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
               </div>
@@ -566,7 +566,7 @@ export default function TeamChatPage() {
           <div className="flex items-center gap-3 max-w-5xl mx-auto">
             <input
               type="text"
-              className="flex-1 px-5 py-4 border border-gray-200 rounded-input focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none bg-white placeholder-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="flex-1 px-5 py-4 border border-gray-200 rounded-input focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all outline-none bg-white placeholder-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder={selectedConv ? t('chat:input.placeholder') : t('chat:input.placeholderNoConversation')}
               value={input}
               onChange={(e) => setInput(e.target.value)}

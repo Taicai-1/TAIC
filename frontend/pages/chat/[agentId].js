@@ -34,7 +34,7 @@ const MarkdownImage = ({ src, alt, t }) => (
     <img src={src} alt={alt} className="max-w-full rounded-button shadow-card border border-gray-200"
          style={{ maxHeight: '512px', objectFit: 'contain' }} loading="lazy" />
     <div className="flex gap-2 mt-2">
-      <a href={src} download className="px-3 py-1.5 bg-blue-600 text-white rounded-sm hover:bg-blue-700 text-sm">
+      <a href={src} download className="px-3 py-1.5 bg-primary-600 text-white rounded-sm hover:bg-primary-700 text-sm">
         {t('chat:messages.downloadImage')}
       </a>
       <button className="px-3 py-1.5 bg-gray-200 text-gray-800 rounded-sm hover:bg-gray-300 text-sm"
@@ -578,7 +578,7 @@ const handleDeleteConversation = async (convId) => {
 
   if (authLoading || !agent) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-      <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+      <Loader2 className="w-12 h-12 text-primary-600 animate-spin mb-4" />
       <p className="text-gray-600 font-medium">{t('chat:loading.text')}</p>
     </div>
   );
@@ -597,8 +597,8 @@ const handleDeleteConversation = async (convId) => {
               onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}
             />
           ) : (
-            <div className="w-8 h-8 rounded-sm bg-blue-50 flex items-center justify-center">
-              <Bot className="w-4 h-4 text-blue-600" />
+            <div className="w-8 h-8 rounded-sm bg-primary-50 flex items-center justify-center">
+              <Bot className="w-4 h-4 text-primary-600" />
             </div>
           )}
           <div>
@@ -648,7 +648,7 @@ const handleDeleteConversation = async (convId) => {
                 key={conv.id}
                 className={`group relative p-4 rounded-button border transition-all duration-200 cursor-pointer ${
                   selectedConv === conv.id
-                    ? 'border-blue-400 bg-blue-50 shadow-subtle'
+                    ? 'border-primary-500 bg-primary-50 shadow-subtle'
                     : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-subtle'
                 }`}
                 onClick={e => { if (e.target === e.currentTarget || e.target.closest('.conv-content')) selectConversation(conv.id); }}
@@ -657,11 +657,11 @@ const handleDeleteConversation = async (convId) => {
                   {/* Icône de conversation */}
                   <div className={`p-2 rounded-sm flex-shrink-0 ${
                     selectedConv === conv.id
-                      ? 'bg-blue-100'
+                      ? 'bg-primary-100'
                       : 'bg-gray-100 group-hover:bg-gray-200'
                   }`}>
                     <MessageCircle className={`w-4 h-4 ${
-                      selectedConv === conv.id ? 'text-blue-600' : 'text-gray-600'
+                      selectedConv === conv.id ? 'text-primary-600' : 'text-gray-600'
                     }`} />
                   </div>
 
@@ -669,7 +669,7 @@ const handleDeleteConversation = async (convId) => {
                   <div className="flex-1 min-w-0 conv-content" onClick={() => selectConversation(conv.id)}>
                     {editingTitleId === conv.id ? (
                       <input
-                        className="w-full px-2 py-1 border border-blue-300 rounded-sm text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-2 py-1 border border-primary-100 rounded-sm text-sm font-medium focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         value={editedTitle}
                         onChange={e => setEditedTitle(e.target.value)}
                         onBlur={() => handleEditTitle(conv.id)}
@@ -679,7 +679,7 @@ const handleDeleteConversation = async (convId) => {
                       />
                     ) : (
                       <p className={`text-sm font-semibold truncate ${
-                        selectedConv === conv.id ? 'text-blue-700' : 'text-gray-800'
+                        selectedConv === conv.id ? 'text-primary-700' : 'text-gray-800'
                       }`}>
                         {conv.title || `${t('chat:sidebar.conversationNumber')} ${conversations.findIndex(c => c.id === conv.id) + 1}`}
                       </p>
@@ -698,7 +698,7 @@ const handleDeleteConversation = async (convId) => {
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
-                      className="p-1.5 rounded-sm text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-all"
+                      className="p-1.5 rounded-sm text-gray-400 hover:text-primary-600 hover:bg-primary-100 transition-all"
                       title={t('chat:sidebar.renameTooltip')}
                       onClick={e => { e.stopPropagation(); setEditingTitleId(conv.id); setEditedTitle(conv.title || ""); }}
                     >
@@ -725,7 +725,7 @@ const handleDeleteConversation = async (convId) => {
         <div className="flex items-center justify-between px-6 py-4 bg-white shadow-subtle border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <Link href="/agents">
-              <button className="group flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors">
+              <button className="group flex items-center space-x-2 text-gray-700 hover:text-primary-600 transition-colors">
                 <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                 <span className="hidden md:inline font-medium">{t('chat:header.backButton')}</span>
               </button>
@@ -733,7 +733,7 @@ const handleDeleteConversation = async (convId) => {
             <div className="h-6 w-px bg-gray-300 hidden md:block"></div>
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-button bg-gradient-to-br from-blue-100 to-purple-100">
-                <Bot className="w-5 h-5 text-blue-600" />
+                <Bot className="w-5 h-5 text-primary-600" />
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">{agent.name}</h2>
@@ -774,13 +774,13 @@ const handleDeleteConversation = async (convId) => {
             return (
               <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} ${msg.role === "agent" ? "items-end gap-2" : ""} animate-fade-in`}>
                 {msg.role === "agent" && (
-                  <div className="w-7 h-7 rounded-sm bg-blue-50 flex items-center justify-center shrink-0 mb-1">
-                    <Bot className="w-3.5 h-3.5 text-blue-600" />
+                  <div className="w-7 h-7 rounded-sm bg-primary-50 flex items-center justify-center shrink-0 mb-1">
+                    <Bot className="w-3.5 h-3.5 text-primary-600" />
                   </div>
                 )}
                 <div className={`rounded-card px-5 py-3.5 shadow-subtle max-w-[70%] whitespace-pre-line transition-all duration-200 ${
                   msg.role === "user"
-                    ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none"
+                    ? "bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-br-none"
                     : msg.role === "system"
                       ? "bg-gray-100 text-gray-700 rounded-bl-none border border-gray-200"
                       : "bg-white text-gray-900 rounded-bl-none border border-gray-200"
@@ -788,16 +788,16 @@ const handleDeleteConversation = async (convId) => {
                   {msg.role === "system" && url ? (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center space-x-2">
-                        <Zap className="w-4 h-4 text-blue-600" />
+                        <Zap className="w-4 h-4 text-primary-600" />
                         <span className="text-sm font-semibold text-gray-700">{t('chat:messages.actionResult')}</span>
                       </div>
-                      <div className="p-4 bg-white border border-blue-200 rounded-button flex flex-col gap-3">
-                        <div className="text-sm text-blue-700 break-words">
+                      <div className="p-4 bg-white border border-primary-100 rounded-button flex flex-col gap-3">
+                        <div className="text-sm text-primary-700 break-words">
                           <a href={url} target="_blank" rel="noreferrer" className="hover:underline font-medium">{url}</a>
                         </div>
                         <div className="flex gap-2">
                           <button
-                            className="flex items-center space-x-1 px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition-all font-medium text-sm"
+                            className="flex items-center space-x-1 px-4 py-2 bg-primary-600 text-white rounded-sm hover:bg-primary-700 transition-all font-medium text-sm"
                             onClick={() => window.open(url, "_blank")}
                           >
                             <ExternalLink className="w-4 h-4" />
@@ -822,7 +822,7 @@ const handleDeleteConversation = async (convId) => {
                       {msg.role === "agent" ? (
                         <>
                           <MarkdownText>{msg.content}</MarkdownText>
-                          {msg.streaming && <span className="inline-block w-2 h-5 bg-blue-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
+                          {msg.streaming && <span className="inline-block w-2 h-5 bg-primary-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
                         </>
                       ) : (
                         <div className="leading-relaxed whitespace-pre-line">{msg.content}</div>
@@ -857,15 +857,15 @@ const handleDeleteConversation = async (convId) => {
           {loading && !messages.some(m => m.streaming) && ((messages.length > 0 && messages[messages.length-1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
             <div className="flex justify-start animate-fade-in">
               <div className="rounded-card px-5 py-4 shadow-subtle max-w-[70%] bg-white text-gray-900 rounded-bl-none border border-gray-200 flex items-center gap-3">
-                <div className="p-2 rounded-sm bg-blue-100">
-                  <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                <div className="p-2 rounded-sm bg-primary-100">
+                  <Loader2 className="w-4 h-4 text-primary-600 animate-spin" />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-gray-700">{t('chat:messages.thinking', { agentName: agent.name })}</span>
                   <div className="flex items-center mt-1">
-                    <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-bounce mr-1" style={{animationDelay: '0ms'}}></span>
-                    <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-bounce mr-1" style={{animationDelay: '150ms'}}></span>
-                    <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></span>
+                    <span className="inline-block w-2 h-2 bg-primary-500 rounded-full animate-bounce mr-1" style={{animationDelay: '0ms'}}></span>
+                    <span className="inline-block w-2 h-2 bg-primary-500 rounded-full animate-bounce mr-1" style={{animationDelay: '150ms'}}></span>
+                    <span className="inline-block w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></span>
                   </div>
                 </div>
               </div>
@@ -878,7 +878,7 @@ const handleDeleteConversation = async (convId) => {
             /* Message si aucune conversation sélectionnée */
             <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
               <div className="p-6 rounded-card bg-gradient-to-br from-blue-100 to-purple-100 mb-4">
-                <MessageCircle className="w-16 h-16 text-blue-600" />
+                <MessageCircle className="w-16 h-16 text-primary-600" />
               </div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">{t('chat:emptyState.title')}</h3>
               <p className="text-gray-600 mb-4">{t('chat:emptyState.description', { agentName: agent.name })}</p>
@@ -905,8 +905,8 @@ const handleDeleteConversation = async (convId) => {
             {attachments.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {attachments.map((file, idx) => (
-                  <div key={idx} className="flex items-center space-x-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-sm">
-                    <FileText className="w-4 h-4 text-blue-600" />
+                  <div key={idx} className="flex items-center space-x-2 px-3 py-2 bg-primary-50 border border-primary-100 rounded-sm">
+                    <FileText className="w-4 h-4 text-primary-600" />
                     <span className="text-sm text-gray-700 truncate max-w-[200px]">{file.name}</span>
                     <button
                       onClick={() => setAttachments(attachments.filter((_, i) => i !== idx))}
@@ -1014,7 +1014,7 @@ const handleDeleteConversation = async (convId) => {
                 <div className="flex items-center justify-between px-3 pb-3">
                   <div className="flex gap-1">
                     {/* Bouton pièce jointe */}
-                    <label className="group p-2 flex items-center justify-center rounded-sm hover:bg-gray-100 text-gray-400 hover:text-blue-600 cursor-pointer transition-all" title={t('chat:input.attachmentTooltip')}>
+                    <label className="group p-2 flex items-center justify-center rounded-sm hover:bg-gray-100 text-gray-400 hover:text-primary-600 cursor-pointer transition-all" title={t('chat:input.attachmentTooltip')}>
                       <Paperclip className="w-4 h-4 group-hover:rotate-12 transition-transform" />
                       <input
                         type="file"
@@ -1038,7 +1038,7 @@ const handleDeleteConversation = async (convId) => {
                       className={`p-2 flex items-center justify-center rounded-sm transition-all ${
                         listening
                           ? 'bg-red-500 text-white ring-2 ring-red-200 animate-pulse'
-                          : 'hover:bg-gray-100 text-gray-400 hover:text-blue-600'
+                          : 'hover:bg-gray-100 text-gray-400 hover:text-primary-600'
                       } focus:outline-none disabled:opacity-50`}
                       disabled={!selectedConv}
                     >
