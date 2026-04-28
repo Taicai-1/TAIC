@@ -3,3 +3,6 @@ ruff
 pytest
 pytest-asyncio
 httpx
+pytest-cov
+fakeredis
+factory-boy
