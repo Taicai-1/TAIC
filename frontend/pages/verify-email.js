@@ -59,7 +59,7 @@ export default function VerifyEmail() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-green-100 to-blue-100 mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-600" />
             </div>
-            <h2 className="text-2xl font-bold text-green-700">
+            <h2 className="text-2xl font-heading font-bold text-green-700">
               {t('auth:emailVerification.success')}
             </h2>
             <div className="flex items-center justify-center space-x-2 text-gray-600">
@@ -74,7 +74,7 @@ export default function VerifyEmail() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-red-100 to-pink-100 mb-4">
               <XCircle className="w-8 h-8 text-red-600" />
             </div>
-            <h2 className="text-2xl font-bold text-red-700">
+            <h2 className="text-2xl font-heading font-bold text-red-700">
               {t('auth:emailVerification.expired')}
             </h2>
             <p className="text-gray-600">{errorMsg}</p>

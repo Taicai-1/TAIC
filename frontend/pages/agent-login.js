@@ -125,7 +125,7 @@ export default function AgentLogin() {
             </div>
           </div>
 
-          <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-blue-200">
+          <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-button border border-blue-200">
             <p className="text-xs text-center text-gray-600">
               <span className="font-semibold text-blue-700">{t('auth:agentLogin.infoReserved')}</span> {t('auth:agentLogin.infoMessage')} <a href="/login" className="text-blue-600 hover:underline font-semibold">{t('auth:agentLogin.normalLoginLink')}</a>.
             </p>

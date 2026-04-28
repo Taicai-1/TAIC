@@ -200,9 +200,9 @@ export default function TeamsPage() {
                     <Zap className="w-4 h-4 mr-2 text-purple-600" />
                     {t('teams:form.subAgentsLabel')}
                   </label>
-                  <div className="space-y-2 max-h-40 overflow-y-auto p-3 bg-white/50 rounded-xl border-2 border-gray-200">
+                  <div className="space-y-2 max-h-40 overflow-y-auto p-3 bg-white/50 rounded-button border-2 border-gray-200">
                     {agents.filter(a => (a.type || 'conversationnel') === 'conversationnel').map(agent => (
-                      <label key={agent.id} className="flex items-center p-2 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer group">
+                      <label key={agent.id} className="flex items-center p-2 hover:bg-blue-50 rounded-sm transition-colors cursor-pointer group">
                         <input
                           type="checkbox"
                           checked={form.actionIds.includes(agent.id)}
@@ -229,7 +229,7 @@ export default function TeamsPage() {
             <div className="flex space-x-4 mt-8">
               <button
                 onClick={() => setShowForm(false)}
-                className="flex-1 px-6 py-3 text-gray-700 bg-white border border-gray-200 rounded-input hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 font-semibold shadow-lg"
+                className="flex-1 px-6 py-3 text-gray-700 bg-white border border-gray-200 rounded-input hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 font-semibold shadow-card"
               >
                 {t('teams:buttons.cancel')}
               </button>
@@ -341,7 +341,7 @@ export default function TeamsPage() {
                     <h3 className="text-2xl font-heading font-bold text-gray-900 mb-3 group-hover:text-purple-600 transition-colors">{team.name}</h3>
 
                     {/* Leader badge */}
-                    <div className="flex items-center space-x-2 mb-4 p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-purple-200">
+                    <div className="flex items-center space-x-2 mb-4 p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-button border border-purple-200">
                       <UserCircle className="w-5 h-5 text-purple-600 flex-shrink-0" />
                       <div>
                         <p className="text-xs text-gray-500 font-medium">{t('teams:form.teamLeader')}</p>

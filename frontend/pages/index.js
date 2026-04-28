@@ -28,7 +28,7 @@ function Section({ icon: Icon, title, subtitle, color, children, defaultOpen = f
         className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50/50 transition-colors"
       >
         <div className="flex items-center space-x-3">
-          <div className={`p-2 rounded-xl ${color || 'bg-blue-100'}`}>
+          <div className={`p-2 rounded-button ${color || 'bg-blue-100'}`}>
             <Icon className={`w-5 h-5 ${color ? 'text-white' : 'text-blue-600'}`} />
           </div>
           <div>
@@ -595,7 +595,7 @@ export default function CompanionSettings() {
                     <Bot className="w-16 h-16 text-white" />
                   </div>
                 )}
-                <label className="absolute inset-0 rounded-2xl bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center">
+                <label className="absolute inset-0 rounded-card bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center">
                   <Camera className="w-8 h-8 text-white" />
                   <input
                     type="file"
@@ -753,7 +753,7 @@ export default function CompanionSettings() {
                     setEmailTagInput("");
                   }
                 }}
-                className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors text-sm font-medium"
+                className="px-4 py-2 bg-purple-600 text-white rounded-button hover:bg-purple-700 transition-colors text-sm font-medium"
               >
                 {t('agents:buttons.addTag')}
               </button>
@@ -770,7 +770,7 @@ export default function CompanionSettings() {
             subtitle={t('agents:settings.neo4jDesc')}
             color="bg-teal-500"
           >
-            <div className="flex items-center justify-between mb-4 p-3 bg-teal-50 rounded-xl border border-teal-200">
+            <div className="flex items-center justify-between mb-4 p-3 bg-teal-50 rounded-button border border-teal-200">
               <span className="text-sm font-semibold text-gray-700">{t('agents:settings.enableNeo4j')}</span>
               <button
                 type="button"
@@ -820,7 +820,7 @@ export default function CompanionSettings() {
         >
           {/* Drop zone */}
           <div
-            className={`relative border-2 border-dashed rounded-xl p-8 mb-4 transition-all duration-300 text-center ${
+            className={`relative border-2 border-dashed rounded-button p-8 mb-4 transition-all duration-300 text-center ${
               isDragging ? 'border-purple-500 bg-purple-50 scale-[1.01]' : 'border-gray-300 bg-gradient-to-br from-gray-50 to-purple-50/50 hover:border-purple-400'
             }`}
             onDragOver={e => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
@@ -835,7 +835,7 @@ export default function CompanionSettings() {
               {isDragging ? t('agents:documents.dropHere') : t('agents:documents.dragDrop')}
             </p>
             <p className="text-xs text-gray-500 mb-3">{t('agents:documents.formats')}</p>
-            <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
+            <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
               <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx" disabled={uploadingDoc}
                 onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
               {uploadingDoc ? <><Loader2 className="w-4 h-4 animate-spin" /><span>{t('agents:buttons.uploading')}</span></> : <><Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span></>}
@@ -847,7 +847,7 @@ export default function CompanionSettings() {
             <Globe className="w-5 h-5 text-purple-500 flex-shrink-0" />
             <input
               type="url"
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-sm text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
               placeholder={t('agents:url.placeholder', 'https://example.com/page')}
               value={urlInput}
               onChange={e => setUrlInput(e.target.value)}
@@ -856,7 +856,7 @@ export default function CompanionSettings() {
             <button
               onClick={handleAddUrl}
               disabled={addingUrl || !urlInput.trim()}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               {addingUrl ? <><Loader2 className="w-4 h-4 animate-spin" /><span>{t('agents:url.adding', 'Ajout...')}</span></> : <><Plus className="w-4 h-4" /><span>{t('agents:url.add', 'Ajouter URL')}</span></>}
             </button>
@@ -870,7 +870,7 @@ export default function CompanionSettings() {
                 <p className="text-sm">{t('agents:documents.noDocuments')}</p>
               </div>
             ) : agentDocuments.map(doc => (
-              <div key={doc.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-purple-300 transition-all group">
+              <div key={doc.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-purple-300 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   {doc.source_url ? <Globe className="w-5 h-5 text-blue-600 flex-shrink-0" /> : <FileText className="w-5 h-5 text-purple-600 flex-shrink-0" />}
                   <div className="flex-1 min-w-0">
@@ -892,7 +892,7 @@ export default function CompanionSettings() {
                     <button
                       onClick={() => handleRefreshUrl(doc.id)}
                       disabled={refreshingDocId === doc.id}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
                       title={t('agents:url.refresh', 'Rafraîchir')}
                     >
                       {refreshingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> : <RefreshCw className="w-4 h-4" />}
@@ -902,13 +902,13 @@ export default function CompanionSettings() {
                     <button
                       onClick={() => resyncNotionDoc(doc)}
                       disabled={resyncingDocId === doc.id}
-                      className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
+                      className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
                       title={t('agents:buttons.resyncNotion')}
                     >
                       {resyncingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> : <RefreshCw className="w-4 h-4" />}
                     </button>
                   )}
-                  <button onClick={() => deleteDocument(doc.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
+                  <button onClick={() => deleteDocument(doc.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -927,7 +927,7 @@ export default function CompanionSettings() {
         >
           {/* Drop zone */}
           <div
-            className={`relative border-2 border-dashed rounded-xl p-8 mb-4 transition-all duration-300 text-center ${
+            className={`relative border-2 border-dashed rounded-button p-8 mb-4 transition-all duration-300 text-center ${
               isDraggingTraceability ? 'border-amber-500 bg-amber-50 scale-[1.01]' : 'border-gray-300 bg-gradient-to-br from-gray-50 to-amber-50/50 hover:border-amber-400'
             }`}
             onDragOver={e => { e.preventDefault(); e.stopPropagation(); setIsDraggingTraceability(true); }}
@@ -942,7 +942,7 @@ export default function CompanionSettings() {
               {isDraggingTraceability ? t('agents:documents.dropHere') : t('agents:traceabilityDocs.dragDrop')}
             </p>
             <p className="text-xs text-gray-500 mb-3">{t('agents:traceabilityDocs.formats')}</p>
-            <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:from-amber-600 hover:to-orange-600 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
+            <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-sm hover:from-amber-600 hover:to-orange-600 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
               <input type="file" className="hidden" accept=".pdf,.txt,.docx,.xlsx,.xls,.csv" disabled={uploadingTraceabilityDoc}
                 onChange={e => { if (e.target.files?.[0]) { uploadTraceabilityDoc(e.target.files[0]); e.target.value = ''; } }} />
               {uploadingTraceabilityDoc ? <><Loader2 className="w-4 h-4 animate-spin" /><span>{t('agents:buttons.uploading')}</span></> : <><Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span></>}
@@ -957,7 +957,7 @@ export default function CompanionSettings() {
                 <p className="text-sm">{t('agents:traceabilityDocs.noDocuments')}</p>
               </div>
             ) : traceabilityDocs.map(doc => (
-              <div key={doc.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-amber-300 transition-all group">
+              <div key={doc.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-amber-300 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <FileText className="w-5 h-5 text-amber-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -965,7 +965,7 @@ export default function CompanionSettings() {
                     <p className="text-xs text-gray-500">{new Date(doc.created_at).toLocaleDateString('fr-FR')}</p>
                   </div>
                 </div>
-                <button onClick={() => deleteTraceabilityDoc(doc.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
+                <button onClick={() => deleteTraceabilityDoc(doc.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -973,7 +973,7 @@ export default function CompanionSettings() {
           </div>
 
           {/* Weekly Recap */}
-          <div className="mt-6 p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+          <div className="mt-6 p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-button border border-amber-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-gray-700 flex items-center">
@@ -997,7 +997,7 @@ export default function CompanionSettings() {
                     {t('agents:form.weeklyRecap.promptLabel')}
                   </label>
                   <textarea
-                    className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm resize-y"
+                    className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm resize-y"
                     rows={4}
                     placeholder={t('agents:form.weeklyRecap.promptPlaceholder')}
                     value={form.weekly_recap_prompt}
@@ -1014,7 +1014,7 @@ export default function CompanionSettings() {
                   <div className="flex gap-2">
                     <input
                       type="email"
-                      className="flex-1 px-3 py-1.5 border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
+                      className="flex-1 px-3 py-1.5 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
                       placeholder={t('agents:form.weeklyRecap.recipientsPlaceholder')}
                       value={recapRecipientInput}
                       onChange={e => setRecapRecipientInput(e.target.value)}
@@ -1038,7 +1038,7 @@ export default function CompanionSettings() {
                           setRecapRecipientInput("");
                         }
                       }}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-lg transition-colors"
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-sm transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -1067,7 +1067,7 @@ export default function CompanionSettings() {
                     type="button"
                     onClick={sendRecapNow}
                     disabled={sendingRecap}
-                    className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-lg transition-colors"
+                    className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-sm transition-colors"
                   >
                     {sendingRecap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     {sendingRecap ? t('agents:buttons.sendingRecap') : t('agents:buttons.sendRecapNow')}
@@ -1087,7 +1087,7 @@ export default function CompanionSettings() {
           defaultOpen={false}
         >
           {/* Add Notion link form */}
-          <div className="p-4 bg-gradient-to-br from-indigo-50 to-violet-50 rounded-xl border border-indigo-200 mb-4">
+          <div className="p-4 bg-gradient-to-br from-indigo-50 to-violet-50 rounded-button border border-indigo-200 mb-4">
             <input
               type="text"
               className="w-full px-4 py-2.5 border border-indigo-200 rounded-input focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all outline-none bg-white text-sm mb-3"
@@ -1109,7 +1109,7 @@ export default function CompanionSettings() {
                 type="button"
                 onClick={addNotionLink}
                 disabled={addingNotionLink || !notionInput.trim()}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                className="px-4 py-2 bg-indigo-600 text-white rounded-button hover:bg-indigo-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
                 {addingNotionLink ? <Loader2 className="w-4 h-4 animate-spin" /> : t('agents:notion.addButton')}
               </button>
@@ -1124,7 +1124,7 @@ export default function CompanionSettings() {
                 <p className="text-sm">{t('agents:notion.noLinks')}</p>
               </div>
             ) : notionLinks.map(link => (
-              <div key={link.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-indigo-300 transition-all group">
+              <div key={link.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-indigo-300 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <Link className="w-5 h-5 text-indigo-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -1136,7 +1136,7 @@ export default function CompanionSettings() {
                 </div>
                 <div className="flex items-center space-x-1">
                   {link.ingested ? (
-                    <span className="flex items-center space-x-1 px-2 py-1 text-xs bg-green-50 text-green-600 rounded-lg border border-green-200">
+                    <span className="flex items-center space-x-1 px-2 py-1 text-xs bg-green-50 text-green-600 rounded-sm border border-green-200">
                       <CheckCircle className="w-3.5 h-3.5" />
                       <span>{t('agents:notion.ingested')}</span>
                     </span>
@@ -1144,7 +1144,7 @@ export default function CompanionSettings() {
                     <button
                       onClick={() => ingestNotionLink(link.id)}
                       disabled={ingestingNotionLinkId === link.id}
-                      className="flex items-center space-x-1 px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                      className="flex items-center space-x-1 px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
                       title={t('agents:notion.ingestButton')}
                     >
                       {ingestingNotionLinkId === link.id ? (
@@ -1157,7 +1157,7 @@ export default function CompanionSettings() {
                       )}
                     </button>
                   )}
-                  <button onClick={() => deleteNotionLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
+                  <button onClick={() => deleteNotionLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1175,7 +1175,7 @@ export default function CompanionSettings() {
           defaultOpen={false}
         >
           {/* Add Drive folder form */}
-          <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200 mb-4">
+          <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-button border border-emerald-200 mb-4">
             <div className="flex gap-2">
               <input
                 type="text"
@@ -1189,7 +1189,7 @@ export default function CompanionSettings() {
                 type="button"
                 onClick={addDriveLink}
                 disabled={addingDriveLink || !driveInput.trim()}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-button hover:bg-emerald-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
                 {addingDriveLink ? <Loader2 className="w-4 h-4 animate-spin" /> : t('agents:drive.addButton')}
               </button>
@@ -1204,7 +1204,7 @@ export default function CompanionSettings() {
                 <p className="text-sm">{t('agents:drive.noLinks')}</p>
               </div>
             ) : driveLinks.map(link => (
-              <div key={link.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-all group">
+              <div key={link.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-emerald-300 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <HardDrive className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -1218,7 +1218,7 @@ export default function CompanionSettings() {
                   <button
                     onClick={() => link.ingested_count > 0 ? resyncDriveLink(link.id) : ingestDriveLink(link.id)}
                     disabled={syncingDriveLinkId === link.id}
-                    className="flex items-center space-x-1 px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                    className="flex items-center space-x-1 px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
                   >
                     {syncingDriveLinkId === link.id ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1229,7 +1229,7 @@ export default function CompanionSettings() {
                       </>
                     )}
                   </button>
-                  <button onClick={() => deleteDriveLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
+                  <button onClick={() => deleteDriveLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1249,7 +1249,7 @@ export default function CompanionSettings() {
           {slackConfig.is_configured ? (
             <div className="space-y-4">
               {/* Connected status */}
-              <div className="flex items-center justify-between p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200">
+              <div className="flex items-center justify-between p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-button border border-green-200">
                 <div className="flex items-center space-x-3">
                   <CheckCircle className="w-5 h-5 text-green-600" />
                   <div>
@@ -1263,27 +1263,27 @@ export default function CompanionSettings() {
 
               {/* Masked credentials */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="p-3 bg-gray-50 rounded-button border border-gray-200">
                   <p className="text-xs font-medium text-gray-500 mb-1">{t('agents:slack.botToken')}</p>
                   <p className="text-sm font-mono text-gray-700">{slackConfig.masked_token}</p>
                 </div>
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="p-3 bg-gray-50 rounded-button border border-gray-200">
                   <p className="text-xs font-medium text-gray-500 mb-1">{t('agents:slack.signingSecret')}</p>
                   <p className="text-sm font-mono text-gray-700">{slackConfig.masked_secret}</p>
                 </div>
               </div>
 
               {/* Webhook URL */}
-              <div className="p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-xl border border-pink-200">
+              <div className="p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-button border border-pink-200">
                 <p className="text-xs font-medium text-gray-500 mb-1">{t('agents:slack.webhookUrl')}</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-sm bg-white px-3 py-2 rounded-lg border border-pink-200 text-gray-700 truncate">
+                  <code className="flex-1 text-sm bg-white px-3 py-2 rounded-sm border border-pink-200 text-gray-700 truncate">
                     {apiUrl}/slack/events
                   </code>
                   <button
                     type="button"
                     onClick={() => { navigator.clipboard.writeText(`${apiUrl}/slack/events`); toast.success(t('agents:slack.copied')); }}
-                    className="p-2 text-pink-600 hover:bg-pink-100 rounded-lg transition-colors flex-shrink-0"
+                    className="p-2 text-pink-600 hover:bg-pink-100 rounded-sm transition-colors flex-shrink-0"
                     title="Copy"
                   >
                     <Copy className="w-4 h-4" />
@@ -1298,7 +1298,7 @@ export default function CompanionSettings() {
                   type="button"
                   onClick={testSlackConnection}
                   disabled={testingSlack}
-                  className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-pink-600 text-white rounded-xl hover:bg-pink-700 transition-colors text-sm font-medium disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-pink-600 text-white rounded-button hover:bg-pink-700 transition-colors text-sm font-medium disabled:opacity-50"
                 >
                   {testingSlack ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                   <span>{testingSlack ? t('agents:slack.testing') : t('agents:slack.test')}</span>
@@ -1306,7 +1306,7 @@ export default function CompanionSettings() {
                 <button
                   type="button"
                   onClick={disconnectSlack}
-                  className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                  className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-red-100 text-red-700 rounded-button hover:bg-red-200 transition-colors text-sm font-medium"
                 >
                   <XCircle className="w-4 h-4" />
                   <span>{t('agents:slack.disconnect')}</span>
@@ -1316,13 +1316,13 @@ export default function CompanionSettings() {
           ) : (
             <div className="space-y-4">
               {/* Not connected status */}
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-button border border-gray-200">
                 <XCircle className="w-5 h-5 text-gray-400" />
                 <p className="text-sm text-gray-500">{t('agents:slack.notConnected')}</p>
               </div>
 
               {/* Connection form */}
-              <div className="p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-xl border border-pink-200 space-y-3">
+              <div className="p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-button border border-pink-200 space-y-3">
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-1 block">{t('agents:slack.botToken')}</label>
                   <input
@@ -1347,7 +1347,7 @@ export default function CompanionSettings() {
                   type="button"
                   onClick={saveSlackConfig}
                   disabled={savingSlack || !slackForm.bot_token.trim() || !slackForm.signing_secret.trim()}
-                  className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-pink-600 text-white rounded-xl hover:bg-pink-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-pink-600 text-white rounded-button hover:bg-pink-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {savingSlack ? <Loader2 className="w-4 h-4 animate-spin" /> : <Hash className="w-4 h-4" />}
                   <span>{savingSlack ? t('agents:slack.connecting') : t('agents:slack.connect')}</span>
@@ -1355,16 +1355,16 @@ export default function CompanionSettings() {
               </div>
 
               {/* Webhook URL hint */}
-              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="p-3 bg-gray-50 rounded-button border border-gray-200">
                 <p className="text-xs font-medium text-gray-500 mb-1">{t('agents:slack.webhookUrl')}</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs bg-white px-2 py-1.5 rounded-lg border border-gray-200 text-gray-600 truncate">
+                  <code className="flex-1 text-xs bg-white px-2 py-1.5 rounded-sm border border-gray-200 text-gray-600 truncate">
                     {apiUrl}/slack/events
                   </code>
                   <button
                     type="button"
                     onClick={() => { navigator.clipboard.writeText(`${apiUrl}/slack/events`); toast.success(t('agents:slack.copied')); }}
-                    className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                    className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-sm transition-colors flex-shrink-0"
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>

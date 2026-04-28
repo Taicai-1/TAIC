@@ -253,7 +253,7 @@ export default function Profile() {
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
               {/* Avatar */}
               <div className="relative">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-xl">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-elevated">
                   <User className="w-12 h-12 text-white" />
                 </div>
                 <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-green-500 rounded-full border-4 border-white flex items-center justify-center shadow-subtle">
@@ -296,7 +296,7 @@ export default function Profile() {
           {/* Organization Card */}
           <div className="bg-white rounded-card shadow-card border border-gray-200 p-8 mb-8 animate-fade-in">
             <div className="flex items-start space-x-4 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-lg flex-shrink-0">
+              <div className="w-12 h-12 rounded-button bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-card flex-shrink-0">
                 <Building2 className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1">
@@ -306,7 +306,7 @@ export default function Profile() {
             </div>
 
             {company ? (
-              <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-xl">
+              <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-button">
                 <div className="flex items-center space-x-3">
                   <Building2 className="w-5 h-5 text-teal-600" />
                   <span className="font-semibold text-teal-800">{company.name}</span>
@@ -316,7 +316,7 @@ export default function Profile() {
                 </div>
                 <button
                   onClick={() => router.push('/organization')}
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition-colors"
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-button transition-colors"
                 >
                   {t('profile:company.manage')}
                 </button>
@@ -324,7 +324,7 @@ export default function Profile() {
             ) : (
               <button
                 onClick={() => router.push('/organization')}
-                className="w-full px-4 py-3 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg transition-all"
+                className="w-full px-4 py-3 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white font-semibold rounded-button shadow-card transition-all"
               >
                 {t('profile:company.joinOrCreate')}
               </button>
@@ -335,7 +335,7 @@ export default function Profile() {
           {twoFactorStatus && (
             <div className="bg-white rounded-card shadow-card border border-gray-200 p-8 mb-8 animate-fade-in">
               <div className="flex items-start space-x-4 mb-6">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center shadow-lg flex-shrink-0">
+                <div className="w-12 h-12 rounded-button bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center shadow-card flex-shrink-0">
                   <Shield className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
@@ -346,14 +346,14 @@ export default function Profile() {
 
               <div className="space-y-4">
                 {/* Status */}
-                <div className="flex items-center space-x-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                <div className="flex items-center space-x-3 p-4 bg-green-50 border border-green-200 rounded-button">
                   <CheckCircle className="w-5 h-5 text-green-600" />
                   <span className="font-semibold text-green-800">{t('profile:twoFactor.enabled')}</span>
                 </div>
 
                 {/* Activated date */}
                 {twoFactorStatus.setup_completed_at && (
-                  <div className="p-4 bg-gray-50 rounded-xl">
+                  <div className="p-4 bg-gray-50 rounded-button">
                     <div className="flex items-center space-x-2 mb-1">
                       <Calendar className="w-4 h-4 text-gray-500" />
                       <span className="text-sm font-medium text-gray-600">{t('profile:twoFactor.activatedOn')}</span>
@@ -370,7 +370,7 @@ export default function Profile() {
           {/* Change Password Card */}
           <div className="bg-white rounded-card shadow-card border border-gray-200 p-8 mb-8 animate-fade-in">
             <div className="flex items-start space-x-4 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg flex-shrink-0">
+              <div className="w-12 h-12 rounded-button bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-card flex-shrink-0">
                 <KeyRound className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1">
@@ -437,7 +437,7 @@ export default function Profile() {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type={showPasswords.confirm ? 'text' : 'password'}
-                  className={`w-full pl-10 pr-10 py-3 border-2 rounded-xl focus:ring-2 transition-all outline-none bg-white ${
+                  className={`w-full pl-10 pr-10 py-3 border-2 rounded-input focus:ring-2 transition-all outline-none bg-white ${
                     passwordForm.confirm
                       ? passwordsMatch
                         ? 'border-green-400 focus:border-green-500 focus:ring-green-200'
@@ -460,7 +460,7 @@ export default function Profile() {
               <button
                 onClick={handleChangePassword}
                 disabled={passwordLoading || !passwordForm.current || !allPasswordValid || !passwordsMatch}
-                className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+                className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
               >
                 {passwordLoading ? (
                   <>
@@ -480,9 +480,9 @@ export default function Profile() {
           {/* Statistics Grid */}
           {stats && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-              <div className="group bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in">
+              <div className="group bg-white/90 backdrop-blur-sm rounded-card shadow-elevated border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-button bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-card group-hover:scale-110 transition-transform">
                     <Bot className="w-6 h-6 text-white" />
                   </div>
                 </div>
@@ -490,9 +490,9 @@ export default function Profile() {
                 <div className="text-sm font-medium text-gray-600">{t('profile:sections.statistics.agents')}</div>
               </div>
 
-              <div className="group bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in animation-delay-100">
+              <div className="group bg-white/90 backdrop-blur-sm rounded-card shadow-elevated border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in animation-delay-100">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-button bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-card group-hover:scale-110 transition-transform">
                     <FileText className="w-6 h-6 text-white" />
                   </div>
                 </div>
@@ -500,9 +500,9 @@ export default function Profile() {
                 <div className="text-sm font-medium text-gray-600">{t('profile:sections.statistics.documents')}</div>
               </div>
 
-              <div className="group bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in animation-delay-200">
+              <div className="group bg-white/90 backdrop-blur-sm rounded-card shadow-elevated border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in animation-delay-200">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-button bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center shadow-card group-hover:scale-110 transition-transform">
                     <MessageCircle className="w-6 h-6 text-white" />
                   </div>
                 </div>
@@ -510,9 +510,9 @@ export default function Profile() {
                 <div className="text-sm font-medium text-gray-600">{t('profile:sections.statistics.conversations')}</div>
               </div>
 
-              <div className="group bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in animation-delay-300">
+              <div className="group bg-white/90 backdrop-blur-sm rounded-card shadow-elevated border-2 border-white/50 p-6 hover:shadow-elevated transition-all duration-200 animate-fade-in animation-delay-300">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-button bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-card group-hover:scale-110 transition-transform">
                     <Zap className="w-6 h-6 text-white" />
                   </div>
                 </div>
@@ -525,7 +525,7 @@ export default function Profile() {
           {/* Analytics Section */}
           <div className="bg-white rounded-card shadow-card border border-gray-200 p-8 mb-8 animate-fade-in">
             <div className="flex items-start space-x-4 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-400 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg flex-shrink-0">
+              <div className="w-12 h-12 rounded-button bg-gradient-to-br from-indigo-400 via-purple-500 to-pink-500 flex items-center justify-center shadow-card flex-shrink-0">
                 <Activity className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1">
@@ -537,7 +537,7 @@ export default function Profile() {
             {analyticsLoading ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {[...Array(4)].map((_, i) => (
-                  <div key={i} className={`animate-pulse bg-gray-200 rounded-xl h-64 ${i === 0 ? 'lg:col-span-2' : ''}`} />
+                  <div key={i} className={`animate-pulse bg-gray-200 rounded-button h-64 ${i === 0 ? 'lg:col-span-2' : ''}`} />
                 ))}
               </div>
             ) : !analytics || (analytics.messages_per_day.every(d => d.count === 0) && analytics.messages_per_agent.length === 0) ? (
@@ -548,7 +548,7 @@ export default function Profile() {
             ) : (
               <div className="space-y-6">
                 {/* Row 1: Activity over time (full width) */}
-                <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <div className="bg-white rounded-card border border-gray-100 p-5">
                   <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-indigo-500" />
                     {t('profile:sections.analytics.activityOverTime')}
@@ -581,7 +581,7 @@ export default function Profile() {
 
                 {/* Row 2: Messages per agent + Feedback */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <div className="bg-white rounded-card border border-gray-100 p-5">
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
                       <BarChart3 className="w-4 h-4 text-violet-500" />
                       {t('profile:sections.analytics.messagesPerAgent')}
@@ -600,7 +600,7 @@ export default function Profile() {
                     )}
                   </div>
 
-                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <div className="bg-white rounded-card border border-gray-100 p-5">
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
                       <PieChartIcon className="w-4 h-4 text-emerald-500" />
                       {t('profile:sections.analytics.feedbackDistribution')}
@@ -632,7 +632,7 @@ export default function Profile() {
 
                 {/* Row 3: Conversations per agent + Role distribution */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <div className="bg-white rounded-card border border-gray-100 p-5">
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
                       <MessageSquare className="w-4 h-4 text-indigo-500" />
                       {t('profile:sections.analytics.conversationsPerAgent')}
@@ -651,7 +651,7 @@ export default function Profile() {
                     )}
                   </div>
 
-                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <div className="bg-white rounded-card border border-gray-100 p-5">
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
                       <PieChartIcon className="w-4 h-4 text-blue-500" />
                       {t('profile:sections.analytics.userVsAgent')}
@@ -681,8 +681,8 @@ export default function Profile() {
 
                 {/* Row 4: Mini stat cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center space-x-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0">
+                  <div className="bg-white rounded-card border border-gray-100 p-5 flex items-center space-x-4">
+                    <div className="w-10 h-10 rounded-button bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0">
                       <MessageCircle className="w-5 h-5 text-white" />
                     </div>
                     <div>
@@ -690,8 +690,8 @@ export default function Profile() {
                       <div className="text-xs text-gray-500">{t('profile:sections.analytics.avgMessagesPerConversation')}</div>
                     </div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center space-x-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center flex-shrink-0">
+                  <div className="bg-white rounded-card border border-gray-100 p-5 flex items-center space-x-4">
+                    <div className="w-10 h-10 rounded-button bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center flex-shrink-0">
                       <Award className="w-5 h-5 text-white" />
                     </div>
                     <div>
@@ -707,7 +707,7 @@ export default function Profile() {
           {/* GDPR Data Export Card */}
           <div className="bg-white rounded-card shadow-card border border-gray-200 p-8 mb-8 animate-fade-in animation-delay-400">
             <div className="flex items-start space-x-4 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center shadow-lg flex-shrink-0">
+              <div className="w-12 h-12 rounded-button bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center shadow-card flex-shrink-0">
                 <Shield className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1">
@@ -753,7 +753,7 @@ export default function Profile() {
             </div>
 
             {/* Delete Account Section */}
-            <div className="border border-red-200 rounded-xl p-5 bg-red-50/50">
+            <div className="border border-red-200 rounded-button p-5 bg-red-50/50">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
@@ -765,7 +765,7 @@ export default function Profile() {
                   <p className="text-sm text-gray-600 mb-2">
                     {t('profile:sections.dangerZone.delete.description')}
                   </p>
-                  <div className="flex items-start space-x-2 text-xs text-red-700 bg-red-100 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2 text-xs text-red-700 bg-red-100 border border-red-200 rounded-sm p-3">
                     <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="font-semibold mb-1">This action cannot be undone.</p>
@@ -776,7 +776,7 @@ export default function Profile() {
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
                   disabled={deleteLoading}
-                  className="sm:flex-shrink-0 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  className="sm:flex-shrink-0 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   Delete Account
                 </button>
@@ -793,7 +793,7 @@ export default function Profile() {
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-red-200 bg-red-50">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-100">
+                <div className="w-10 h-10 rounded-sm flex items-center justify-center bg-red-100">
                   <AlertTriangle className="w-6 h-6 text-red-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900">
@@ -808,7 +808,7 @@ export default function Profile() {
                 {t('profile:modal.delete.description')}
               </p>
 
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <div className="bg-red-50 border border-red-200 rounded-sm p-4 mb-4">
                 <div className="flex items-start space-x-2 mb-3">
                   <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                   <div>
@@ -849,7 +849,7 @@ export default function Profile() {
             <div className="px-6 py-4 bg-gray-50 rounded-b-card flex flex-col-reverse sm:flex-row gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 px-4 py-2.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg font-medium transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-sm font-medium transition-colors disabled:opacity-50"
                 disabled={deleteLoading}
               >
                 {t('profile:modal.buttons.cancel')}
@@ -857,7 +857,7 @@ export default function Profile() {
               <button
                 onClick={handleDeleteAccount}
                 disabled={deleteLoading}
-                className="flex-1 px-4 py-2.5 rounded-lg font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-red-600 hover:bg-red-700"
+                className="flex-1 px-4 py-2.5 rounded-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-red-600 hover:bg-red-700"
               >
                 {deleteLoading ? (
                   <div className="flex items-center justify-center space-x-2">

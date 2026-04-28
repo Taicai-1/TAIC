@@ -418,7 +418,7 @@ export default function TeamChatPage() {
                 </div>
                 <div className={`flex items-center ml-2 gap-1 ${selectedConv === conv.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
                   <button
-                    className={`p-2 rounded-lg transition-all ${
+                    className={`p-2 rounded-sm transition-all ${
                       selectedConv === conv.id
                         ? 'bg-white/20 hover:bg-white/30 text-white'
                         : 'bg-blue-50 hover:bg-blue-100 text-blue-600'
@@ -433,7 +433,7 @@ export default function TeamChatPage() {
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button
-                    className={`p-2 rounded-lg transition-all ${
+                    className={`p-2 rounded-sm transition-all ${
                       selectedConv === conv.id
                         ? 'bg-white/20 hover:bg-red-500 text-white'
                         : 'bg-red-50 hover:bg-red-100 text-red-600'
@@ -482,7 +482,7 @@ export default function TeamChatPage() {
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}
                 >
                   <div
-                    className={`rounded-2xl px-5 py-4 max-w-[75%] transition-all duration-300 ${
+                    className={`rounded-card px-5 py-4 max-w-[75%] transition-all duration-300 ${
                       msg.role === "user"
                         ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-none shadow-card"
                         : "bg-white text-gray-900 rounded-bl-none border border-gray-100 shadow-subtle"
@@ -502,12 +502,12 @@ export default function TeamChatPage() {
                             inline ? (
                               <code className={`${msg.role === "user" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-900"} px-1.5 py-0.5 rounded text-sm`} {...props} />
                             ) : (
-                              <code className={`block ${msg.role === "user" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-900"} p-3 rounded-lg text-sm overflow-x-auto`} {...props} />
+                              <code className={`block ${msg.role === "user" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-900"} p-3 rounded-sm text-sm overflow-x-auto`} {...props} />
                             ),
                           a: ({ node, ...props }) => <a className={msg.role === "user" ? "text-blue-200 underline hover:text-blue-100" : "text-blue-600 underline hover:text-blue-800"} target="_blank" rel="noopener noreferrer" {...props} />,
                           table: ({ node, ...props }) => (
                             <div className="overflow-x-auto my-3">
-                              <table className="min-w-full border-collapse border border-gray-200 rounded-lg text-sm" {...props} />
+                              <table className="min-w-full border-collapse border border-gray-200 rounded-sm text-sm" {...props} />
                             </div>
                           ),
                           thead: ({ node, ...props }) => <thead className="bg-gray-50" {...props} />,
@@ -549,7 +549,7 @@ export default function TeamChatPage() {
           )}
           {loading && !messages.some(m => m.streaming) && ((messages.length > 0 && messages[messages.length - 1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
             <div className="flex justify-start animate-fade-in">
-              <div className="rounded-2xl px-5 py-4 shadow-subtle max-w-[75%] bg-white text-gray-900 rounded-bl-none border border-gray-100 flex items-center gap-3">
+              <div className="rounded-card px-5 py-4 shadow-subtle max-w-[75%] bg-white text-gray-900 rounded-bl-none border border-gray-100 flex items-center gap-3">
                 <Bot className="w-6 h-6 text-blue-600 animate-pulse" />
                 <span className="italic text-gray-500 mr-2">{t('teams:chat.teamThinking')}</span>
                 <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>

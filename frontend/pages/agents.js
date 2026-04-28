@@ -1,48 +1,27 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
 import toast, { Toaster } from "react-hot-toast";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useAuth } from '../hooks/useAuth';
-import api, { getApiUrl } from '../lib/api';
+import api from '../lib/api';
 import {
   Bot,
   Plus,
-  Trash2,
-  Pencil,
   ArrowRight,
   Users,
-  UserCircle,
-  TrendingUp,
   MessageCircle,
   Zap,
   FileText,
   Database,
-  Share2,
   MessageSquarePlus,
   Send,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Search
 } from "lucide-react";
 import Layout from '../components/Layout';
-
-const AGENT_TYPES_CONFIG = {
-  conversationnel: {
-    key: 'conversationnel',
-    icon: Users,
-    color: 'bg-blue-500'
-  },
-  recherche_live: {
-    key: 'recherche_live',
-    icon: TrendingUp,
-    color: 'bg-purple-500'
-  },
-  visuel: {
-    key: 'visuel',
-    icon: ImageIcon,
-    color: 'bg-pink-500'
-  }
-};
+import AgentCard from '../components/AgentCard';
 
 export default function AgentsPage() {
   const { t } = useTranslation(['agents', 'common', 'errors']);
@@ -61,26 +40,8 @@ export default function AgentsPage() {
   const [feedbackType, setFeedbackType] = useState("bug");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [search, setSearch] = useState('');
   const router = useRouter();
-
-  // Agent types with translations (memoized)
-  const AGENT_TYPES = useMemo(() => ({
-    conversationnel: {
-      ...AGENT_TYPES_CONFIG.conversationnel,
-      name: t('agents:types.conversationnel.name'),
-      description: t('agents:types.conversationnel.description')
-    },
-    recherche_live: {
-      ...AGENT_TYPES_CONFIG.recherche_live,
-      name: t('agents:types.recherche_live.name'),
-      description: t('agents:types.recherche_live.description')
-    },
-    visuel: {
-      ...AGENT_TYPES_CONFIG.visuel,
-      name: t('agents:types.visuel.name'),
-      description: t('agents:types.visuel.description')
-    }
-  }), [t]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -177,7 +138,7 @@ export default function AgentsPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-3">
-                <div className="h-6 w-48 bg-gray-200 rounded-lg animate-pulse"></div>
+                <div className="h-6 w-48 bg-gray-200 rounded-sm animate-pulse"></div>
               </div>
               <div className="flex items-center space-x-2">
                 <div className="w-10 h-10 bg-gray-100 rounded-button animate-pulse"></div>
@@ -193,7 +154,7 @@ export default function AgentsPage() {
                 <div className="h-20 bg-gradient-to-r from-gray-200 to-gray-300 animate-pulse"></div>
                 <div className="p-6 -mt-10">
                   <div className="w-16 h-16 bg-gray-200 rounded-full border-4 border-white shadow-card animate-pulse mb-4"></div>
-                  <div className="h-5 w-3/4 bg-gray-200 rounded-lg animate-pulse mb-3"></div>
+                  <div className="h-5 w-3/4 bg-gray-200 rounded-sm animate-pulse mb-3"></div>
                   <div className="flex space-x-2 mb-4">
                     <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse"></div>
                   </div>
@@ -206,6 +167,8 @@ export default function AgentsPage() {
       </div>
     );
   }
+
+  const filtered = agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Layout title={t('agents:pageTitle')} onFeedback={() => setShowFeedback(true)} onLogout={logout}>
@@ -221,7 +184,7 @@ export default function AgentsPage() {
               setPhotoPreview(null);
               setShowForm(true);
             }}
-            className="group flex items-center justify-center px-8 py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-button hover:from-blue-700 hover:to-purple-700 transition-all font-semibold shadow-card hover:shadow-elevated"
+            className="group flex items-center justify-center px-8 py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-button transition-all font-semibold shadow-card hover:shadow-elevated"
           >
             <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform duration-300" />
             <span>{t('agents:buttons.createNew')}</span>
@@ -379,7 +342,7 @@ export default function AgentsPage() {
                       <div>
                         <label className="text-xs font-medium text-gray-600 mb-1 block">{t('agents:form.neo4j.person')}</label>
                         <select
-                          className="w-full px-3 py-2 border border-teal-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition-all outline-none bg-white text-sm"
+                          className="w-full px-3 py-2 border border-teal-200 rounded-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition-all outline-none bg-white text-sm"
                           value={form.neo4j_person_name}
                           onChange={e => setForm(f => ({ ...f, neo4j_person_name: e.target.value }))}
                         >
@@ -392,7 +355,7 @@ export default function AgentsPage() {
                       <div>
                         <label className="text-xs font-medium text-gray-600 mb-1 block">{t('agents:form.neo4j.depth')}</label>
                         <select
-                          className="w-full px-3 py-2 border border-teal-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition-all outline-none bg-white text-sm"
+                          className="w-full px-3 py-2 border border-teal-200 rounded-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition-all outline-none bg-white text-sm"
                           value={form.neo4j_depth}
                           onChange={e => setForm(f => ({ ...f, neo4j_depth: parseInt(e.target.value) }))}
                         >
@@ -440,7 +403,7 @@ export default function AgentsPage() {
                     {form.profile_photo ? <ImageIcon className="w-12 h-12 text-blue-400" /> : <Plus className="w-12 h-12" />}
                   </div>
                 )}
-                <label className="group px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-button font-semibold cursor-pointer hover:from-blue-700 hover:to-purple-700 transition-all shadow-card hover:shadow-elevated flex items-center">
+                <label className="group px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-button font-semibold cursor-pointer transition-all shadow-card hover:shadow-elevated flex items-center">
                   {form.profile_photo ? t('agents:buttons.changePhoto') : t('agents:buttons.choosePhoto')}
                   <input
                     type="file"
@@ -512,7 +475,7 @@ export default function AgentsPage() {
                     setCreating(false);
                   }
                 }}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-button hover:from-blue-700 hover:to-purple-700 transition-all font-semibold shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-button transition-all font-semibold shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={creating}
               >
                 {creating ? (
@@ -559,111 +522,27 @@ export default function AgentsPage() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {agents.map((agent) => {
-              const typeConfig = AGENT_TYPES[agent.type] || AGENT_TYPES.conversationnel;
-              const IconComponent = typeConfig.icon;
-              const API_URL = getApiUrl();
-              return (
-                <div
+          <>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-input w-64">
+                <Search className="w-4 h-4 text-gray-400" />
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="Rechercher un agent…"
+                  className="flex-1 text-sm bg-transparent outline-none" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map((agent) => (
+                <AgentCard
                   key={agent.id}
-                  className="group bg-white rounded-card shadow-card border border-gray-200 hover:border-gray-300 hover:shadow-elevated transition-all duration-200 overflow-hidden animate-fade-in"
-                >
-                  {/* Gradient header */}
-                  <div className="h-20 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 relative overflow-hidden">
-                  </div>
-
-                  <div className="p-6 -mt-10">
-                    <div className="flex items-start justify-between mb-4">
-                      {agent.profile_photo ? (
-                        <div className="relative z-10">
-                          <img
-                            src={`${API_URL}/api/agent-photo/${agent.id}`}
-                            alt={agent.name}
-                            className="w-16 h-16 object-cover rounded-full border-4 border-white shadow-card ring-2 ring-gray-100"
-                            onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}
-                          />
-                          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-3 border-white"></div>
-                        </div>
-                      ) : (
-                        <div className={`relative z-10 p-3 rounded-card ${typeConfig.color} shadow-card ring-2 ring-white`}>
-                          <IconComponent className="w-8 h-8 text-white" />
-                        </div>
-                      )}
-                      <div className="flex space-x-2 pt-10">
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            if (!agent.shared || agent.can_edit) {
-                              router.push(`/?agentId=${agent.id}`);
-                            }
-                          }}
-                          className={`p-2 bg-white rounded-button transition-all opacity-0 group-hover:opacity-100 shadow-subtle border ${
-                            agent.shared && !agent.can_edit
-                              ? 'text-gray-300 border-gray-200 cursor-not-allowed opacity-50'
-                              : 'text-blue-600 border-gray-200 hover:bg-blue-50 hover:border-blue-300'
-                          }`}
-                          title={t('agents:buttons.edit')}
-                          disabled={agent.shared && !agent.can_edit}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        {!agent.shared && (
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              deleteAgent(agent.id);
-                            }}
-                            className="p-2 bg-white text-red-600 rounded-button hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100 shadow-subtle border border-gray-200 hover:border-red-300"
-                            title={t('agents:buttons.delete')}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <h3 className="text-xl font-heading font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{agent.name}</h3>
-
-                    {/* Type badge */}
-                    <div className="flex items-center space-x-2 mb-4">
-                      <span className={`px-3 py-1 ${typeConfig.color} text-white text-xs font-semibold rounded-full flex items-center`}>
-                        <IconComponent className="w-3 h-3 mr-1" />
-                        {typeConfig.name}
-                      </span>
-                      {agent.neo4j_enabled && (
-                        <span className="px-3 py-1 bg-teal-500 text-white text-xs font-semibold rounded-full flex items-center">
-                          <Database className="w-3 h-3 mr-1" />
-                          Neo4j
-                        </span>
-                      )}
-                      {agent.shared && (
-                        <span className={`px-3 py-1 ${agent.can_edit ? 'bg-purple-500' : 'bg-orange-500'} text-white text-xs font-semibold rounded-full flex items-center`}>
-                          <Share2 className="w-3 h-3 mr-1" />
-                          {agent.can_edit ? t('agents:badges.sharedEdit') : t('agents:badges.sharedReadOnly')}
-                        </span>
-                      )}
-                    </div>
-                    {agent.shared && agent.owner_username && (
-                      <p className="text-xs text-gray-500 mb-3">{t('agents:badges.sharedBy', { owner: agent.owner_username })}</p>
-                    )}
-
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        router.push(`/chat/${agent.id}`);
-                      }}
-                      className="w-full group/btn flex items-center justify-center px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-button hover:from-blue-700 hover:to-purple-700 font-semibold shadow-card hover:shadow-elevated transition-all"
-                    >
-                      <MessageCircle className="w-4 h-4 mr-2" />
-                      {t('agents:buttons.openCompanion')}
-                      <ArrowRight className="w-4 h-4 ml-2 group-hover/btn:translate-x-1 transition-transform" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  agent={agent}
+                  onChat={() => router.push(`/chat/${agent.id}`)}
+                  onEdit={() => router.push(`/?agentId=${agent.id}`)}
+                  onDelete={() => deleteAgent(agent.id)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
       )}
@@ -723,7 +602,7 @@ export default function AgentsPage() {
                 <button
                   onClick={handleSendFeedback}
                   disabled={sendingFeedback || !feedbackMessage.trim()}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-button shadow-card disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+                  className="flex-1 py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-button shadow-card disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
                 >
                   {sendingFeedback ? (
                     <>

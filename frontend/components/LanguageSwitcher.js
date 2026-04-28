@@ -42,7 +42,7 @@ export default function LanguageSwitcher() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 px-4 py-2.5 rounded-button bg-white hover:bg-white border border-gray-200 hover:border-blue-300 shadow-md hover:shadow-lg transition-all duration-300 group"
+        className="flex items-center space-x-2 px-4 py-2.5 rounded-button bg-white hover:bg-white border border-gray-200 hover:border-blue-300 shadow-subtle hover:shadow-card transition-all duration-300 group"
         aria-label="Change language"
       >
         <Globe className="w-5 h-5 text-blue-600 group-hover:text-blue-700 transition-colors" />

@@ -523,7 +523,7 @@ export default function Organization() {
               {/* Create */}
               <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                 <div className="flex items-center space-x-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-button bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center">
                     <Building2 className="w-5 h-5 text-white" />
                   </div>
                   <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:noOrg.createTitle')}</h2>
@@ -541,7 +541,7 @@ export default function Organization() {
               {/* Join */}
               <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                 <div className="flex items-center space-x-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-button bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
                     <UserPlus className="w-5 h-5 text-white" />
                   </div>
                   <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:noOrg.joinTitle')}</h2>
@@ -565,7 +565,7 @@ export default function Organization() {
               <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center space-x-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-lg">
+                    <div className="w-14 h-14 rounded-card bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-card">
                       <Building2 className="w-7 h-7 text-white" />
                     </div>
                     <div>
@@ -577,14 +577,14 @@ export default function Organization() {
                   </div>
                   {company.role !== 'owner' && (
                     <button onClick={handleLeave}
-                      className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-xl transition-colors">
+                      className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-button transition-colors">
                       <LogOut className="w-4 h-4" />
                       <span className="text-sm font-medium">{t('organization:info.leaveButton')}</span>
                     </button>
                   )}
                   {company.role === 'owner' && (
                     <button onClick={handleDeleteOrg}
-                      className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-xl transition-colors">
+                      className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-button transition-colors">
                       <Trash2 className="w-4 h-4" />
                       <span className="text-sm font-medium">{t('organization:info.deleteButton')}</span>
                     </button>
@@ -596,7 +596,7 @@ export default function Organization() {
               {['admin', 'owner'].includes(company.role) && (
                 <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                   <div className="flex items-center space-x-3 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-button bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
                       <Mail className="w-5 h-5 text-white" />
                     </div>
                     <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:invitations.title')}</h2>
@@ -619,7 +619,7 @@ export default function Organization() {
 
                   {/* Invite link */}
                   {company.invite_code && (
-                    <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+                    <div className="p-4 bg-gray-50 rounded-button space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <Link2 className="w-4 h-4 text-gray-500" />
@@ -632,18 +632,18 @@ export default function Organization() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <code className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-mono text-gray-600 truncate">
+                        <code className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-sm text-sm font-mono text-gray-600 truncate">
                           {company.invite_code}
                         </code>
-                        <button onClick={handleCopyInviteLink} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={t('organization:invitations.copyLink')}>
+                        <button onClick={handleCopyInviteLink} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-sm transition-colors" title={t('organization:invitations.copyLink')}>
                           <Copy className="w-4 h-4" />
                         </button>
                         {company.role === 'owner' && (
                           <>
-                            <button onClick={handleToggleCode} className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors">
+                            <button onClick={handleToggleCode} className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-sm transition-colors">
                               {company.invite_code_enabled ? <ToggleRight className="w-5 h-5 text-green-500" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
                             </button>
-                            <button onClick={handleRegenerateCode} className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title={t('organization:invitations.regenerate')}>
+                            <button onClick={handleRegenerateCode} className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-sm transition-colors" title={t('organization:invitations.regenerate')}>
                               <RefreshCw className="w-4 h-4" />
                             </button>
                           </>
@@ -659,7 +659,7 @@ export default function Organization() {
                 <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                   <button onClick={() => setMembersOpen(!membersOpen)} className="w-full flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-button bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
                         <Users className="w-5 h-5 text-white" />
                       </div>
                       <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:members.title')} ({members.length})</h2>
@@ -699,12 +699,12 @@ export default function Organization() {
                                       <select
                                         value={m.role}
                                         onChange={e => handleChangeRole(m.id, e.target.value)}
-                                        className="text-xs px-2 py-1 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        className="text-xs px-2 py-1 border border-gray-200 rounded-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                                       >
                                         <option value="member">{t('organization:members.member')}</option>
                                         <option value="admin">{t('organization:members.admin')}</option>
                                       </select>
-                                      <button onClick={() => handleRemoveMember(m.id)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                      <button onClick={() => handleRemoveMember(m.id)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors">
                                         <Trash2 className="w-4 h-4" />
                                       </button>
                                     </div>
@@ -724,7 +724,7 @@ export default function Organization() {
               {company.role === 'owner' && (
                 <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                   <div className="flex items-center space-x-3 mb-2">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-button bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
                       <Settings className="w-5 h-5 text-white" />
                     </div>
                     <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:integrations.title')}</h2>
@@ -733,7 +733,7 @@ export default function Organization() {
 
                   <div className="space-y-6">
                     {/* Neo4j */}
-                    <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+                    <div className="p-4 bg-gray-50 rounded-button space-y-3">
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold text-gray-800">{t('organization:integrations.neo4j.title')}</h3>
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${integrations?.neo4j?.configured ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -741,7 +741,7 @@ export default function Organization() {
                         </span>
                       </div>
                       {integrations?.neo4j?.configured ? (
-                        <div className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-sm">
                           <div className="space-y-1">
                             <p className="text-sm text-gray-700">
                               <span className="font-medium">{t('organization:integrations.neo4j.uri')}:</span>{' '}
@@ -755,7 +755,7 @@ export default function Organization() {
                             )}
                           </div>
                           <button onClick={() => handleDeleteIntegration('neo4j')} disabled={integLoading}
-                            className="flex items-center space-x-1.5 px-3 py-1.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors text-sm disabled:opacity-50">
+                            className="flex items-center space-x-1.5 px-3 py-1.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-sm transition-colors text-sm disabled:opacity-50">
                             <Trash2 className="w-3.5 h-3.5" />
                             <span>{t('organization:integrations.removeButton')}</span>
                           </button>
@@ -763,14 +763,14 @@ export default function Organization() {
                       ) : (
                         <div className="grid sm:grid-cols-3 gap-3">
                           <input type="text" placeholder={t('organization:integrations.neo4j.uriPlaceholder')}
-                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            className="px-3 py-2 border border-gray-200 rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                             value={integForm.neo4j_uri} onChange={e => setIntegForm(p => ({ ...p, neo4j_uri: e.target.value }))} />
                           <input type="text" placeholder={t('organization:integrations.neo4j.userPlaceholder')}
-                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            className="px-3 py-2 border border-gray-200 rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                             value={integForm.neo4j_user} onChange={e => setIntegForm(p => ({ ...p, neo4j_user: e.target.value }))} />
                           <div className="relative">
                             <input type={showSecrets.neo4j ? 'text' : 'password'} placeholder={t('organization:integrations.neo4j.passwordPlaceholder')}
-                              className="w-full px-3 py-2 pr-8 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                              className="w-full px-3 py-2 pr-8 border border-gray-200 rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                               value={integForm.neo4j_password} onChange={e => setIntegForm(p => ({ ...p, neo4j_password: e.target.value }))} />
                             <button type="button" onClick={() => setShowSecrets(p => ({ ...p, neo4j: !p.neo4j }))} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
                               {showSecrets.neo4j ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -781,7 +781,7 @@ export default function Organization() {
                     </div>
 
                     {/* Notion */}
-                    <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+                    <div className="p-4 bg-gray-50 rounded-button space-y-3">
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold text-gray-800">{t('organization:integrations.notion.title')}</h3>
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${integrations?.notion?.configured ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -789,7 +789,7 @@ export default function Organization() {
                         </span>
                       </div>
                       {integrations?.notion?.configured ? (
-                        <div className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-sm">
                           <div>
                             <p className="text-sm text-gray-700">
                               <span className="font-medium">{t('organization:integrations.notion.apiKey')}:</span>{' '}
@@ -797,7 +797,7 @@ export default function Organization() {
                             </p>
                           </div>
                           <button onClick={() => handleDeleteIntegration('notion')} disabled={integLoading}
-                            className="flex items-center space-x-1.5 px-3 py-1.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors text-sm disabled:opacity-50">
+                            className="flex items-center space-x-1.5 px-3 py-1.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-sm transition-colors text-sm disabled:opacity-50">
                             <Trash2 className="w-3.5 h-3.5" />
                             <span>{t('organization:integrations.removeButton')}</span>
                           </button>
@@ -805,7 +805,7 @@ export default function Organization() {
                       ) : (
                         <div className="relative">
                           <input type={showSecrets.notion ? 'text' : 'password'} placeholder={t('organization:integrations.notion.apiKeyPlaceholder')}
-                            className="w-full px-3 py-2 pr-8 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            className="w-full px-3 py-2 pr-8 border border-gray-200 rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                             value={integForm.notion_api_key} onChange={e => setIntegForm(p => ({ ...p, notion_api_key: e.target.value }))} />
                           <button type="button" onClick={() => setShowSecrets(p => ({ ...p, notion: !p.notion }))} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
                             {showSecrets.notion ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -829,7 +829,7 @@ export default function Organization() {
                 <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                   <button onClick={() => setSlashOpen(!slashOpen)} className="w-full flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-button bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
                         <Zap className="w-5 h-5 text-white" />
                       </div>
                       <div className="text-left">
@@ -903,7 +903,7 @@ export default function Organization() {
                 <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
                   <button onClick={() => setAgentsOpen(!agentsOpen)} className="w-full flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-button bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
                         <Bot className="w-5 h-5 text-white" />
                       </div>
                       <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:agents.title')} ({orgAgents.length})</h2>
@@ -945,10 +945,10 @@ export default function Organization() {
                                 </td>
                                 <td className="py-3 px-2 text-right">
                                   <div className="flex items-center justify-end space-x-1">
-                                    <button onClick={() => openShareModal(a)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors" title={t('organization:agents.share')}>
+                                    <button onClick={() => openShareModal(a)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-sm transition-colors" title={t('organization:agents.share')}>
                                       <Share2 className="w-4 h-4" />
                                     </button>
-                                    <button onClick={() => handleDeleteOrgAgent(a.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t('organization:agents.actions')}>
+                                    <button onClick={() => handleDeleteOrgAgent(a.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors" title={t('organization:agents.actions')}>
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
@@ -973,7 +973,7 @@ export default function Organization() {
           <div className="bg-white rounded-card shadow-floating w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold text-gray-900">{t('organization:agents.shareModal.title')} — {shareModalAgent.name}</h3>
-              <button onClick={() => setShareModalAgent(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+              <button onClick={() => setShareModalAgent(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded-sm hover:bg-gray-100 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1019,7 +1019,7 @@ export default function Organization() {
               ) : (
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {agentShares.map(s => (
-                    <div key={s.user_id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                    <div key={s.user_id} className="flex items-center justify-between p-2 bg-gray-50 rounded-sm">
                       <div>
                         <span className="text-sm font-medium text-gray-900">{s.username}</span>
                         <span className="text-xs text-gray-400 ml-2">{s.email}</span>
@@ -1036,7 +1036,7 @@ export default function Organization() {
                         </label>
                         <button
                           onClick={() => handleRemoveShare(s.user_id)}
-                          className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors"
+                          className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 border border-red-200 rounded-sm transition-colors"
                         >
                           {t('organization:agents.shareModal.remove')}
                         </button>
@@ -1053,7 +1053,7 @@ export default function Organization() {
       {/* Slash Command Modal */}
       {slashModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-elevated w-full max-w-lg mx-4 p-6">
+          <div className="bg-white rounded-card shadow-elevated w-full max-w-lg mx-4 p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-heading font-bold text-gray-900">
                 {slashEditItem ? t('organization:slashCommands.modal.editTitle') : t('organization:slashCommands.modal.createTitle')}
@@ -1066,7 +1066,7 @@ export default function Organization() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('organization:slashCommands.modal.commandLabel')}</label>
-                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-purple-500">
+                <div className="flex items-center border border-gray-200 rounded-sm overflow-hidden focus-within:ring-2 focus-within:ring-purple-500">
                   <span className="px-3 text-purple-600 font-bold bg-gray-50">/</span>
                   <input type="text" className="flex-1 px-3 py-2 text-sm outline-none"
                     placeholder={t('organization:slashCommands.modal.commandPlaceholder')}
@@ -1077,7 +1077,7 @@ export default function Organization() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('organization:slashCommands.modal.promptLabel')}</label>
-                <textarea className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                <textarea className="w-full px-3 py-2 border border-gray-200 rounded-sm text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
                   rows={4}
                   placeholder={t('organization:slashCommands.modal.promptPlaceholder')}
                   value={slashForm.prompt}
@@ -1086,7 +1086,7 @@ export default function Organization() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('organization:slashCommands.modal.companionsLabel')}</label>
-                <div className="border border-gray-200 rounded-lg p-2 min-h-[40px] flex flex-wrap gap-1 items-center">
+                <div className="border border-gray-200 rounded-sm p-2 min-h-[40px] flex flex-wrap gap-1 items-center">
                   {slashForm.agent_ids.map(aid => {
                     const ag = orgAgents.find(a => a.id === aid);
                     return ag ? (
@@ -1120,7 +1120,7 @@ export default function Organization() {
 
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setSlashModalOpen(false)}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                className="px-4 py-2 border border-gray-200 rounded-sm text-sm text-gray-600 hover:bg-gray-50 transition-colors">
                 {t('organization:slashCommands.modal.cancel')}
               </button>
               <button onClick={handleSaveSlashCommand} disabled={slashLoading}

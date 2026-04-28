@@ -1,112 +1,53 @@
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
-import { ArrowLeft, Users, UserCircle, MessageSquarePlus, LogOut, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import Sidebar from './Sidebar';
 
-export default function Layout({ children, showBack, backHref, title, actions, onFeedback, onLogout }) {
+export default function Layout({ children, title, actions, className = '' }) {
   const router = useRouter();
-  const { t } = useTranslation(['common', 'agents']);
-  const { user, logout: authLogout } = useAuth({ required: false });
-
-  const handleLogout = onLogout || (() => {
-    authLogout();
-  });
-
+  const { t } = useTranslation('common');
+  const { user } = useAuth({ required: false });
   const hasNoOrg = user && !user.company_id;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Subtle background gradient */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-purple-50/30" />
-      </div>
+    <div className="flex min-h-screen bg-slate-50">
+      <Sidebar />
 
-      {/* Top Navigation Bar */}
-      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200 shadow-subtle">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Left: Back + Title */}
-            <div className="flex items-center space-x-3">
-              {showBack && (
-                <button
-                  onClick={() => router.push(backHref || '/agents')}
-                  className="flex items-center space-x-1.5 text-gray-500 hover:text-gray-900 transition-colors"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              )}
-              {title && (
-                <h1 className="text-lg font-heading font-bold text-gray-900">{title}</h1>
-              )}
-            </div>
+      {/* Main area */}
+      <div className={`flex-1 flex flex-col min-w-0 ${className}`}>
 
-            {/* Right: Nav icons + custom actions */}
-            <div className="flex items-center space-x-1">
-              {actions}
-              <button
-                onClick={() => router.push('/organization')}
-                className="p-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-button transition-colors"
-                title={t('common:navigation.organization')}
-              >
-                <Users className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => router.push('/profile')}
-                className="p-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-button transition-colors"
-                title={t('common:navigation.profile')}
-              >
-                <UserCircle className="w-5 h-5" />
-              </button>
-              {onFeedback && (
-                <button
-                  onClick={onFeedback}
-                  className="p-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-button transition-colors"
-                  title={t('agents:feedback.button')}
-                >
-                  <MessageSquarePlus className="w-5 h-5" />
-                </button>
-              )}
-              <button
-                onClick={handleLogout}
-                className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-button transition-colors"
-                title={t('agents:logout')}
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* No Organization Warning Banner */}
-      {hasNoOrg && (
-        <div className="relative z-40 bg-amber-50 border-b-2 border-amber-300">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-shrink-0">
-                <AlertTriangle className="w-8 h-8 text-amber-600" />
-              </div>
+        {/* No-org warning */}
+        {hasNoOrg && (
+          <div className="bg-amber-50 border-b-2 border-amber-300">
+            <div className="max-w-5xl mx-auto px-6 py-3 flex items-center gap-4">
+              <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0" />
               <div className="flex-1">
-                <p className="text-lg font-bold text-amber-900">
-                  {t('common:noOrg.title')}
-                </p>
-                <p className="text-sm text-amber-700 mt-0.5">
-                  {t('common:noOrg.description')}
-                </p>
+                <p className="text-sm font-bold text-amber-900">{t('noOrg.title')}</p>
+                <p className="text-xs text-amber-700">{t('noOrg.description')}</p>
               </div>
               <button
                 onClick={() => router.push('/organization')}
-                className="flex-shrink-0 px-5 py-2.5 bg-amber-600 text-white font-semibold rounded-button hover:bg-amber-700 transition-colors shadow-sm"
+                className="shrink-0 px-4 py-2 bg-amber-600 text-white text-sm font-semibold rounded-button hover:bg-amber-700 transition-colors"
               >
-                {t('common:noOrg.action')}
+                {t('noOrg.action')}
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Main Content */}
-      <div className="relative">
+        {/* Optional inline page header (title + actions) */}
+        {(title || actions) && (
+          <div className="px-8 pt-7 pb-0 flex items-center justify-between">
+            {title && (
+              <h1 className="font-heading font-extrabold text-[22px] text-slate-900 tracking-tight">
+                {title}
+              </h1>
+            )}
+            {actions && <div className="flex items-center gap-3">{actions}</div>}
+          </div>
+        )}
+
         {children}
       </div>
     </div>

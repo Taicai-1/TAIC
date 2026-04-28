@@ -140,7 +140,7 @@ export default function Setup2FA() {
           <div key={s} className="flex items-center">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${
               step >= s
-                ? "bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-lg"
+                ? "bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-card"
                 : "bg-gray-200 text-gray-500"
             }`}>
               {step > s ? <CheckCircle className="w-5 h-5" /> : s}
@@ -161,7 +161,7 @@ export default function Setup2FA() {
           {step === 1 && (
             <div>
               <div className="text-center mb-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-card bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-card bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-card">
                   <Shield className="w-8 h-8 text-white" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('auth:twoFactor.setup.title')}</h2>
@@ -181,12 +181,12 @@ export default function Setup2FA() {
               <div className="mb-6">
                 <p className="text-sm text-gray-600 mb-2 text-center">{t('auth:twoFactor.setup.manualEntry')}</p>
                 <div className="flex items-center space-x-2">
-                  <code className="flex-1 px-4 py-3 bg-gray-100 rounded-xl text-sm font-mono text-center break-all select-all">
+                  <code className="flex-1 px-4 py-3 bg-gray-100 rounded-sm text-sm font-mono text-center break-all select-all">
                     {secret}
                   </code>
                   <button
                     onClick={handleCopySecret}
-                    className="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+                    className="p-3 bg-gray-100 hover:bg-gray-200 rounded-sm transition-colors"
                     title={t('auth:twoFactor.setup.copySecret')}
                   >
                     <Copy className="w-5 h-5 text-gray-600" />
@@ -207,7 +207,7 @@ export default function Setup2FA() {
           {step === 2 && (
             <div>
               <div className="text-center mb-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-card bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-card bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-card">
                   <KeyRound className="w-8 h-8 text-white" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('auth:twoFactor.setup.verifyTitle')}</h2>

@@ -291,7 +291,9 @@ def get_chat_response_stream(messages: list, model_id: str = None, gemini_only: 
             model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                yield from gemini_generate_text_stream(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
+                yield from gemini_generate_text_stream(
+                    prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens
+                )
                 return
             except Exception as e:
                 env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
@@ -309,7 +311,9 @@ def get_chat_response_stream(messages: list, model_id: str = None, gemini_only: 
             model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                yield from mistral_generate_text_stream(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
+                yield from mistral_generate_text_stream(
+                    prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens
+                )
                 return
             except Exception as e:
                 logger.error(f"Mistral stream failed: {e}, falling back to OpenAI")
@@ -326,7 +330,9 @@ def get_chat_response_stream(messages: list, model_id: str = None, gemini_only: 
             model_short = model.split(":", 1)[1]
             prompt = _messages_to_prompt(messages)
             try:
-                yield from perplexity_generate_text_stream(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
+                yield from perplexity_generate_text_stream(
+                    prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens
+                )
                 return
             except Exception as e:
                 logger.error(f"Perplexity stream failed: {e}, falling back to OpenAI")

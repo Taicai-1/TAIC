@@ -550,8 +550,13 @@ def get_answer_stream(
             query_embedding = get_embedding(question)
             top_k = 20 if mentioned_doc_id else 8
             context_results = search_similar_texts_for_user(
-                query_embedding, user_id, db, top_k=top_k,
-                selected_doc_ids=selected_doc_ids, agent_id=agent_id, company_id=company_id,
+                query_embedding,
+                user_id,
+                db,
+                top_k=top_k,
+                selected_doc_ids=selected_doc_ids,
+                agent_id=agent_id,
+                company_id=company_id,
             )
 
             context_by_document = {}
@@ -577,10 +582,16 @@ def get_answer_stream(
             if contexte_agent:
                 system_content = contexte_agent
             if available_docs_list:
-                system_content = (system_content + available_docs_list) if system_content else available_docs_list.strip()
+                system_content = (
+                    (system_content + available_docs_list) if system_content else available_docs_list.strip()
+                )
             if enhanced_context:
                 rag_section = f"\n\nExtraits de documents pertinents :\n{enhanced_context}"
-                system_content = (system_content + rag_section) if system_content else f"Extraits de documents pertinents :\n{enhanced_context}"
+                system_content = (
+                    (system_content + rag_section)
+                    if system_content
+                    else f"Extraits de documents pertinents :\n{enhanced_context}"
+                )
             if system_content:
                 messages.append({"role": "system", "content": system_content})
 

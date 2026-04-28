@@ -22,7 +22,8 @@ import {
   Loader2,
   ThumbsUp,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Search
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -30,13 +31,13 @@ import remarkGfm from "remark-gfm";
 // Image block rendered inside markdown (generated images)
 const MarkdownImage = ({ src, alt, t }) => (
   <div className="my-3">
-    <img src={src} alt={alt} className="max-w-full rounded-xl shadow-lg border border-gray-200"
+    <img src={src} alt={alt} className="max-w-full rounded-button shadow-card border border-gray-200"
          style={{ maxHeight: '512px', objectFit: 'contain' }} loading="lazy" />
     <div className="flex gap-2 mt-2">
-      <a href={src} download className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+      <a href={src} download className="px-3 py-1.5 bg-blue-600 text-white rounded-sm hover:bg-blue-700 text-sm">
         {t('chat:messages.downloadImage')}
       </a>
-      <button className="px-3 py-1.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm"
+      <button className="px-3 py-1.5 bg-gray-200 text-gray-800 rounded-sm hover:bg-gray-300 text-sm"
               onClick={() => window.open(src, '_blank')}>
         {t('chat:messages.fullSize')}
       </button>
@@ -69,7 +70,7 @@ const MarkdownText = ({ children }) => {
           img: ({ node, ...props }) => <MarkdownImage {...props} t={t} />,
           table: ({ node, ...props }) => (
             <div className="overflow-x-auto my-3">
-              <table className="min-w-full border-collapse border border-gray-200 rounded-lg text-sm" {...props} />
+              <table className="min-w-full border-collapse border border-gray-200 rounded-sm text-sm" {...props} />
             </div>
           ),
           thead: ({ node, ...props }) => <thead className="bg-gray-50" {...props} />,
@@ -135,6 +136,9 @@ export default function AgentChatPage() {
   // Pièces jointes
   const [attachments, setAttachments] = useState([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  // Recherche de conversations
+  const [convSearch, setConvSearch] = useState('');
+  const filteredConvs = conversations.filter(c => (c.title || '').toLowerCase().includes(convSearch.toLowerCase()));
 
   useEffect(() => {
     if (!authenticated && !authLoading) router.push("/login");
@@ -584,28 +588,24 @@ const handleDeleteConversation = async (convId) => {
       {/* Colonne gauche : liste des conversations - Version améliorée */}
       <div className="w-80 min-w-[18rem] max-w-xs h-full flex flex-col border-r border-gray-200 bg-white shadow-subtle overflow-hidden">
         {/* Header avec profil agent */}
-        <div className="p-6 border-b border-gray-200 bg-gradient-to-br from-blue-600 via-purple-600 to-blue-600 relative overflow-hidden">
-          {/* Subtle overlay */}
-          <div className="absolute inset-0 bg-black/10"></div>
-
-          <div className="relative z-10 flex flex-col items-center">
-            {agent.profile_photo && (
-              <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white/30 shadow-elevated mb-3 ring-2 ring-white/20">
-                <img
-                  src={`${getApiUrl()}/api/agent-photo/${agent.id}`}
-                  alt={agent.name}
-                  width={80}
-                  height={80}
-                  style={{ objectFit: "cover" }}
-                  className="w-full h-full"
-                  onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}
-                />
-              </div>
-            )}
-            <h1 className="text-lg font-bold text-white text-center tracking-wide">{agent.name}</h1>
-            <div className="flex items-center mt-1">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse mr-2"></span>
-              <span className="text-xs text-white/80 capitalize">{agent.type || t('chat:sidebar.agentTypeLabel')}</span>
+        <div className="p-4 border-b border-gray-200 bg-white flex items-center gap-3">
+          {agent.profile_photo ? (
+            <img
+              src={`${getApiUrl()}/api/agent-photo/${agent.id}`}
+              alt={agent.name}
+              className="w-8 h-8 rounded-sm object-cover"
+              onError={e => { e.target.onerror = null; e.target.src = '/default-avatar.svg'; }}
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-sm bg-blue-50 flex items-center justify-center">
+              <Bot className="w-4 h-4 text-blue-600" />
+            </div>
+          )}
+          <div>
+            <p className="font-heading font-bold text-sm text-gray-900">{agent.name}</p>
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              <span className="text-xs text-gray-400 capitalize">{agent.type || t('chat:sidebar.agentTypeLabel')}</span>
             </div>
           </div>
         </div>
@@ -613,7 +613,7 @@ const handleDeleteConversation = async (convId) => {
         {/* Bouton Nouvelle conversation */}
         <div className="p-4 border-b border-gray-200">
           <button
-            className="w-full group flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white py-3 rounded-button font-semibold shadow-card hover:shadow-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full group flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-button font-semibold shadow-card hover:shadow-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleNewConversation}
             disabled={creatingConv}
           >
@@ -626,15 +626,24 @@ const handleDeleteConversation = async (convId) => {
           </button>
         </div>
 
+        {/* Recherche de conversations */}
+        <div className="px-4 pb-2">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-sm border border-gray-200">
+            <Search className="w-3.5 h-3.5 text-gray-400" />
+            <input value={convSearch} onChange={e => setConvSearch(e.target.value)}
+              placeholder="Rechercher\u2026" className="flex-1 text-xs bg-transparent outline-none" />
+          </div>
+        </div>
+
         {/* Liste des conversations */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">{conversations.length === 0 ? (
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">{filteredConvs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <MessageCircle className="w-12 h-12 text-gray-300 mb-3" />
               <p className="text-sm text-gray-500">{t('chat:sidebar.noConversations')}</p>
               <p className="text-xs text-gray-400 mt-1">{t('chat:sidebar.noConversationsSubtext')}</p>
             </div>
           ) : (
-            conversations.map((conv) => (
+            filteredConvs.map((conv) => (
               <div
                 key={conv.id}
                 className={`group relative p-4 rounded-button border transition-all duration-200 cursor-pointer ${
@@ -646,7 +655,7 @@ const handleDeleteConversation = async (convId) => {
               >
                 <div className="flex items-start space-x-3">
                   {/* Icône de conversation */}
-                  <div className={`p-2 rounded-lg flex-shrink-0 ${
+                  <div className={`p-2 rounded-sm flex-shrink-0 ${
                     selectedConv === conv.id
                       ? 'bg-blue-100'
                       : 'bg-gray-100 group-hover:bg-gray-200'
@@ -660,7 +669,7 @@ const handleDeleteConversation = async (convId) => {
                   <div className="flex-1 min-w-0 conv-content" onClick={() => selectConversation(conv.id)}>
                     {editingTitleId === conv.id ? (
                       <input
-                        className="w-full px-2 py-1 border border-blue-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-2 py-1 border border-blue-300 rounded-sm text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={editedTitle}
                         onChange={e => setEditedTitle(e.target.value)}
                         onBlur={() => handleEditTitle(conv.id)}
@@ -689,14 +698,14 @@ const handleDeleteConversation = async (convId) => {
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-all"
+                      className="p-1.5 rounded-sm text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-all"
                       title={t('chat:sidebar.renameTooltip')}
                       onClick={e => { e.stopPropagation(); setEditingTitleId(conv.id); setEditedTitle(conv.title || ""); }}
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-100 transition-all"
+                      className="p-1.5 rounded-sm text-gray-400 hover:text-red-600 hover:bg-red-100 transition-all"
                       title={t('chat:sidebar.deleteTooltip')}
                       onClick={e => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
                     >
@@ -723,7 +732,7 @@ const handleDeleteConversation = async (convId) => {
             </Link>
             <div className="h-6 w-px bg-gray-300 hidden md:block"></div>
             <div className="flex items-center space-x-3">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-blue-100 to-purple-100">
+              <div className="p-2 rounded-button bg-gradient-to-br from-blue-100 to-purple-100">
                 <Bot className="w-5 h-5 text-blue-600" />
               </div>
               <div>
@@ -736,7 +745,7 @@ const handleDeleteConversation = async (convId) => {
           <div className="flex items-center gap-3">
             {/* Bouton retour vers page sources */}
             <Link href={`/sources/${agentId}`}>
-              <button className="group flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-button font-medium shadow-card hover:shadow-elevated transition-all">
+              <button className="group flex items-center space-x-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-button font-medium shadow-card hover:shadow-elevated transition-all">
                 <FileText className="w-4 h-4" />
                 <span className="hidden md:inline">{t('chat:header.sourcesButton')}</span>
               </button>
@@ -763,8 +772,13 @@ const handleDeleteConversation = async (convId) => {
             const url = msg.role === "system" ? extractUrl(msg.content) : null;
 
             return (
-              <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}>
-                <div className={`rounded-2xl px-5 py-3.5 shadow-subtle max-w-[70%] whitespace-pre-line transition-all duration-200 ${
+              <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} ${msg.role === "agent" ? "items-end gap-2" : ""} animate-fade-in`}>
+                {msg.role === "agent" && (
+                  <div className="w-7 h-7 rounded-sm bg-blue-50 flex items-center justify-center shrink-0 mb-1">
+                    <Bot className="w-3.5 h-3.5 text-blue-600" />
+                  </div>
+                )}
+                <div className={`rounded-card px-5 py-3.5 shadow-subtle max-w-[70%] whitespace-pre-line transition-all duration-200 ${
                   msg.role === "user"
                     ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none"
                     : msg.role === "system"
@@ -783,14 +797,14 @@ const handleDeleteConversation = async (convId) => {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            className="flex items-center space-x-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium text-sm"
+                            className="flex items-center space-x-1 px-4 py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700 transition-all font-medium text-sm"
                             onClick={() => window.open(url, "_blank")}
                           >
                             <ExternalLink className="w-4 h-4" />
                             <span>{t('chat:messages.openButton')}</span>
                           </button>
                           <button
-                            className="flex items-center space-x-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-all font-medium text-sm"
+                            className="flex items-center space-x-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-sm hover:bg-gray-300 transition-all font-medium text-sm"
                             onClick={() => { navigator.clipboard?.writeText(url); }}
                           >
                             <Copy className="w-4 h-4" />
@@ -817,7 +831,7 @@ const handleDeleteConversation = async (convId) => {
                       {isLastAgentMsg && (
                         <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
                           <button
-                            className="group flex items-center justify-center space-x-1 px-3 py-1.5 bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 rounded-lg transition-all border border-gray-300 hover:border-green-400"
+                            className="group flex items-center justify-center space-x-1 px-3 py-1.5 bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 rounded-sm transition-all border border-gray-300 hover:border-green-400"
                             title={t('chat:messages.usefulButton')}
                             onClick={async () => {
                               // Optimistic update: retire le bouton localement
@@ -842,8 +856,8 @@ const handleDeleteConversation = async (convId) => {
           {/* Indicateur de typing amélioré - hide when streaming message is visible */}
           {loading && !messages.some(m => m.streaming) && ((messages.length > 0 && messages[messages.length-1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
             <div className="flex justify-start animate-fade-in">
-              <div className="rounded-2xl px-5 py-4 shadow-subtle max-w-[70%] bg-white text-gray-900 rounded-bl-none border border-gray-200 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100">
+              <div className="rounded-card px-5 py-4 shadow-subtle max-w-[70%] bg-white text-gray-900 rounded-bl-none border border-gray-200 flex items-center gap-3">
+                <div className="p-2 rounded-sm bg-blue-100">
                   <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
                 </div>
                 <div className="flex flex-col">
@@ -863,13 +877,13 @@ const handleDeleteConversation = async (convId) => {
           ) : (
             /* Message si aucune conversation sélectionnée */
             <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-              <div className="p-6 rounded-2xl bg-gradient-to-br from-blue-100 to-purple-100 mb-4">
+              <div className="p-6 rounded-card bg-gradient-to-br from-blue-100 to-purple-100 mb-4">
                 <MessageCircle className="w-16 h-16 text-blue-600" />
               </div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">{t('chat:emptyState.title')}</h3>
               <p className="text-gray-600 mb-4">{t('chat:emptyState.description', { agentName: agent.name })}</p>
               <button
-                className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all"
+                className="flex items-center space-x-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all"
                 onClick={handleNewConversation}
                 disabled={creatingConv}
               >
@@ -891,7 +905,7 @@ const handleDeleteConversation = async (convId) => {
             {attachments.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {attachments.map((file, idx) => (
-                  <div key={idx} className="flex items-center space-x-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div key={idx} className="flex items-center space-x-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-sm">
                     <FileText className="w-4 h-4 text-blue-600" />
                     <span className="text-sm text-gray-700 truncate max-w-[200px]">{file.name}</span>
                     <button
@@ -917,7 +931,7 @@ const handleDeleteConversation = async (convId) => {
                       <span className="flex items-center justify-center w-6 h-full py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-400 hover:text-purple-600 text-[10px] font-bold rounded-r-full border border-l-0 border-purple-200 cursor-help transition-all">
                         i
                       </span>
-                      <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50">
+                      <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-gray-900 text-white text-xs rounded-sm shadow-card z-50">
                         <p className="line-clamp-4">{cmd.prompt}</p>
                         <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                       </div>
@@ -927,130 +941,135 @@ const handleDeleteConversation = async (convId) => {
               </div>
             )}
 
-            <div className="flex items-end w-full gap-2">
-              {/* Zone de texte */}
-              <div className="flex-1 relative">
-                {showSlashMenu && (() => {
-                  const filtered = slashCommands.filter(c => c.command.toLowerCase().startsWith(slashFilter));
-                  return filtered.length > 0 ? (
-                    <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-elevated overflow-hidden z-50">
-                      <div className="px-3 py-2 border-b border-gray-100">
-                        <span className="text-xs text-gray-400 font-medium">Commandes disponibles</span>
-                      </div>
-                      <div className="py-1">
-                        {filtered.map((cmd, idx) => (
-                          <button key={cmd.id} onClick={() => handleSlashSelect(cmd)}
-                            className={`w-full flex items-center px-3 py-2.5 text-left transition-colors ${idx === slashSelectedIdx ? 'bg-purple-50' : 'hover:bg-gray-50'}`}>
-                            <code className="text-purple-600 font-semibold text-sm min-w-[100px]">/{cmd.command}</code>
-                            <span className="text-gray-400 text-sm truncate">{cmd.prompt}</span>
-                          </button>
-                        ))}
-                      </div>
+            <div className="relative">
+              {/* Slash command menu */}
+              {showSlashMenu && (() => {
+                const filtered = slashCommands.filter(c => c.command.toLowerCase().startsWith(slashFilter));
+                return filtered.length > 0 ? (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-button shadow-elevated overflow-hidden z-50">
+                    <div className="px-3 py-2 border-b border-gray-100">
+                      <span className="text-xs text-gray-400 font-medium">Commandes disponibles</span>
                     </div>
-                  ) : null;
-                })()}
-                <input
-                  type="text"
-                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-input focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:opacity-50 disabled:bg-gray-50"
-                  placeholder={selectedConv ? t('chat:input.placeholder') : t('chat:input.placeholderNoConversation')}
-                  value={input}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setInput(val);
-                    if (val.startsWith('/') && val.length >= 1) {
-                      setSlashFilter(val.slice(1).toLowerCase());
-                      setShowSlashMenu(true);
-                      setSlashSelectedIdx(0);
-                    } else {
-                      setShowSlashMenu(false);
-                    }
-                  }}
-                  onKeyDown={e => {
-                    if (showSlashMenu) {
-                      const filtered = slashCommands.filter(c => c.command.toLowerCase().startsWith(slashFilter));
-                      if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        setSlashSelectedIdx(i => Math.min(i + 1, filtered.length - 1));
-                      } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        setSlashSelectedIdx(i => Math.max(i - 1, 0));
-                      } else if (e.key === 'Enter' && filtered.length > 0) {
-                        e.preventDefault();
-                        handleSlashSelect(filtered[slashSelectedIdx]);
-                      } else if (e.key === 'Escape') {
+                    <div className="py-1">
+                      {filtered.map((cmd, idx) => (
+                        <button key={cmd.id} onClick={() => handleSlashSelect(cmd)}
+                          className={`w-full flex items-center px-3 py-2.5 text-left transition-colors ${idx === slashSelectedIdx ? 'bg-purple-50' : 'hover:bg-gray-50'}`}>
+                          <code className="text-purple-600 font-semibold text-sm min-w-[100px]">/{cmd.command}</code>
+                          <span className="text-gray-400 text-sm truncate">{cmd.prompt}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Textarea input card */}
+              <div className="border border-gray-200 rounded-card bg-white shadow-subtle">
+                <div className="relative">
+                  <textarea
+                    rows={2}
+                    className="w-full px-4 pt-3 pb-1 text-sm resize-none outline-none bg-transparent"
+                    placeholder={selectedConv ? t('chat:input.placeholder') : t('chat:input.placeholderNoConversation')}
+                    value={input}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setInput(val);
+                      if (val.startsWith('/') && val.length >= 1) {
+                        setSlashFilter(val.slice(1).toLowerCase());
+                        setShowSlashMenu(true);
+                        setSlashSelectedIdx(0);
+                      } else {
                         setShowSlashMenu(false);
                       }
-                    } else if (e.key === 'Enter' && !e.shiftKey) {
-                      sendMessage();
-                    }
-                  }}
-                  disabled={loading || !selectedConv}
-                />
-                {listening && (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
-                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                    <span className="text-xs text-red-500 font-medium">{t('chat:input.listeningLabel')}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Boutons d'action */}
-              <div className="flex items-center gap-2">
-                {/* Bouton pièce jointe */}
-                <label className="group p-3 flex items-center justify-center rounded-button border border-gray-200 bg-white hover:bg-gray-50 hover:border-blue-400 text-gray-600 hover:text-blue-600 cursor-pointer transition-all disabled:opacity-50" title={t('chat:input.attachmentTooltip')}>
-                  <Paperclip className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                  <input
-                    type="file"
-                    multiple
-                    style={{ display: "none" }}
-                    onChange={e => {
-                      if (e.target.files) {
-                        setAttachments(Array.from(e.target.files));
+                    }}
+                    onKeyDown={e => {
+                      if (showSlashMenu) {
+                        const filtered = slashCommands.filter(c => c.command.toLowerCase().startsWith(slashFilter));
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          setSlashSelectedIdx(i => Math.min(i + 1, filtered.length - 1));
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setSlashSelectedIdx(i => Math.max(i - 1, 0));
+                        } else if (e.key === 'Enter' && filtered.length > 0) {
+                          e.preventDefault();
+                          handleSlashSelect(filtered[slashSelectedIdx]);
+                        } else if (e.key === 'Escape') {
+                          setShowSlashMenu(false);
+                        }
+                      } else if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
                       }
                     }}
-                    accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.odt,.ods,.odp,.rtf,.html,.md,.json,.xml,image/*"
-                    disabled={loading}
+                    disabled={loading || !selectedConv}
                   />
-                </label>
-
-                {/* Bouton micro */}
-                <button
-                  title={listening ? t('chat:input.stopDictationTooltip') : t('chat:input.startDictationTooltip')}
-                  onClick={() => listening ? stopListening() : startListening()}
-                  aria-pressed={listening}
-                  className={`p-3 flex items-center justify-center rounded-button border transition-all ${
-                    listening
-                      ? 'bg-red-500 border-red-500 text-white ring-4 ring-red-200 animate-pulse'
-                      : 'border-gray-200 bg-white hover:bg-gray-50 hover:border-blue-400 text-gray-600 hover:text-blue-600'
-                  } focus:outline-none disabled:opacity-50`}
-                  disabled={!selectedConv}
-                >
-                  <Mic className="w-5 h-5" />
-                </button>
-
-                {/* Bouton envoyer */}
-                <button
-                  onClick={sendMessage}
-                  className="group px-6 py-3 flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={loading || (!input.trim() && attachments.length === 0) || !selectedConv}
-                >
-                  {uploadingAttachments ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="hidden md:inline">{t('chat:input.extractingButton')}</span>
-                    </>
-                  ) : loading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="hidden md:inline">{t('chat:input.sendingButton')}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                      <span className="hidden md:inline">{t('chat:input.sendButton')}</span>
-                    </>
+                  {listening && (
+                    <div className="absolute right-3 top-3 flex items-center space-x-1">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                      <span className="text-xs text-red-500 font-medium">{t('chat:input.listeningLabel')}</span>
+                    </div>
                   )}
-                </button>
+                </div>
+                <div className="flex items-center justify-between px-3 pb-3">
+                  <div className="flex gap-1">
+                    {/* Bouton pièce jointe */}
+                    <label className="group p-2 flex items-center justify-center rounded-sm hover:bg-gray-100 text-gray-400 hover:text-blue-600 cursor-pointer transition-all" title={t('chat:input.attachmentTooltip')}>
+                      <Paperclip className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+                      <input
+                        type="file"
+                        multiple
+                        style={{ display: "none" }}
+                        onChange={e => {
+                          if (e.target.files) {
+                            setAttachments(Array.from(e.target.files));
+                          }
+                        }}
+                        accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.odt,.ods,.odp,.rtf,.html,.md,.json,.xml,image/*"
+                        disabled={loading}
+                      />
+                    </label>
+
+                    {/* Bouton micro */}
+                    <button
+                      title={listening ? t('chat:input.stopDictationTooltip') : t('chat:input.startDictationTooltip')}
+                      onClick={() => listening ? stopListening() : startListening()}
+                      aria-pressed={listening}
+                      className={`p-2 flex items-center justify-center rounded-sm transition-all ${
+                        listening
+                          ? 'bg-red-500 text-white ring-2 ring-red-200 animate-pulse'
+                          : 'hover:bg-gray-100 text-gray-400 hover:text-blue-600'
+                      } focus:outline-none disabled:opacity-50`}
+                      disabled={!selectedConv}
+                    >
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Bouton envoyer */}
+                  <button
+                    onClick={sendMessage}
+                    className="group px-4 py-2 flex items-center space-x-2 bg-primary-600 hover:bg-primary-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={loading || (!input.trim() && attachments.length === 0) || !selectedConv}
+                  >
+                    {uploadingAttachments ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="hidden md:inline text-sm">{t('chat:input.extractingButton')}</span>
+                      </>
+                    ) : loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="hidden md:inline text-sm">{t('chat:input.sendingButton')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        <span className="hidden md:inline text-sm">{t('chat:input.sendButton')}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

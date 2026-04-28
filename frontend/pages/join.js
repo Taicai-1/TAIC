@@ -83,7 +83,7 @@ export default function JoinOrganization() {
           {status === 'loading' && (
             <>
               <Loader2 className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Joining organization...</h2>
+              <h2 className="text-xl font-heading font-bold text-gray-900 mb-2">Joining organization...</h2>
             </>
           )}
 
@@ -92,7 +92,7 @@ export default function JoinOrganization() {
               <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-10 h-10 text-green-600" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">{message}</h2>
+              <h2 className="text-xl font-heading font-bold text-gray-900 mb-2">{message}</h2>
               {companyName && (
                 <div className="flex items-center justify-center space-x-2 mb-4">
                   <Building2 className="w-5 h-5 text-teal-600" />
@@ -108,7 +108,7 @@ export default function JoinOrganization() {
               <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
                 <XCircle className="w-10 h-10 text-red-600" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Unable to join</h2>
+              <h2 className="text-xl font-heading font-bold text-gray-900 mb-2">Unable to join</h2>
               <p className="text-gray-600 mb-4">{message}</p>
               <button onClick={() => router.push('/agents')}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-button transition-colors shadow-card hover:shadow-elevated">
@@ -122,7 +122,7 @@ export default function JoinOrganization() {
               <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
                 <Building2 className="w-10 h-10 text-blue-600" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Login required</h2>
+              <h2 className="text-xl font-heading font-bold text-gray-900 mb-2">Login required</h2>
               <p className="text-gray-600 mb-4">Please log in to accept this invitation. Redirecting...</p>
             </>
           )}
