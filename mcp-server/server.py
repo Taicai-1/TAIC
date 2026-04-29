@@ -117,7 +117,6 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
     logger.info(f"Starting TAIC MCP server on port {port}")
 
-    # Import and add auth middleware
     from auth_middleware import BearerAuthMiddleware
 
     app = mcp.streamable_http_app()
