@@ -45,4 +45,4 @@ async def test_slack_event_without_signature_rejected(client, test_agent):
     # Should reject with 403 due to missing/invalid signature
     assert response.status_code == 403
     data = response.json()
-    assert "signature" in data["detail"].lower()
+    assert "signature" in data["message"].lower()
