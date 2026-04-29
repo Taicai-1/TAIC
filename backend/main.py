@@ -90,6 +90,12 @@ def _setup_logging():
 
 
 _setup_logging()
+
+# Attach monitoring error capture handler to root logger
+from monitoring import error_handler, request_metrics
+
+logging.getLogger().addHandler(error_handler)
+
 logger = logging.getLogger("app")
 
 # ---------------------------------------------------------------------------
@@ -193,7 +199,10 @@ async def request_id_middleware(request: Request, call_next):
     """Assign a unique request_id to every request for log tracing."""
     rid = request.headers.get("X-Request-Id") or str(uuid.uuid4())
     _request_id.set(rid)
+    t0 = time.time()
     response = await call_next(request)
+    latency_ms = (time.time() - t0) * 1000
+    request_metrics.record(request.method, request.url.path, response.status_code, latency_ms)
     response.headers["X-Request-Id"] = rid
     return response
 
@@ -413,6 +422,7 @@ from routers.public import router as public_router  # noqa: E402
 from routers.email_ingest import router as email_ingest_router  # noqa: E402
 from routers.organization import router as organization_router  # noqa: E402
 from routers.user import router as user_router  # noqa: E402
+from routers.monitoring import router as monitoring_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(ask_router)
@@ -425,3 +435,4 @@ app.include_router(public_router)
 app.include_router(email_ingest_router)
 app.include_router(organization_router)
 app.include_router(user_router)
+app.include_router(monitoring_router)
