@@ -71,6 +71,7 @@ export default function Login() {
   const [formData, setFormData] = useState({ username: '', email: '', password: '', invite_code: '' });
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const localePrefix = router.locale !== router.defaultLocale ? `/${router.locale}` : '';
 
   const [show2FA, setShow2FA] = useState(false);
   const [totpCode, setTotpCode] = useState('');
@@ -109,10 +110,10 @@ export default function Login() {
 
       if (isLogin) {
         if (data.requires_email_verification) { setVerificationEmail(data.email); setShowEmailVerif(true); setLoading(false); return; }
-        if (data.requires_2fa_setup) { sessionStorage.setItem('setup_token', data.setup_token); toast.success(t('auth:twoFactor.setupRequired')); window.location.href = '/setup-2fa'; return; }
+        if (data.requires_2fa_setup) { sessionStorage.setItem('setup_token', data.setup_token); toast.success(t('auth:twoFactor.setupRequired')); window.location.href = `${localePrefix}/setup-2fa`; return; }
         if (data.requires_2fa) { sessionStorage.setItem('pre_2fa_token', data.pre_2fa_token); setShow2FA(true); setLoading(false); return; }
         toast.success(t('auth:login.success'));
-        window.location.href = '/agents';
+        window.location.href = `${localePrefix}/agents`;
       } else {
         toast.success(t('auth:signup.success'));
         setIsLogin(true);
@@ -151,7 +152,7 @@ export default function Login() {
       await axios.post(`${API_URL}/auth/2fa/verify`, { code: totpCode.trim() }, { headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
       sessionStorage.removeItem('pre_2fa_token');
       toast.success(t('auth:login.success'));
-      window.location.href = '/agents';
+      window.location.href = `${localePrefix}/agents`;
     } catch (err) {
       toast.error(err.response?.data?.detail || t('auth:twoFactor.invalidCode'));
       setTotpCode('');
@@ -164,7 +165,7 @@ export default function Login() {
       if (!isLogin && formData.invite_code.trim()) payload.invite_code = formData.invite_code.trim();
       await axios.post(`${API_URL}/auth/google`, payload, { withCredentials: true });
       toast.success(t('auth:login.success'));
-      window.location.href = '/agents';
+      window.location.href = `${localePrefix}/agents`;
     } catch (err) { toast.error(err.response?.data?.detail || t('auth:google.error')); }
   };
 
