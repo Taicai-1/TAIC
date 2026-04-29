@@ -13,10 +13,7 @@ import taic_client
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP(
-    "TAIC Monitoring",
-    description="MCP server for TAIC platform monitoring, routines, and GCP resources",
-)
+mcp = FastMCP("TAIC Monitoring")
 
 
 # ── Routine tools ──────────────────────────────────────────────────────────
