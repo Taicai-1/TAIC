@@ -18,13 +18,14 @@ async def test_slack_url_verification(client):
 
 
 @pytest.mark.asyncio
-async def test_slack_event_without_signature_rejected(client, test_agent):
+async def test_slack_event_without_signature_rejected(client, test_agent, db_session):
     """Test that Slack events without valid signature are rejected."""
     # Set up agent with Slack config
     test_agent.slack_team_id = "T12345"
     test_agent.slack_bot_user_id = "U12345"
     test_agent._slack_signing_secret = "test_signing_secret"
     test_agent._slack_bot_token = "xoxb-test-token"
+    db_session.flush()
 
     payload = {
         "type": "event_callback",
