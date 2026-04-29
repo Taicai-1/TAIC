@@ -117,6 +117,8 @@ export default function AdminMonitoring() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [expanded, setExpanded] = useState({});
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
 
   const loadLatest = useCallback(async () => {
     try {
@@ -151,13 +153,26 @@ export default function AdminMonitoring() {
 
   const handleRunAll = async () => {
     setRunning(true);
+    setError(null);
+    setSuccess(null);
     try {
-      await api.post('/api/admin/routine/run-all');
+      const res = await api.post('/api/admin/routine/run-all');
       await Promise.all([loadLatest(), loadHistory()]);
+      const reports = res.data?.reports || [];
+      const failCount = reports.filter(r => r.status === 'fail').length;
+      const warnCount = reports.filter(r => r.status === 'warn').length;
+      if (failCount > 0) {
+        setError(`${reports.length} routines executed — ${failCount} failed, ${warnCount} warnings`);
+      } else {
+        setSuccess(`${reports.length} routines executed successfully${warnCount > 0 ? ` (${warnCount} warnings)` : ''}`);
+      }
     } catch (err) {
       console.error('Run all failed:', err);
+      const msg = err.response?.data?.detail || err.message || 'Unknown error';
+      setError(`Failed to run routines: ${msg}`);
     } finally {
       setRunning(false);
+      setTimeout(() => { setSuccess(null); }, 8000);
     }
   };
 
@@ -196,6 +211,26 @@ export default function AdminMonitoring() {
             {running ? 'Running...' : 'Run Now'}
           </button>
         </div>
+
+        {/* Feedback banners */}
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <XCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">&times;</button>
+          </div>
+        )}
+        {success && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{success}</span>
+            </div>
+            <button onClick={() => setSuccess(null)} className="text-green-400 hover:text-green-600">&times;</button>
+          </div>
+        )}
 
         {/* Status cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
