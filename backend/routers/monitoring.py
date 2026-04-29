@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from auth import verify_token
 from database import (
     Agent,
     Conversation,
@@ -21,8 +20,8 @@ from database import (
     engine,
     get_db,
 )
+from helpers.admin_auth import verify_admin_or_scheduler
 from monitoring import _get_memory_rss_kb, error_handler, request_metrics
-from permissions import require_role
 from redis_client import get_redis
 
 router = APIRouter()
@@ -124,22 +123,20 @@ def _collect_errors(limit: int = 50) -> list[dict[str, Any]]:
 @router.get("/api/admin/monitoring/metrics")
 async def admin_metrics(
     request: Request,
-    user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
     """System metrics: memory, uptime, DB pool, Redis info, request latency."""
-    require_role(int(user_id), db, "admin")
+    verify_admin_or_scheduler(request, db)
     return _collect_metrics()
 
 
 @router.get("/api/admin/monitoring/app-stats")
 async def admin_app_stats(
     request: Request,
-    user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
     """Application statistics: entity counts, 24h/7d activity."""
-    require_role(int(user_id), db, "admin")
+    verify_admin_or_scheduler(request, db)
     return _collect_app_stats(db)
 
 
@@ -147,22 +144,20 @@ async def admin_app_stats(
 async def admin_errors(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
-    user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
     """Recent captured errors from the ring buffer."""
-    require_role(int(user_id), db, "admin")
+    verify_admin_or_scheduler(request, db)
     return {"errors": _collect_errors(limit=limit), "count": len(error_handler)}
 
 
 @router.get("/api/admin/monitoring/full-report")
 async def admin_full_report(
     request: Request,
-    user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
     """Aggregated monitoring report: health + metrics + app-stats + errors."""
-    require_role(int(user_id), db, "admin")
+    verify_admin_or_scheduler(request, db)
 
     return {
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),

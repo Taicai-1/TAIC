@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "taic-monitoring": {
+      "type": "http",
+      "url": "https://taic-mcp-server-817946451913.europe-west1.run.app/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_AUTH_TOKEN}"
+      }
+    }
+  }
+}

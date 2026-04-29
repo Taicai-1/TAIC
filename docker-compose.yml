@@ -50,5 +50,19 @@ services:
       - backend
     restart: unless-stopped
 
+  # MCP Server
+  mcp-server:
+    build: ./mcp-server
+    environment:
+      - TAIC_BACKEND_URL=http://backend:8080
+      - ROUTINE_SCHEDULER_SECRET=${ROUTINE_SCHEDULER_SECRET}
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN}
+      - GCP_PROJECT_ID=applydi
+    ports:
+      - "8081:8080"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   postgres_data:
