@@ -45,7 +45,7 @@ async def ask_question(
             msgs = (
                 db.query(Message)
                 .filter(Message.conversation_id == request.conversation_id)
-                .order_by(Message.created_at.asc())
+                .order_by(Message.timestamp.asc())
                 .all()
             )
             history = [{"role": m.role, "content": m.content} for m in msgs]
@@ -193,7 +193,7 @@ async def ask_question_stream(
         msgs = (
             db.query(Message)
             .filter(Message.conversation_id == request.conversation_id)
-            .order_by(Message.created_at.asc())
+            .order_by(Message.timestamp.asc())
             .all()
         )
         history = [{"role": m.role, "content": m.content} for m in msgs]

@@ -21,7 +21,7 @@ async def test_user_cannot_access_other_users_agent(client, db_session, test_use
     response = await client.get(f"/agents/{other_agent.id}", cookies={"token": test_user_token})
 
     assert response.status_code == 403
-    assert "Access denied" in response.json()["detail"]
+    assert "Access denied" in response.json()["message"]
 
 
 @pytest.mark.asyncio
@@ -72,7 +72,7 @@ async def test_conversation_owner_isolation(client, db_session, test_user, test_
 
     # Should return 404 (not 403) because _verify_conversation_owner returns 404
     assert response.status_code == 404
-    assert "Conversation not found" in response.json()["detail"]
+    assert "Conversation not found" in response.json()["message"]
 
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_document_delete_owner_only(client, db_session, test_user, test_ag
 
     # Should return 404 because document doesn't belong to test_user
     assert response.status_code == 404
-    assert "Document not found" in response.json()["detail"]
+    assert "Document not found" in response.json()["message"]
 
     # Verify document still exists
     db_session.expire_all()

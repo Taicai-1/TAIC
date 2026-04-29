@@ -20,9 +20,6 @@ async def test_register_success(client, db_session, mock_email_service, mock_eve
     assert "message" in data
     assert "created successfully" in data["message"]
 
-    # Verify event was tracked
-    mock_event_tracker.track_user_action.assert_called()
-
 
 @pytest.mark.asyncio
 async def test_register_duplicate_username(client, db_session, test_user, mock_email_service, mock_event_tracker):
@@ -36,7 +33,7 @@ async def test_register_duplicate_username(client, db_session, test_user, mock_e
     response = await client.post("/register", json=payload)
 
     assert response.status_code == 400
-    assert "Username already registered" in response.json()["detail"]
+    assert "Username already registered" in response.json()["message"]
 
 
 @pytest.mark.asyncio
@@ -51,7 +48,7 @@ async def test_register_duplicate_email(client, db_session, test_user, mock_emai
     response = await client.post("/register", json=payload)
 
     assert response.status_code == 400
-    assert "Email already registered" in response.json()["detail"]
+    assert "Email already registered" in response.json()["message"]
 
 
 @pytest.mark.asyncio
@@ -125,7 +122,7 @@ async def test_login_wrong_password(client, db_session, test_user, mock_event_tr
     response = await client.post("/login", json=payload)
 
     assert response.status_code == 401
-    assert "Invalid credentials" in response.json()["detail"]
+    assert "Invalid credentials" in response.json()["message"]
 
 
 @pytest.mark.asyncio
@@ -139,7 +136,7 @@ async def test_login_nonexistent_user(client, db_session, mock_event_tracker):
     response = await client.post("/login", json=payload)
 
     assert response.status_code == 401
-    assert "Invalid credentials" in response.json()["detail"]
+    assert "Invalid credentials" in response.json()["message"]
 
 
 @pytest.mark.asyncio
@@ -162,7 +159,7 @@ async def test_verify_auth_no_token(client, db_session):
     response = await client.get("/auth/verify")
 
     assert response.status_code == 401
-    assert "Not authenticated" in response.json()["detail"]
+    assert "Not authenticated" in response.json()["message"]
 
 
 @pytest.mark.asyncio

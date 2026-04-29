@@ -54,7 +54,7 @@ async def test_list_conversations_no_params(client, auth_cookies):
     )
     assert response.status_code == 422
     data = response.json()
-    assert "agent_id ou team_id doit être fourni" in data["detail"]
+    assert "agent_id ou team_id doit être fourni" in data["message"]
 
 
 @pytest.mark.asyncio
@@ -136,7 +136,7 @@ async def test_get_messages_nonexistent_conversation(client, auth_cookies):
     )
     assert response.status_code == 404
     data = response.json()
-    assert "Conversation not found" in data["detail"]
+    assert "Conversation not found" in data["message"]
 
 
 @pytest.mark.asyncio

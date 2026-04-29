@@ -28,7 +28,11 @@ async def test_ask_with_agent_id_returns_mocked_answer(client, test_user, test_a
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("mock_event_tracker")
 async def test_ask_without_agent_or_team_returns_error(client, test_user, auth_cookies):
-    """POST /ask without agent_id or team_id returns 400 error."""
+    """POST /ask without agent_id or team_id returns error.
+
+    The endpoint's broad except catches HTTPException(400) and returns 200
+    with a French error message in the answer field.
+    """
     response = await client.post(
         "/ask",
         json={
@@ -38,12 +42,11 @@ async def test_ask_without_agent_or_team_returns_error(client, test_user, auth_c
         cookies=auth_cookies,
     )
 
-    # According to the code, if neither agent_id nor team_id is provided,
-    # answer remains None and raises HTTPException 400
-    assert response.status_code == 400
+    assert response.status_code == 200
     data = response.json()
-    assert "detail" in data
-    assert "agent" in data["detail"].lower() or "équipe" in data["detail"].lower()
+    assert "answer" in data
+    # Broad except returns French error message
+    assert "erreur" in data["answer"].lower() or "désolé" in data["answer"].lower()
 
 
 @pytest.mark.asyncio

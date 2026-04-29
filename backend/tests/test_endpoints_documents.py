@@ -62,7 +62,7 @@ async def test_delete_document_not_found(client, auth_cookies):
     resp = await client.delete("/documents/99999", cookies=auth_cookies)
     assert resp.status_code == 404
     data = resp.json()
-    assert "detail" in data
+    assert "message" in data
 
 
 @pytest.mark.asyncio
@@ -96,8 +96,8 @@ async def test_upload_unsupported_file_type(client, auth_cookies):
 
     assert resp.status_code == 400
     data = resp.json()
-    assert "detail" in data
-    assert "not allowed" in data["detail"].lower()
+    assert "message" in data
+    assert "not allowed" in data["message"].lower()
 
 
 @pytest.mark.asyncio

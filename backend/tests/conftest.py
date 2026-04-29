@@ -14,7 +14,7 @@ os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 import pytest
 import pytest_asyncio
 from unittest.mock import patch, MagicMock
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db, User
@@ -64,12 +64,26 @@ def setup_database():
 
 @pytest.fixture
 def db_session(setup_database):
-    """Yield a DB session that rolls back after each test."""
+    """Yield a DB session that rolls back after each test.
+
+    Uses SAVEPOINT so that endpoint code calling session.commit()
+    only commits the SAVEPOINT, not the outer transaction.
+    """
     if not _db_available:
         pytest.skip("PostgreSQL not available")
     connection = _test_engine.connect()
     transaction = connection.begin()
     session = TestSession(bind=connection)
+
+    # Start a SAVEPOINT — session.commit() will commit this, not the outer txn.
+    session.begin_nested()
+
+    # After every commit/rollback inside the endpoint, restart a fresh SAVEPOINT.
+    @event.listens_for(session, "after_transaction_end")
+    def restart_savepoint(sess, trans):
+        if trans.nested and not trans._parent.nested:
+            sess.begin_nested()
+
     yield session
     session.close()
     transaction.rollback()

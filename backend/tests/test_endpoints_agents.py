@@ -32,7 +32,7 @@ async def test_list_agents_with_agent(client, auth_cookies, test_agent):
 @pytest.mark.asyncio
 async def test_create_agent(client, auth_cookies, test_user, mock_gcs):
     """POST /agents should create a new agent using Form data."""
-    with patch("helpers.agent_helpers.update_agent_embedding") as mock_embed:
+    with patch("routers.agents.update_agent_embedding") as mock_embed:
         form_data = {
             "name": "New Test Agent",
             "contexte": "Test context",
@@ -60,7 +60,7 @@ async def test_create_agent(client, auth_cookies, test_user, mock_gcs):
 @pytest.mark.asyncio
 async def test_create_agent_no_context(client, auth_cookies, test_user, mock_gcs):
     """Creating agent without contexte should not call update_agent_embedding."""
-    with patch("helpers.agent_helpers.update_agent_embedding") as mock_embed:
+    with patch("routers.agents.update_agent_embedding") as mock_embed:
         form_data = {
             "name": "Agent No Context",
             "type": "conversationnel",
@@ -97,8 +97,8 @@ async def test_get_agent_not_found(client, auth_cookies):
     resp = await client.get("/agents/99999", cookies=auth_cookies)
     assert resp.status_code == 404
     data = resp.json()
-    assert "detail" in data
-    assert data["detail"] == "Agent not found"
+    assert "message" in data
+    assert "not found" in data["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -170,5 +170,5 @@ async def test_agent_isolation(client, auth_cookies, test_agent, db_session):
     resp = await client.get(f"/agents/{other_agent.id}", cookies=auth_cookies)
     assert resp.status_code == 403
     data = resp.json()
-    assert "detail" in data
-    assert "Access denied" in data["detail"]
+    assert "message" in data
+    assert "denied" in data["message"].lower() or "access" in data["message"].lower()
