@@ -492,6 +492,17 @@ class WeeklyRecapLog(Base):
     user = relationship("User")
 
 
+class RoutineReport(Base):
+    __tablename__ = "routine_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String(20), nullable=False, index=True)  # health, ci_cd, security, billing
+    status = Column(String(10), nullable=False)  # pass, warn, fail
+    data = Column(Text, nullable=False)  # JSON string (use json.dumps/loads)
+    summary = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 # Create database engine with connection pooling (env-configurable for Cloud Run scaling)
 engine = create_engine(
     DATABASE_URL,
