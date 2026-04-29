@@ -616,7 +616,9 @@ def ensure_columns():
     migrations = [
         ("agents", "weekly_recap_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("agents", "weekly_recap_prompt", "TEXT"),
+        ("agents", "weekly_recap_recipients", "TEXT"),
         ("documents", "document_type", "VARCHAR(20) NOT NULL DEFAULT 'rag'"),
+        ("documents", "source_url", "VARCHAR(2048)"),
         # Company org-level columns
         ("companies", "invite_code", "VARCHAR(32) UNIQUE"),
         ("companies", "invite_code_enabled", "BOOLEAN NOT NULL DEFAULT TRUE"),
@@ -627,6 +629,7 @@ def ensure_columns():
         ("companies", "slack_bot_token", "TEXT"),
         ("companies", "slack_signing_secret", "TEXT"),
         ("companies", "slack_team_id", "VARCHAR(64)"),
+        ("companies", "slash_commands", "TEXT"),
         ("conversations", "user_id", "INTEGER REFERENCES users(id)"),
         ("agent_shares", "can_edit", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("documents", "notion_link_id", "INTEGER REFERENCES notion_links(id)"),
