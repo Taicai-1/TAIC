@@ -30,6 +30,7 @@ from database import (
     SessionLocal,
     User,
     engine,
+    ensure_columns,
     ensure_pgvector,
     migrate_existing_company_memberships,
     set_current_company_id,
@@ -272,6 +273,19 @@ async def add_security_headers(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
+# Catch-all exception middleware (must sit INSIDE CORSMiddleware so that
+# unhandled exceptions still return a proper JSONResponse with CORS headers)
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def catch_unhandled_exceptions(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("Unhandled exception in %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+# ---------------------------------------------------------------------------
 # CORS configuration
 # ---------------------------------------------------------------------------
 allowed_origins = [
@@ -321,6 +335,8 @@ async def startup_event():
         Base.metadata.create_all(bind=engine)
         # pgvector extension must exist before Alembic migrations touch embedding columns
         ensure_pgvector()
+        # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
+        ensure_columns()
         # Run Alembic migrations to apply any pending schema changes
         from alembic.config import Config as AlembicConfig
         from alembic import command as alembic_command

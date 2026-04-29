@@ -38,4 +38,5 @@ qrcode[pil]
 alembic
 python-json-logger
 google-cloud-billing
+google-cloud-billing-budgets
 google-cloud-build
