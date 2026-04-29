@@ -62,7 +62,7 @@ def _serialize_report(report: RoutineReport) -> dict:
         "status": report.status,
         "data": json.loads(report.data) if report.data else {},
         "summary": report.summary,
-        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "created_at": (report.created_at.isoformat() + "Z") if report.created_at else None,
     }
 
 
