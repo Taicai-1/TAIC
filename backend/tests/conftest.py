@@ -80,6 +80,7 @@ def db_session(setup_database):
 # FastAPI test client
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def client(db_session):
     """Async test client with DB dependency override."""
@@ -106,6 +107,7 @@ async def client(db_session):
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def test_user(db_session):
@@ -170,6 +172,7 @@ def test_conversation(db_session, test_user, test_agent):
 # Mock fixtures for external services
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_redis():
     """Patch redis_client.get_redis to return a fakeredis instance."""
@@ -231,9 +234,11 @@ def mock_gcs():
 @pytest.fixture
 def mock_email_service():
     """Patch email_service functions to prevent real email sending."""
-    with patch("email_service.send_password_reset_email") as m1, \
-         patch("email_service.send_verification_email") as m2, \
-         patch("email_service.send_feedback_email") as m3:
+    with (
+        patch("email_service.send_password_reset_email") as m1,
+        patch("email_service.send_verification_email") as m2,
+        patch("email_service.send_feedback_email") as m3,
+    ):
         yield {"reset": m1, "verify": m2, "feedback": m3}
 
 

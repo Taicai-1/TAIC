@@ -111,12 +111,8 @@ class TestChunkTextIntegration:
             # Allow some tolerance for overlap
             # First chunk should strictly respect limit
             if i == 0:
-                assert token_count <= chunk_size, (
-                    f"First chunk has {token_count} tokens, exceeds limit of {chunk_size}"
-                )
+                assert token_count <= chunk_size, f"First chunk has {token_count} tokens, exceeds limit of {chunk_size}"
             else:
                 # Subsequent chunks may have overlap added, so they can be up to chunk_size + overlap
                 # But they shouldn't be excessively large
-                assert token_count <= chunk_size + 100, (
-                    f"Chunk {i} has {token_count} tokens, excessively large"
-                )
+                assert token_count <= chunk_size + 100, f"Chunk {i} has {token_count} tokens, excessively large"

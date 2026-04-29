@@ -6,9 +6,7 @@ from unittest.mock import patch
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("mock_event_tracker")
-async def test_ask_with_agent_id_returns_mocked_answer(
-    client, test_user, test_agent, auth_cookies
-):
+async def test_ask_with_agent_id_returns_mocked_answer(client, test_user, test_agent, auth_cookies):
     """POST /ask with agent_id returns mocked answer from get_answer."""
     with patch("routers.ask.get_answer", return_value="This is a mocked RAG answer."):
         response = await client.post(
@@ -29,9 +27,7 @@ async def test_ask_with_agent_id_returns_mocked_answer(
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("mock_event_tracker")
-async def test_ask_without_agent_or_team_returns_error(
-    client, test_user, auth_cookies
-):
+async def test_ask_without_agent_or_team_returns_error(client, test_user, auth_cookies):
     """POST /ask without agent_id or team_id returns 400 error."""
     response = await client.post(
         "/ask",
@@ -66,9 +62,7 @@ async def test_ask_unauthenticated_returns_401(client, test_agent):
 
 
 @pytest.mark.asyncio
-async def test_ask_with_empty_question_returns_422(
-    client, test_user, test_agent, auth_cookies
-):
+async def test_ask_with_empty_question_returns_422(client, test_user, test_agent, auth_cookies):
     """POST /ask with empty question returns 422 validation error."""
     response = await client.post(
         "/ask",

@@ -62,11 +62,7 @@ async def test_add_message(client, auth_cookies, test_conversation):
     """Test POST /conversations/{id}/messages - add a message."""
     response = await client.post(
         f"/conversations/{test_conversation.id}/messages",
-        json={
-            "conversation_id": test_conversation.id,
-            "role": "user",
-            "content": "Test message content"
-        },
+        json={"conversation_id": test_conversation.id, "role": "user", "content": "Test message content"},
         cookies=auth_cookies,
     )
     assert response.status_code == 200
@@ -79,11 +75,7 @@ async def test_add_message(client, auth_cookies, test_conversation):
 async def test_get_messages(client, auth_cookies, test_conversation, db_session):
     """Test GET /conversations/{id}/messages - list messages."""
     # Add a message first
-    msg = Message(
-        conversation_id=test_conversation.id,
-        role="user",
-        content="Test message content"
-    )
+    msg = Message(conversation_id=test_conversation.id, role="user", content="Test message content")
     db_session.add(msg)
     db_session.commit()
 

@@ -10,18 +10,18 @@ class TestNotionClientImport:
         import notion_client
 
         # Verify key functions are exposed
-        assert hasattr(notion_client, 'extract_notion_id')
-        assert hasattr(notion_client, 'fetch_page_title')
-        assert hasattr(notion_client, 'fetch_database_title')
-        assert hasattr(notion_client, 'fetch_page_content')
-        assert hasattr(notion_client, 'fetch_database_entries')
-        assert hasattr(notion_client, 'blocks_to_text')
-        assert hasattr(notion_client, 'database_entries_to_text')
+        assert hasattr(notion_client, "extract_notion_id")
+        assert hasattr(notion_client, "fetch_page_title")
+        assert hasattr(notion_client, "fetch_database_title")
+        assert hasattr(notion_client, "fetch_page_content")
+        assert hasattr(notion_client, "fetch_database_entries")
+        assert hasattr(notion_client, "blocks_to_text")
+        assert hasattr(notion_client, "database_entries_to_text")
 
 
 class TestNotionPageFetchMocked:
-    @patch('notion_client.requests.get')
-    @patch('notion_client.get_notion_token')
+    @patch("notion_client.requests.get")
+    @patch("notion_client.get_notion_token")
     def test_notion_page_fetch_mocked(self, mock_get_token, mock_requests_get):
         """Mock requests.get and verify the module can process a Notion API response format."""
         from notion_client import fetch_page_title
@@ -39,14 +39,10 @@ class TestNotionPageFetchMocked:
                 "title": {
                     "type": "title",
                     "title": [
-                        {
-                            "type": "text",
-                            "text": {"content": "Test Page Title"},
-                            "plain_text": "Test Page Title"
-                        }
-                    ]
+                        {"type": "text", "text": {"content": "Test Page Title"}, "plain_text": "Test Page Title"}
+                    ],
                 }
-            }
+            },
         }
         mock_requests_get.return_value = mock_response
 

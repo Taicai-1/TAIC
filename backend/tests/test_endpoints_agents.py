@@ -137,6 +137,7 @@ async def test_delete_agent_not_owner(client, auth_cookies, test_agent, db_sessi
 
     # Verify agent still exists
     from database import Agent
+
     db_session.expire_all()
     agent = db_session.query(Agent).filter(Agent.id == test_agent.id).first()
     assert agent is not None

@@ -93,7 +93,7 @@ jobs:
           JWT_SECRET_KEY: test-secret-key-for-ci
           ENVIRONMENT: test
           DATABASE_URL: postgresql://test:test@localhost:5432/taic_test
-          OPENAI_API_KEY: ''
-          MISTRAL_API_KEY: ''
-          GEMINI_API_KEY: ''
+          OPENAI_API_KEY: sk-test-fake-key-for-ci
+          MISTRAL_API_KEY: test-fake-mistral-key
+          GEMINI_API_KEY: test-fake-gemini-key
           REDIS_HOST: ''

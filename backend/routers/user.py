@@ -32,7 +32,8 @@ async def get_user_summary(user_id: str = Depends(verify_token), db: Session = D
         db.query(func.count(Message.id))
         .join(Conversation, Message.conversation_id == Conversation.id)
         .filter(Conversation.user_id == uid)
-        .scalar() or 0
+        .scalar()
+        or 0
     )
     total_teams = db.query(func.count(Team.id)).filter(Team.user_id == uid).scalar() or 0
 

@@ -106,14 +106,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     """Return structured 422 for validation errors."""
     errors = []
     for err in exc.errors():
-        errors.append({
-            "field": ".".join(str(loc) for loc in err.get("loc", [])),
-            "message": err.get("msg", "Validation error"),
-            "type": err.get("type", ""),
-        })
+        errors.append(
+            {
+                "field": ".".join(str(loc) for loc in err.get("loc", [])),
+                "message": err.get("msg", "Validation error"),
+                "type": err.get("type", ""),
+            }
+        )
     logger.warning(
         "Validation error on %s %s: %s",
-        request.method, request.url.path, errors,
+        request.method,
+        request.url.path,
+        errors,
     )
     return JSONResponse(
         status_code=422,
@@ -134,7 +138,10 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Return structured JSON for all HTTP errors."""
     logger.warning(
         "HTTP %d on %s %s: %s",
-        exc.status_code, request.method, request.url.path, exc.detail,
+        exc.status_code,
+        request.method,
+        request.url.path,
+        exc.detail,
     )
     return JSONResponse(
         status_code=exc.status_code,
@@ -153,7 +160,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     request_id = _request_id.get("-")
     logger.error(
         "Unhandled exception on %s %s [request_id=%s]: %s",
-        request.method, request.url.path, request_id, exc,
+        request.method,
+        request.url.path,
+        request_id,
+        exc,
         exc_info=True,
     )
     detail = None
