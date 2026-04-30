@@ -117,10 +117,19 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
     logger.info(f"Starting TAIC MCP server on port {port}")
 
-    from auth_middleware import BearerAuthMiddleware
+    from auth_middleware import MCPAuthMiddleware
 
     app = mcp.streamable_http_app()
-    app.add_middleware(BearerAuthMiddleware)
+    app.add_middleware(
+        MCPAuthMiddleware,
+        server_url=os.getenv(
+            "MCP_SERVER_URL",
+            f"http://localhost:{port}",
+        ),
+        google_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
+        google_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
+        jwt_secret=os.getenv("MCP_JWT_SECRET", "dev-secret-change-me"),
+    )
 
     import uvicorn
 
