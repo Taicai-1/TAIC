@@ -4,8 +4,10 @@ import json
 import logging
 import os
 from typing import Optional
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 import gcp_tools
 import taic_client
@@ -13,7 +15,19 @@ import taic_client
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("TAIC Monitoring")
+_server_url = os.getenv("MCP_SERVER_URL", "")
+_allowed_hosts = ["localhost:*", "127.0.0.1:*"]
+if _server_url:
+    _parsed = urlparse(_server_url)
+    _allowed_hosts.append(_parsed.hostname)
+
+mcp = FastMCP(
+    "TAIC Monitoring",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_allowed_hosts,
+    ),
+)
 
 
 # ── Routine tools ──────────────────────────────────────────────────────────
@@ -118,8 +132,14 @@ if __name__ == "__main__":
     logger.info(f"Starting TAIC MCP server on port {port}")
 
     from auth_middleware import MCPAuthMiddleware
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
 
     app = mcp.streamable_http_app()
+
+    # Add health check route (Cloud Run liveness probe)
+    app.routes.insert(0, Route("/health", lambda r: JSONResponse({"status": "ok"})))
+
     app.add_middleware(
         MCPAuthMiddleware,
         server_url=os.getenv(

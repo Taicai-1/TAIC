@@ -84,51 +84,9 @@ steps:
           --max-instances=5 \
           --set-env-vars=NEXT_PUBLIC_API_URL=https://dev-taic-backend-817946451913.europe-west1.run.app,NEXT_PUBLIC_GOOGLE_CLIENT_ID=817946451913-bn9a7q6f61eimoirof9spquo0bk23k5p.apps.googleusercontent.com
 
-  # Build MCP Server
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/applydi/taic-mcp-server', './mcp-server']
-
-  # Push MCP Server
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/applydi/taic-mcp-server']
-
-  # Deploy MCP Server (dev)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'dev-taic-mcp-server'
-      - '--image'
-      - 'gcr.io/applydi/taic-mcp-server'
-      - '--platform'
-      - 'managed'
-      - '--region'
-      - 'europe-west1'
-      - '--allow-unauthenticated'
-      - '--port'
-      - '8080'
-      - '--memory'
-      - '256Mi'
-      - '--cpu'
-      - '1'
-      - '--min-instances'
-      - '0'
-      - '--max-instances'
-      - '2'
-      - '--timeout'
-      - '300'
-      - '--service-account'
-      - 'taic-drive-sa@applydi.iam.gserviceaccount.com'
-      - '--set-env-vars'
-      - 'GCP_PROJECT_ID=applydi,GCP_REGION=europe-west1,TAIC_BACKEND_URL=https://dev-taic-backend-817946451913.europe-west1.run.app'
-      - '--set-secrets'
-      - 'ROUTINE_SCHEDULER_SECRET=ROUTINE_SCHEDULER_SECRET:latest,MCP_AUTH_TOKEN=MCP_AUTH_TOKEN:latest'
-
 images:
   - 'gcr.io/applydi/applydi-backend'
   - 'gcr.io/applydi/applydi-frontend'
-  - 'gcr.io/applydi/taic-mcp-server'
 
 substitutions:
   _GA_ID: ''  # No GA4 tracking in dev

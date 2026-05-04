@@ -25,8 +25,11 @@ api.interceptors.response.use(
       if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
-      if (error.response?.status === 403 && !window.location.pathname.includes('/setup-2fa')) {
-        window.location.href = '/setup-2fa';
+      if (error.response?.status === 403) {
+        const detail = error.response?.data?.detail || '';
+        if (detail.includes('2FA') && !window.location.pathname.includes('/setup-2fa')) {
+          window.location.href = '/setup-2fa';
+        }
       }
     }
     return Promise.reject(error);
