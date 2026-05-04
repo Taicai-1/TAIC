@@ -101,7 +101,7 @@ def _check_admin_protection() -> dict[str, Any]:
             # Token-based auth routes (org request) are intentionally unprotected
             if "/companies/request/" in path:
                 continue
-            if "require_role" not in func_body and "_verify_admin_or_scheduler" not in func_body:
+            if "require_role" not in func_body and "verify_admin_or_scheduler" not in func_body:
                 rel = os.path.relpath(py_file, _BACKEND_DIR)
                 unprotected.append(f"{rel}:{path}")
 
