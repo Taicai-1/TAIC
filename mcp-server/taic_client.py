@@ -6,7 +6,7 @@ from typing import Any, Optional
 import httpx
 
 _BACKEND_URL = os.getenv("TAIC_BACKEND_URL", "http://localhost:8080")
-_SCHEDULER_SECRET = os.getenv("ROUTINE_SCHEDULER_SECRET", "")
+_SCHEDULER_SECRET = os.getenv("ROUTINE_SCHEDULER_SECRET", "").strip()
 
 
 def _headers() -> dict[str, str]:
