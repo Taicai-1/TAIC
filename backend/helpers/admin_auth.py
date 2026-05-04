@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from auth import verify_token
 from permissions import require_role
 
-_SCHEDULER_SECRET = os.getenv("ROUTINE_SCHEDULER_SECRET", "")
+_SCHEDULER_SECRET = os.getenv("ROUTINE_SCHEDULER_SECRET", "").strip()
 
 
 def verify_admin_or_scheduler(request: Request, db: Session) -> bool:
