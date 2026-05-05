@@ -43,18 +43,19 @@ def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
     if not tags:
         return []
 
-    from sqlalchemy import text, literal_column
+    from sqlalchemy import text
 
     # Normalize search tags to lowercase
     lower_tags = [t.lower() for t in tags]
 
     # Use PostgreSQL JSON filtering: cast email_tags to jsonb, expand array,
     # then check if any element (lowered) matches any of the search tags.
+    # text() handles both ::jsonb cast and :tags bind parameter correctly.
     agents = (
         db.query(Agent)
         .filter(
             Agent.email_tags.isnot(None),
-            literal_column(
+            text(
                 "EXISTS (SELECT 1 FROM jsonb_array_elements_text(email_tags::jsonb) AS t(tag) "
                 "WHERE lower(t.tag) = ANY(:tags))"
             ),
