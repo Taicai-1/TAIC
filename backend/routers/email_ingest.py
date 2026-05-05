@@ -37,25 +37,35 @@ def extract_email_tags_from_title(title: str) -> List[str]:
 def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
     """Trouve tous les agents dont email_tags contient au moins un des tags.
 
-    Loads agents with email_tags set, then filters in Python to avoid
-    PostgreSQL jsonb cast issues with the Text column type.
+    Uses raw SQL to read only id + email_tags (avoids ORM type issues
+    with corrupted data in other columns), then loads matching Agent objects.
     """
     if not tags:
         return []
 
+    from sqlalchemy import text
+
     lower_tags = [t.lower() for t in tags]
 
-    agents_with_tags = db.query(Agent).filter(Agent.email_tags.isnot(None)).all()
-    matching = []
-    for agent in agents_with_tags:
+    # Raw SQL to avoid ORM loading all columns (some may have corrupted data)
+    rows = db.execute(
+        text("SELECT id, email_tags FROM agents WHERE email_tags IS NOT NULL AND email_tags != ''")
+    ).fetchall()
+
+    matching_ids = []
+    for row in rows:
         try:
-            agent_tags = json.loads(agent.email_tags) if isinstance(agent.email_tags, str) else (agent.email_tags or [])
+            agent_tags = json.loads(row[1]) if isinstance(row[1], str) else []
             agent_tags_lower = [t.lower() for t in agent_tags if isinstance(t, str)]
             if any(tag in agent_tags_lower for tag in lower_tags):
-                matching.append(agent)
+                matching_ids.append(row[0])
         except (json.JSONDecodeError, TypeError):
             continue
-    return matching
+
+    if not matching_ids:
+        return []
+
+    return db.query(Agent).filter(Agent.id.in_(matching_ids)).all()
 
 
 def verify_email_api_key(request: Request) -> bool:
