@@ -438,4 +438,4 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
     except Exception as e:
         logger.error(f"Error uploading attachment: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail="Erreur lors de l'upload de la pièce jointe")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'upload de la pièce jointe: {e}")
