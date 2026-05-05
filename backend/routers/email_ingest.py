@@ -37,20 +37,25 @@ def extract_email_tags_from_title(title: str) -> List[str]:
 def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
     """Trouve tous les agents dont email_tags contient au moins un des tags.
 
-    Uses raw SQL to read only id + email_tags (avoids ORM type issues
-    with corrupted data in other columns), then loads matching Agent objects.
+    Uses raw SQL with explicit casts and error handling to work around
+    corrupted data in the agents table.
     """
     if not tags:
         return []
 
-    from sqlalchemy import text
-
     lower_tags = [t.lower() for t in tags]
 
-    # Raw SQL to avoid ORM loading all columns (some may have corrupted data)
-    rows = db.execute(
-        text("SELECT id, email_tags FROM agents WHERE email_tags IS NOT NULL AND email_tags != ''")
-    ).fetchall()
+    from sqlalchemy import text
+
+    try:
+        rows = db.execute(
+            text("SELECT id, email_tags FROM agents WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
+        ).fetchall()
+    except Exception as e:
+        logger.error(f"Failed to query agents for email_tags: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        return []
 
     matching_ids = []
     for row in rows:
@@ -63,6 +68,7 @@ def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
             continue
 
     if not matching_ids:
+        logger.info(f"No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)")
         return []
 
     return db.query(Agent).filter(Agent.id.in_(matching_ids)).all()
