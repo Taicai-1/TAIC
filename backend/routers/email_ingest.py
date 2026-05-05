@@ -48,19 +48,20 @@ def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
     # Normalize search tags to lowercase
     lower_tags = [t.lower() for t in tags]
 
-    # Use PostgreSQL JSON filtering: cast email_tags to jsonb, expand array,
-    # then check if any element (lowered) matches any of the search tags.
-    # text() handles both ::jsonb cast and :tags bind parameter correctly.
+    # Build individual bind parameters to avoid psycopg2 array type issues
+    tag_conditions = " OR ".join([f"lower(t.tag) = :tag_{i}" for i in range(len(lower_tags))])
+    tag_params = {f"tag_{i}": tag for i, tag in enumerate(lower_tags)}
+
     agents = (
         db.query(Agent)
         .filter(
             Agent.email_tags.isnot(None),
             text(
                 "EXISTS (SELECT 1 FROM jsonb_array_elements_text(email_tags::jsonb) AS t(tag) "
-                "WHERE lower(t.tag) = ANY(:tags))"
+                f"WHERE {tag_conditions})"
             ),
         )
-        .params(tags=lower_tags)
+        .params(**tag_params)
         .all()
     )
     return agents
