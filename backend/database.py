@@ -530,7 +530,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def _set_tenant_on_begin(session, transaction, connection):
     cid = _current_company_id.get()
     if cid is not None:
-        connection.execute(text(f"SET LOCAL app.company_id = '{int(cid)}'"))
+        connection.execute(text("SET LOCAL app.company_id = :cid"), {"cid": str(int(cid))})
 
 
 def set_current_company_id(company_id: Optional[int]):
@@ -547,7 +547,7 @@ def get_db():
         cid = _current_company_id.get()
         if cid is not None:
             try:
-                db.execute(text(f"SET LOCAL app.company_id = '{int(cid)}'"))
+                db.execute(text("SET LOCAL app.company_id = :cid"), {"cid": str(int(cid))})
             except Exception as e:
                 logger.warning(f"get_db: failed to SET LOCAL app.company_id={cid}: {e}")
         yield db
@@ -562,7 +562,7 @@ def get_db_with_tenant(user_id: int, db: Session):
     user = db.query(User).filter(User.id == user_id).first()
     company_id = user.company_id if user else None
     if company_id is not None:
-        db.execute(text(f"SET LOCAL app.company_id = '{company_id}'"))
+        db.execute(text("SET LOCAL app.company_id = :cid"), {"cid": str(int(company_id))})
     return company_id
 
 
@@ -654,7 +654,8 @@ def ensure_columns():
         with engine.connect() as conn:
             for table, column, col_def in migrations:
                 try:
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_def}"))
+                    stmt = "ALTER TABLE " + table + " ADD COLUMN IF NOT EXISTS " + column + " " + col_def
+                    conn.execute(text(stmt))
                     conn.commit()
                     logger.info(f"ensure_columns: {table}.{column} OK")
                 except Exception as e:

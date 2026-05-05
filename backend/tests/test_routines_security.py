@@ -37,8 +37,8 @@ class TestRunSecurityCheck:
         secrets = next(c for c in result["checks"] if c["name"] == "hardcoded_secrets")
         assert secrets["status"] == "pass"
 
-    def test_dependency_pinning_warns_or_fails(self):
-        """Current requirements.txt has 0 pinned deps — should be warn or fail."""
+    def test_dependency_pinning_passes(self):
+        """All requirements.txt deps are pinned — should pass."""
         result = run_security_check()
         deps = next(c for c in result["checks"] if c["name"] == "dependency_pinning")
-        assert deps["status"] in ("warn", "fail")
+        assert deps["status"] == "pass"
