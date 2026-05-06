@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from auth import verify_token
-from database import get_db, Agent, Document, DocumentChunk
+from database import get_db, Agent, Document, DocumentChunk, engine, set_current_company_id
 from helpers.rate_limiting import _check_api_rate_limit, _API_EXTRACT_LIMIT
 from schemas.email_ingest import EmailIngestRequest
 
@@ -37,39 +37,57 @@ def extract_email_tags_from_title(title: str) -> List[str]:
 def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
     """Trouve tous les agents dont email_tags contient au moins un des tags.
 
-    Uses raw SQL with explicit casts and error handling to work around
-    corrupted data in the agents table.
+    Uses a raw DB connection to bypass RLS (Row-Level Security), since this
+    function is called from service endpoints authenticated by API key, not
+    by a user JWT — so no tenant context (app.company_id) is set on the session.
+
+    Returns full Agent ORM objects after setting the correct tenant context
+    on the caller's session so subsequent queries/inserts work under RLS.
     """
     if not tags:
         return []
 
     lower_tags = [t.lower() for t in tags]
 
-    from sqlalchemy import text
-
+    # Use raw connection to bypass RLS for the cross-tenant agent search
+    raw_conn = engine.raw_connection()
     try:
-        rows = db.execute(
-            text("SELECT id, email_tags FROM agents WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
-        ).fetchall()
+        cur = raw_conn.cursor()
+        cur.execute("SELECT id, email_tags, company_id FROM agents WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
+        rows = cur.fetchall()
     except Exception as e:
         logger.error(f"Failed to query agents for email_tags: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        db.rollback()
+        raw_conn.close()
         return []
+    finally:
+        raw_conn.close()
 
     matching_ids = []
+    matched_company_id = None
     for row in rows:
+        agent_id, email_tags_raw, company_id = row[0], row[1], row[2]
         try:
-            agent_tags = json.loads(row[1]) if isinstance(row[1], str) else []
+            agent_tags = json.loads(email_tags_raw) if isinstance(email_tags_raw, str) else []
             agent_tags_lower = [t.lower() for t in agent_tags if isinstance(t, str)]
             if any(tag in agent_tags_lower for tag in lower_tags):
-                matching_ids.append(row[0])
+                matching_ids.append(agent_id)
+                if company_id is not None:
+                    matched_company_id = company_id
         except (json.JSONDecodeError, TypeError):
             continue
 
     if not matching_ids:
         logger.info(f"No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)")
         return []
+
+    # Set the tenant context on the caller's session so subsequent ORM
+    # queries (dedup check, document insert, etc.) work under RLS.
+    if matched_company_id is not None:
+        from sqlalchemy import text
+        set_current_company_id(matched_company_id)
+        db.execute(text("SET LOCAL app.company_id = :cid"), {"cid": str(int(matched_company_id))})
+        logger.info(f"Set tenant context to company_id={matched_company_id} for email ingestion")
 
     return db.query(Agent).filter(Agent.id.in_(matching_ids)).all()
 
