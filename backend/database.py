@@ -316,6 +316,8 @@ class Agent(Base):
     weekly_recap_enabled = Column(Boolean, default=False, nullable=False)
     weekly_recap_prompt = Column(Text, nullable=True)
     weekly_recap_recipients = Column(Text, nullable=True)  # JSON array of extra email recipients
+    recap_frequency = Column(String(20), default="weekly", nullable=False)
+    recap_hour = Column(Integer, default=9, nullable=False)
 
     # Relations
     owner = relationship("User", back_populates="agents")
@@ -617,6 +619,8 @@ def ensure_columns():
         ("agents", "weekly_recap_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("agents", "weekly_recap_prompt", "TEXT"),
         ("agents", "weekly_recap_recipients", "TEXT"),
+        ("agents", "recap_frequency", "VARCHAR(20) NOT NULL DEFAULT 'weekly'"),
+        ("agents", "recap_hour", "INTEGER NOT NULL DEFAULT 9"),
         ("documents", "document_type", "VARCHAR(20) NOT NULL DEFAULT 'rag'"),
         ("documents", "source_url", "VARCHAR(2048)"),
         # Company org-level columns
