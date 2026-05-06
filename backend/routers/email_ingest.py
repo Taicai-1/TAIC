@@ -110,51 +110,6 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
     return matched_agents
 
 
-@router.get("/api/emails/debug-tags")
-async def debug_email_tags(request: Request, db: Session = Depends(get_db)):
-    """Temporary debug endpoint to check RLS bypass and email_tags data."""
-    verify_email_api_key(request)
-    from sqlalchemy import text
-
-    results = {}
-
-    # 1. Without service_bypass
-    try:
-        rows_no_bypass = db.execute(
-            text("SELECT id, email_tags, company_id FROM agents WHERE email_tags IS NOT NULL")
-        ).fetchall()
-        results["without_bypass"] = len(rows_no_bypass)
-    except Exception as e:
-        results["without_bypass_error"] = str(e)
-        db.rollback()
-
-    # 2. With service_bypass
-    try:
-        db.execute(text("SET LOCAL app.service_bypass = 'true'"))
-        rows_bypass = db.execute(
-            text("SELECT id, email_tags, company_id FROM agents WHERE email_tags IS NOT NULL")
-        ).fetchall()
-        results["with_bypass"] = len(rows_bypass)
-        results["agents"] = [
-            {"id": r[0], "email_tags": r[1], "company_id": r[2]}
-            for r in rows_bypass
-        ]
-    except Exception as e:
-        results["with_bypass_error"] = str(e)
-        db.rollback()
-
-    # 3. Check if policy exists
-    try:
-        policies = db.execute(
-            text("SELECT policyname, tablename, cmd FROM pg_policies WHERE tablename = 'agents'")
-        ).fetchall()
-        results["policies"] = [{"name": p[0], "table": p[1], "cmd": p[2]} for p in policies]
-    except Exception as e:
-        results["policies_error"] = str(e)
-        db.rollback()
-
-    return results
-
 
 def verify_email_api_key(request: Request) -> bool:
     """Vérifie l'API Key pour l'ingestion d'emails
@@ -469,8 +424,6 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                 "success": True,
                 "document_ids": [],
                 "agents_matched": 0,
-                "email_subject_received": email_subject,
-                "tags_extracted": extracted_tags,
                 "message": "Aucun companion correspondant - pièce jointe ignorée",
             }
 
