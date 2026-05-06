@@ -50,6 +50,11 @@ def get_database_url():
 
 DATABASE_URL = get_database_url()
 
+# Optional superuser connection for service operations that need to bypass RLS
+# (e.g. email ingestion which uses API key auth, not JWT tenant context).
+_superuser_url = os.getenv("DATABASE_SUPERUSER_URL")
+SUPERUSER_DATABASE_URL = _superuser_url if _superuser_url else None
+
 Base = declarative_base()
 
 
@@ -522,6 +527,20 @@ logger.info(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Superuser engine for service operations that bypass RLS (e.g. email ingestion).
+# Superusers are exempt from FORCE ROW LEVEL SECURITY in PostgreSQL.
+superuser_engine = None
+if SUPERUSER_DATABASE_URL:
+    superuser_engine = create_engine(
+        SUPERUSER_DATABASE_URL,
+        pool_size=1,
+        max_overflow=2,
+        pool_pre_ping=True,
+        pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "600")),
+        echo=False,
+    )
+    logger.info("Superuser DB engine created for service operations")
 
 
 # Re-apply tenant context on every new transaction (including after commit/rollback).
