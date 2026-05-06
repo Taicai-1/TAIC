@@ -469,6 +469,8 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                 "success": True,
                 "document_ids": [],
                 "agents_matched": 0,
+                "email_subject_received": email_subject,
+                "tags_extracted": extracted_tags,
                 "message": "Aucun companion correspondant - pièce jointe ignorée",
             }
 
