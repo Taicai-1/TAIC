@@ -76,13 +76,22 @@
     },
     "weeklyRecap": {
       "label": "Recap Hebdomadaire",
-      "helpText": "Recevez chaque lundi par email un résumé IA basé sur les conversations et documents de traçabilité.",
+      "helpText": "Recevez par email un résumé IA basé sur les conversations et documents de traçabilité.",
       "promptLabel": "Prompt personnalisé",
       "promptPlaceholder": "Ex: Génère un recap avec les sections : Avancement des projets, Risques identifiés, Actions à mener...",
       "promptHelpText": "Laissez vide pour utiliser le prompt par défaut (3 sections : Projets réalisés, Deadlines, Enjeux clés).",
       "recipientsLabel": "Destinataires supplémentaires",
       "recipientsPlaceholder": "email@exemple.com",
-      "recipientsHelpText": "Le propriétaire de l'agent reçoit toujours le recap. Ajoutez des membres de l'équipe ici."
+      "recipientsHelpText": "Le propriétaire de l'agent reçoit toujours le recap. Ajoutez des membres de l'équipe ici.",
+      "frequencyLabel": "Fréquence",
+      "frequencyOptions": {
+        "6h": "Toutes les 6 heures",
+        "daily": "1 fois par jour",
+        "2days": "1 fois tous les 2 jours",
+        "weekly": "1 fois par semaine"
+      },
+      "hourLabel": "Heure d'envoi",
+      "hourSuffix": "h"
     }
   },
   "slack": {
