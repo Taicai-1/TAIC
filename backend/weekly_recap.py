@@ -25,9 +25,18 @@ def get_model_id_for_agent(agent: Agent) -> str:
         return "mistral:mistral-large-latest"
 
 
-def fetch_weekly_messages(agent_id: int, db: Session) -> list[dict]:
-    """Fetch all messages from the last 7 days for a given agent."""
-    cutoff = datetime.utcnow() - timedelta(days=7)
+FREQUENCY_DAYS = {"6h": 1, "daily": 1, "2days": 2, "weekly": 7}
+
+
+def get_days_back(agent: Agent) -> int:
+    """Return the number of days of data to fetch based on agent recap frequency."""
+    freq = getattr(agent, "recap_frequency", "weekly")
+    return FREQUENCY_DAYS.get(freq, 7)
+
+
+def fetch_weekly_messages(agent_id: int, db: Session, days_back: int = 7) -> list[dict]:
+    """Fetch all messages from the last N days for a given agent."""
+    cutoff = datetime.utcnow() - timedelta(days=days_back)
     conversations = db.query(Conversation).filter(Conversation.agent_id == agent_id).all()
 
     if not conversations:
@@ -182,7 +191,8 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
 
     try:
         # 1. Fetch data
-        messages = fetch_weekly_messages(agent.id, db)
+        days_back = get_days_back(agent)
+        messages = fetch_weekly_messages(agent.id, db, days_back=days_back)
         docs = fetch_traceability_documents(agent.id, db)
         notion_pages = fetch_notion_content(agent.id, db)
 
