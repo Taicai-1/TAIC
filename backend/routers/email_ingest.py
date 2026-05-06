@@ -34,30 +34,47 @@ def extract_email_tags_from_title(title: str) -> List[str]:
     return [f"@{tag.lower()}" for tag in matches]
 
 
-def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
+class _MatchedAgent:
+    """Lightweight stand-in for Agent ORM objects returned by find_agents_by_email_tags.
+
+    We avoid returning ORM-managed Agent instances because the session's RLS
+    context changes (service_bypass → company_id) and SQLAlchemy may try to
+    lazy-reload attributes, causing 'row not present' errors.
+    """
+
+    __slots__ = ("id", "name", "user_id", "company_id")
+
+    def __init__(self, id, name, user_id, company_id):
+        self.id = id
+        self.name = name
+        self.user_id = user_id
+        self.company_id = company_id
+
+
+def find_agents_by_email_tags(db: Session, tags: List[str]):
     """Trouve tous les agents dont email_tags contient au moins un des tags.
 
-    Uses a raw DB connection to bypass RLS (Row-Level Security), since this
-    function is called from service endpoints authenticated by API key, not
-    by a user JWT — so no tenant context (app.company_id) is set on the session.
+    Uses SET LOCAL app.service_bypass to bypass RLS (Row-Level Security),
+    since this function is called from service endpoints authenticated by
+    API key, not by a user JWT — so no tenant context is set on the session.
 
-    Returns full Agent ORM objects after setting the correct tenant context
-    on the caller's session so subsequent queries/inserts work under RLS.
+    Returns _MatchedAgent objects (not ORM instances) and sets the correct
+    tenant context on the session for subsequent operations.
     """
     if not tags:
         return []
 
     lower_tags = [t.lower() for t in tags]
 
-    # Use SET LOCAL app.service_bypass to allow cross-tenant reads via the
-    # service_bypass RLS policy. SET LOCAL is scoped to this transaction only,
-    # so other concurrent connections are unaffected.
     from sqlalchemy import text
 
+    # Enable service_bypass RLS policy for this transaction.
+    # SET LOCAL is scoped to the current transaction only.
     try:
         db.execute(text("SET LOCAL app.service_bypass = 'true'"))
         rows = db.execute(
-            text("SELECT id, email_tags, company_id FROM agents WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
+            text("SELECT id, name, user_id, email_tags, company_id FROM agents "
+                 "WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
         ).fetchall()
     except Exception as e:
         logger.error(f"Failed to query agents for email_tags: {e}")
@@ -65,32 +82,32 @@ def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
         db.rollback()
         return []
 
-    matching_ids = []
+    matched_agents = []
     matched_company_id = None
     for row in rows:
-        agent_id, email_tags_raw, company_id = row[0], row[1], row[2]
+        agent_id, agent_name, user_id, email_tags_raw, company_id = row
         try:
             agent_tags = json.loads(email_tags_raw) if isinstance(email_tags_raw, str) else []
             agent_tags_lower = [t.lower() for t in agent_tags if isinstance(t, str)]
             if any(tag in agent_tags_lower for tag in lower_tags):
-                matching_ids.append(agent_id)
+                matched_agents.append(_MatchedAgent(agent_id, agent_name, user_id, company_id))
                 if company_id is not None:
                     matched_company_id = company_id
         except (json.JSONDecodeError, TypeError):
             continue
 
-    if not matching_ids:
+    if not matched_agents:
         logger.info(f"No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)")
         return []
 
-    # Set the tenant context on the caller's session so subsequent ORM
-    # queries (dedup check, document insert, etc.) work under RLS.
+    # Set the tenant context so subsequent ORM operations (document insert,
+    # dedup check, etc.) work correctly under RLS.
     if matched_company_id is not None:
         set_current_company_id(matched_company_id)
         db.execute(text("SET LOCAL app.company_id = :cid"), {"cid": str(int(matched_company_id))})
         logger.info(f"Set tenant context to company_id={matched_company_id} for email ingestion")
 
-    return db.query(Agent).filter(Agent.id.in_(matching_ids)).all()
+    return matched_agents
 
 
 def verify_email_api_key(request: Request) -> bool:
