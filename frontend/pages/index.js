@@ -59,7 +59,7 @@ export default function CompanionSettings() {
     type: 'conversationnel',
     email_tags: [], neo4j_enabled: false, neo4j_person_name: "",
     neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "",
-    weekly_recap_recipients: []
+    weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9
   });
   const [emailTagInput, setEmailTagInput] = useState("");
 
@@ -136,7 +136,9 @@ export default function CompanionSettings() {
         neo4j_person_name: agent.neo4j_person_name || "", neo4j_depth: agent.neo4j_depth || 1,
         weekly_recap_enabled: agent.weekly_recap_enabled || false,
         weekly_recap_prompt: agent.weekly_recap_prompt || "",
-        weekly_recap_recipients: agent.weekly_recap_recipients ? JSON.parse(agent.weekly_recap_recipients) : []
+        weekly_recap_recipients: agent.weekly_recap_recipients ? JSON.parse(agent.weekly_recap_recipients) : [],
+        recap_frequency: agent.recap_frequency || "weekly",
+        recap_hour: agent.recap_hour !== undefined ? agent.recap_hour : 9,
       });
     } catch (error) {
       toast.error(t('agents:toast.loadError'));
@@ -275,6 +277,8 @@ export default function CompanionSettings() {
       if (form.weekly_recap_recipients && form.weekly_recap_recipients.length > 0) {
         formData.append("weekly_recap_recipients", JSON.stringify(form.weekly_recap_recipients));
       }
+      formData.append("recap_frequency", form.recap_frequency);
+      formData.append("recap_hour", String(form.recap_hour));
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -988,6 +992,39 @@ export default function CompanionSettings() {
             </div>
             {form.weekly_recap_enabled && (
               <>
+                {/* Frequency + Hour selectors */}
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                      {t('agents:form.weeklyRecap.frequencyLabel')}
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
+                      value={form.recap_frequency}
+                      onChange={e => setForm(f => ({ ...f, recap_frequency: e.target.value }))}
+                    >
+                      {["6h", "daily", "2days", "weekly"].map(freq => (
+                        <option key={freq} value={freq}>
+                          {t(`agents:form.weeklyRecap.frequencyOptions.${freq}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                      {t('agents:form.weeklyRecap.hourLabel')}
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
+                      value={form.recap_hour}
+                      onChange={e => setForm(f => ({ ...f, recap_hour: parseInt(e.target.value, 10) }))}
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{i}{t('agents:form.weeklyRecap.hourSuffix')}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <div className="mt-3">
                   <label className="text-xs font-semibold text-gray-600 mb-1 block">
                     {t('agents:form.weeklyRecap.promptLabel')}
