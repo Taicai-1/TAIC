@@ -32,6 +32,7 @@ from database import (
     engine,
     ensure_columns,
     ensure_pgvector,
+    ensure_rls_policies,
     migrate_existing_company_memberships,
     set_current_company_id,
 )
@@ -337,6 +338,8 @@ async def startup_event():
         ensure_pgvector()
         # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
         ensure_columns()
+        # Add RLS bypass policies for service operations (email ingestion, etc.)
+        ensure_rls_policies()
         # Run Alembic migrations to apply any pending schema changes
         from alembic.config import Config as AlembicConfig
         from alembic import command as alembic_command

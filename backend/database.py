@@ -674,6 +674,42 @@ def ensure_columns():
         logger.error(f"ensure_columns failed: {e}")
 
 
+def ensure_rls_policies():
+    """Create RLS bypass policies for service-to-service operations.
+
+    Adds a 'service_bypass' policy on tenant-scoped tables that allows
+    SELECT when the session variable app.service_bypass = 'true'.
+    This is scoped to the transaction (SET LOCAL) so it doesn't affect
+    other connections — unlike ALTER TABLE DISABLE ROW LEVEL SECURITY
+    which is a global table-level change.
+    """
+    tables = [
+        "agents", "agent_shares", "documents", "document_chunks",
+        "agent_actions", "teams", "conversations", "messages",
+        "notion_links", "weekly_recap_logs",
+    ]
+    try:
+        with engine.connect() as conn:
+            for table in tables:
+                try:
+                    conn.execute(text(
+                        f"CREATE POLICY service_bypass ON {table} FOR SELECT "
+                        f"USING (current_setting('app.service_bypass', true) = 'true')"
+                    ))
+                    conn.commit()
+                    logger.info(f"ensure_rls_policies: service_bypass on {table} created")
+                except Exception as e:
+                    # Policy already exists — skip
+                    conn.rollback()
+                    if "already exists" in str(e):
+                        logger.info(f"ensure_rls_policies: service_bypass on {table} already exists")
+                    else:
+                        logger.warning(f"ensure_rls_policies: {table} skipped: {e}")
+        logger.info("ensure_rls_policies completed")
+    except Exception as e:
+        logger.error(f"ensure_rls_policies failed: {e}")
+
+
 def migrate_existing_company_memberships():
     """Create CompanyMembership records for existing users with company_id.
     The first user (by creation date) for each company becomes the owner."""
