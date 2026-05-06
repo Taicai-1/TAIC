@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from auth import verify_token
-from database import get_db, Agent, Document, DocumentChunk, engine, superuser_engine, set_current_company_id
+from database import get_db, Agent, Document, DocumentChunk, engine, set_current_company_id
 from helpers.rate_limiting import _check_api_rate_limit, _API_EXTRACT_LIMIT
 from schemas.email_ingest import EmailIngestRequest
 
@@ -49,17 +49,28 @@ def find_agents_by_email_tags(db: Session, tags: List[str]) -> List[Agent]:
 
     lower_tags = [t.lower() for t in tags]
 
-    # Use superuser connection to bypass RLS (superusers are exempt from FORCE ROW
-    # LEVEL SECURITY). Falls back to regular engine if superuser is not configured.
-    query_engine = superuser_engine or engine
-    raw_conn = query_engine.raw_connection()
+    # Temporarily disable RLS on raw connection to query agents across all tenants.
+    # Email ingestion is a service-to-service call (API key auth, no JWT/tenant).
+    # Same pattern used in organization.py for cross-tenant operations.
+    raw_conn = engine.raw_connection()
     try:
         cur = raw_conn.cursor()
+        cur.execute("ALTER TABLE agents DISABLE ROW LEVEL SECURITY")
         cur.execute("SELECT id, email_tags, company_id FROM agents WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
         rows = cur.fetchall()
+        cur.execute("ALTER TABLE agents ENABLE ROW LEVEL SECURITY")
+        cur.execute("ALTER TABLE agents FORCE ROW LEVEL SECURITY")
+        raw_conn.commit()
     except Exception as e:
         logger.error(f"Failed to query agents for email_tags: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
+        try:
+            cur = raw_conn.cursor()
+            cur.execute("ALTER TABLE agents ENABLE ROW LEVEL SECURITY")
+            cur.execute("ALTER TABLE agents FORCE ROW LEVEL SECURITY")
+            raw_conn.commit()
+        except Exception:
+            pass
         return []
     finally:
         raw_conn.close()
