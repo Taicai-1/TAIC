@@ -366,6 +366,22 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
             db.commit()
             document_ids.append(document.id)
 
+            # Document de traçabilité pour le corps de l'email
+            trace_unique_id = f"email_trace_{payload.source_id}_agent_{agent.id}"
+            existing_trace = db.query(Document).filter(Document.gcs_url == trace_unique_id).first()
+            if not existing_trace:
+                trace_doc = Document(
+                    filename=f"[Email] {payload.title}",
+                    content=enriched_content,
+                    user_id=agent.user_id,
+                    agent_id=agent.id,
+                    company_id=agent.company_id,
+                    gcs_url=trace_unique_id,
+                    document_type="traceability",
+                )
+                db.add(trace_doc)
+                db.commit()
+
         logger.info(f"Email ingested successfully to {len(document_ids)} agents: {payload.title}")
 
         return {
@@ -443,11 +459,10 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
         # Importer les fonctions nécessaires
         from rag_engine import process_document_for_user
 
-        # Créer un document pour CHAQUE agent trouvé
+        # Créer un document RAG + traçabilité pour CHAQUE agent trouvé
         document_ids = []
         for agent in target_agents:
             # Vérifier les doublons
-            unique_id = f"attachment_{source_id}_{file.filename}_agent_{agent.id}"
             existing_doc = (
                 db.query(Document)
                 .filter(Document.gcs_url.contains(file.filename), Document.agent_id == agent.id)
@@ -455,16 +470,50 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
             )
 
             if existing_doc and source_id:
-                # Vérification plus stricte avec source_id si disponible
                 logger.info(f"Attachment may already exist for agent {agent.name}: {file.filename}")
 
             try:
-                # Utiliser process_document_for_user qui gère l'upload GCS
+                # 1. Document RAG (chunked + embedded)
                 doc_id = process_document_for_user(
-                    filename=file.filename, content=content, user_id=agent.user_id, db=db, agent_id=agent.id
+                    filename=file.filename, content=content, user_id=agent.user_id,
+                    db=db, agent_id=agent.id, company_id=agent.company_id,
                 )
                 document_ids.append(doc_id)
-                logger.info(f"Attachment uploaded for agent {agent.name}: {file.filename} (doc_id: {doc_id})")
+                logger.info(f"RAG doc uploaded for agent {agent.name}: {file.filename} (doc_id: {doc_id})")
+
+                # 2. Document de traçabilité (no chunking/embedding)
+                # Use text sent by Cloud Function, or extract from file
+                trace_text = form.get("extracted_text", "")
+                if not trace_text:
+                    try:
+                        if file.filename.lower().endswith(".pdf"):
+                            import tempfile as _tempfile
+                            with _tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                                tmp.write(content)
+                                tmp_path = tmp.name
+                            try:
+                                from file_loader import load_text_from_pdf
+                                trace_text = load_text_from_pdf(tmp_path) or ""
+                            finally:
+                                import os as _os
+                                _os.unlink(tmp_path)
+                        else:
+                            trace_text = content.decode("utf-8", errors="replace")
+                    except Exception:
+                        trace_text = ""
+
+                trace_doc = Document(
+                    filename=f"[Email PJ] {file.filename}",
+                    content=trace_text,
+                    user_id=agent.user_id,
+                    agent_id=agent.id,
+                    company_id=agent.company_id,
+                    gcs_url=f"email_attachment_{source_id}_{file.filename}_agent_{agent.id}",
+                    document_type="traceability",
+                )
+                db.add(trace_doc)
+                db.commit()
+                logger.info(f"Traceability doc created for agent {agent.name}: {file.filename}")
 
             except Exception as e:
                 logger.error(f"Failed to upload attachment for agent {agent.name}: {e}")
