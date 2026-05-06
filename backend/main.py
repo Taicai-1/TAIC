@@ -350,8 +350,26 @@ async def startup_event():
         logger.info("Alembic migrations applied successfully")
         migrate_existing_company_memberships()
         logger.info("Database initialization completed successfully")
+
+        # Start internal recap scheduler
+        try:
+            from recap_scheduler import start_scheduler
+            start_scheduler()
+            logger.info("Recap scheduler started")
+        except Exception as e:
+            logger.warning(f"Recap scheduler failed to start: {e}")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Gracefully shut down background services."""
+    try:
+        from recap_scheduler import shutdown_scheduler
+        shutdown_scheduler()
+    except Exception as e:
+        logger.warning(f"Recap scheduler shutdown error: {e}")
 
 
 # ---------------------------------------------------------------------------
