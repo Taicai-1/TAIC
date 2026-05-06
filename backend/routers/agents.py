@@ -88,6 +88,8 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                 "neo4j_enabled": a.neo4j_enabled,
                 "email_tags": a.email_tags,
                 "weekly_recap_enabled": a.weekly_recap_enabled,
+                "recap_frequency": a.recap_frequency,
+                "recap_hour": a.recap_hour,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
                 "shared": False,
             }
@@ -115,6 +117,8 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                     "neo4j_enabled": a.neo4j_enabled,
                     "email_tags": a.email_tags,
                     "weekly_recap_enabled": a.weekly_recap_enabled,
+                    "recap_frequency": a.recap_frequency,
+                    "recap_hour": a.recap_hour,
                     "created_at": a.created_at.isoformat() if a.created_at else None,
                     "shared": True,
                     "can_edit": share.can_edit,
@@ -141,6 +145,8 @@ async def create_agent(
     weekly_recap_enabled: str = Form("false"),
     weekly_recap_prompt: str = Form(None),
     weekly_recap_recipients: str = Form(None),
+    recap_frequency: str = Form("weekly"),
+    recap_hour: str = Form("9"),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -212,6 +218,8 @@ async def create_agent(
             weekly_recap_recipients=weekly_recap_recipients
             if weekly_recap_recipients and weekly_recap_recipients.strip()
             else None,
+            recap_frequency=recap_frequency if recap_frequency in ("6h", "daily", "2days", "weekly") else "weekly",
+            recap_hour=max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9,
             user_id=int(user_id),
             company_id=caller_company_id,
         )
@@ -307,6 +315,8 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
                     "weekly_recap_enabled": agent.weekly_recap_enabled,
                     "weekly_recap_prompt": agent.weekly_recap_prompt,
                     "weekly_recap_recipients": agent.weekly_recap_recipients,
+                    "recap_frequency": agent.recap_frequency,
+                    "recap_hour": agent.recap_hour,
                 }
             )
         if not is_owner:
@@ -495,6 +505,8 @@ async def update_agent(
     weekly_recap_enabled: str = Form("false"),
     weekly_recap_prompt: str = Form(None),
     weekly_recap_recipients: str = Form(None),
+    recap_frequency: str = Form("weekly"),
+    recap_hour: str = Form("9"),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -533,6 +545,8 @@ async def update_agent(
         agent.weekly_recap_recipients = (
             weekly_recap_recipients if weekly_recap_recipients and weekly_recap_recipients.strip() else None
         )
+        agent.recap_frequency = recap_frequency if recap_frequency in ("6h", "daily", "2days", "weekly") else "weekly"
+        agent.recap_hour = max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9
 
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
 
