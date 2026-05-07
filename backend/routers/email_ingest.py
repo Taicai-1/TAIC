@@ -463,60 +463,70 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
         from rag_engine import process_document_for_user
 
         # Créer un document RAG + traçabilité pour CHAQUE agent trouvé
+        prefixed_filename = f"[Email PJ] {file.filename}"
         document_ids = []
         for agent in target_agents:
-            # Vérifier les doublons
-            existing_doc = (
-                db.query(Document)
-                .filter(Document.gcs_url.contains(file.filename), Document.agent_id == agent.id)
-                .first()
-            )
-
-            if existing_doc and source_id:
-                logger.info(f"Attachment may already exist for agent {agent.name}: {file.filename}")
+            # Déduplication RAG : vérifier si ce document existe déjà pour cet agent
+            rag_unique_id = f"email_attachment_rag_{source_id}_{file.filename}_agent_{agent.id}"
+            existing_rag = db.query(Document).filter(
+                Document.gcs_url == rag_unique_id, Document.agent_id == agent.id
+            ).first()
+            if existing_rag:
+                logger.info(f"RAG doc already exists for agent {agent.name}: {file.filename} (doc_id: {existing_rag.id})")
+                document_ids.append(existing_rag.id)
+                continue
 
             try:
-                # 1. Document RAG (chunked + embedded)
+                # 1. Document RAG (chunked + embedded) — avec préfixe [Email PJ]
                 doc_id = process_document_for_user(
-                    filename=file.filename, content=content, user_id=agent.user_id,
+                    filename=prefixed_filename, content=content, user_id=agent.user_id,
                     db=db, agent_id=agent.id, company_id=agent.company_id,
                 )
+                # Mettre à jour le gcs_url pour la déduplication
+                rag_doc = db.query(Document).filter(Document.id == doc_id).first()
+                if rag_doc:
+                    rag_doc.gcs_url = rag_unique_id
+                    db.commit()
                 document_ids.append(doc_id)
-                logger.info(f"RAG doc uploaded for agent {agent.name}: {file.filename} (doc_id: {doc_id})")
+                logger.info(f"RAG doc uploaded for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
 
                 # 2. Document de traçabilité (no chunking/embedding)
-                # Use text sent by Cloud Function, or extract from file
-                trace_text = form.get("extracted_text", "")
-                if not trace_text:
-                    try:
-                        if file.filename.lower().endswith(".pdf"):
-                            import tempfile as _tempfile
-                            with _tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                                tmp.write(content)
-                                tmp_path = tmp.name
-                            try:
-                                from file_loader import load_text_from_pdf
-                                trace_text = load_text_from_pdf(tmp_path) or ""
-                            finally:
-                                import os as _os
-                                _os.unlink(tmp_path)
-                        else:
-                            trace_text = content.decode("utf-8", errors="replace")
-                    except Exception:
-                        trace_text = ""
+                trace_unique_id = f"email_attachment_trace_{source_id}_{file.filename}_agent_{agent.id}"
+                existing_trace = db.query(Document).filter(Document.gcs_url == trace_unique_id).first()
+                if existing_trace:
+                    logger.info(f"Traceability doc already exists for agent {agent.name}: {file.filename}")
+                else:
+                    trace_text = form.get("extracted_text", "")
+                    if not trace_text:
+                        try:
+                            if file.filename.lower().endswith(".pdf"):
+                                import tempfile as _tempfile
+                                with _tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                                    tmp.write(content)
+                                    tmp_path = tmp.name
+                                try:
+                                    from file_loader import load_text_from_pdf
+                                    trace_text = load_text_from_pdf(tmp_path) or ""
+                                finally:
+                                    import os as _os
+                                    _os.unlink(tmp_path)
+                            else:
+                                trace_text = content.decode("utf-8", errors="replace")
+                        except Exception:
+                            trace_text = ""
 
-                trace_doc = Document(
-                    filename=f"[Email PJ] {file.filename}",
-                    content=trace_text,
-                    user_id=agent.user_id,
-                    agent_id=agent.id,
-                    company_id=agent.company_id,
-                    gcs_url=f"email_attachment_{source_id}_{file.filename}_agent_{agent.id}",
-                    document_type="traceability",
-                )
-                db.add(trace_doc)
-                db.commit()
-                logger.info(f"Traceability doc created for agent {agent.name}: {file.filename}")
+                    trace_doc = Document(
+                        filename=prefixed_filename,
+                        content=trace_text,
+                        user_id=agent.user_id,
+                        agent_id=agent.id,
+                        company_id=agent.company_id,
+                        gcs_url=trace_unique_id,
+                        document_type="traceability",
+                    )
+                    db.add(trace_doc)
+                    db.commit()
+                    logger.info(f"Traceability doc created for agent {agent.name}: {prefixed_filename}")
 
             except Exception as e:
                 logger.error(f"Failed to upload attachment for agent {agent.name}: {e}")
