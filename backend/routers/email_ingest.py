@@ -465,36 +465,48 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
         # Créer un document RAG + traçabilité pour CHAQUE agent trouvé
         prefixed_filename = f"[Email PJ] {file.filename}"
         document_ids = []
+        from sqlalchemy import text as _text
         for agent in target_agents:
-            # Déduplication RAG : vérifier si ce document existe déjà pour cet agent
-            rag_unique_id = f"email_attachment_rag_{source_id}_{file.filename}_agent_{agent.id}"
-            existing_rag = db.query(Document).filter(
-                Document.gcs_url == rag_unique_id, Document.agent_id == agent.id
+            # Re-apply service_bypass (may be lost after commits in process_document_for_user)
+            db.execute(_text("SET LOCAL app.service_bypass = 'true'"))
+            # Déduplication : vérifier via raw SQL (bypass RLS) si le doc existe déjà
+            existing_row = db.execute(
+                _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'rag' LIMIT 1"),
+                {"fname": prefixed_filename, "aid": agent.id}
             ).first()
-            if existing_rag:
-                logger.info(f"RAG doc already exists for agent {agent.name}: {file.filename} (doc_id: {existing_rag.id})")
-                document_ids.append(existing_rag.id)
-                continue
+            if existing_row:
+                logger.info(f"RAG doc already exists for agent {agent.name}: {prefixed_filename} (doc_id: {existing_row[0]})")
+                document_ids.append(existing_row[0])
+                # Check traçabilité also exists
+                existing_trace = db.execute(
+                    _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'traceability' LIMIT 1"),
+                    {"fname": prefixed_filename, "aid": agent.id}
+                ).first()
+                if not existing_trace:
+                    logger.info(f"Traceability doc missing, will create for agent {agent.name}")
+                else:
+                    continue
 
             try:
-                # 1. Document RAG (chunked + embedded) — avec préfixe [Email PJ]
-                doc_id = process_document_for_user(
-                    filename=prefixed_filename, content=content, user_id=agent.user_id,
-                    db=db, agent_id=agent.id, company_id=agent.company_id,
-                )
-                # Mettre à jour le gcs_url pour la déduplication
-                rag_doc = db.query(Document).filter(Document.id == doc_id).first()
-                if rag_doc:
-                    rag_doc.gcs_url = rag_unique_id
-                    db.commit()
-                document_ids.append(doc_id)
-                logger.info(f"RAG doc uploaded for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
+                if not existing_row:
+                    # 1. Document RAG (chunked + embedded) — avec préfixe [Email PJ]
+                    doc_id = process_document_for_user(
+                        filename=prefixed_filename, content=content, user_id=agent.user_id,
+                        db=db, agent_id=agent.id, company_id=agent.company_id,
+                    )
+                    document_ids.append(doc_id)
+                    logger.info(f"RAG doc uploaded for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
 
                 # 2. Document de traçabilité (no chunking/embedding)
+                # Re-apply service_bypass after process_document_for_user commits
+                db.execute(_text("SET LOCAL app.service_bypass = 'true'"))
                 trace_unique_id = f"email_attachment_trace_{source_id}_{file.filename}_agent_{agent.id}"
-                existing_trace = db.query(Document).filter(Document.gcs_url == trace_unique_id).first()
-                if existing_trace:
-                    logger.info(f"Traceability doc already exists for agent {agent.name}: {file.filename}")
+                existing_trace_doc = db.execute(
+                    _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'traceability' LIMIT 1"),
+                    {"fname": prefixed_filename, "aid": agent.id}
+                ).first()
+                if existing_trace_doc:
+                    logger.info(f"Traceability doc already exists for agent {agent.name}: {prefixed_filename}")
                 else:
                     trace_text = form.get("extracted_text", "")
                     if not trace_text:
