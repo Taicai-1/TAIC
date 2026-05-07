@@ -84,16 +84,19 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
 
     matched_agents = []
     matched_company_id = None
+    logger.info(f"[TAG_MATCH] Searching for tags {lower_tags} across {len(rows)} agents with email_tags")
     for row in rows:
         agent_id, agent_name, user_id, email_tags_raw, company_id = row
         try:
             agent_tags = json.loads(email_tags_raw) if isinstance(email_tags_raw, str) else []
             agent_tags_lower = [t.lower() for t in agent_tags if isinstance(t, str)]
+            logger.info(f"[TAG_MATCH] Agent {agent_id} ({agent_name}): tags={agent_tags_lower}, looking_for={lower_tags}, match={any(tag in agent_tags_lower for tag in lower_tags)}")
             if any(tag in agent_tags_lower for tag in lower_tags):
                 matched_agents.append(_MatchedAgent(agent_id, agent_name, user_id, company_id))
                 if company_id is not None:
                     matched_company_id = company_id
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"[TAG_MATCH] Agent {agent_id}: failed to parse email_tags '{email_tags_raw}': {e}")
             continue
 
     if not matched_agents:
