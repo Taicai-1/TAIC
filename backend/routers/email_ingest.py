@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from auth import verify_token
-from database import get_db, Agent, Document, DocumentChunk, set_current_company_id
+from database import get_db, Agent, Document, DocumentChunk, set_current_company_id, engine
 from helpers.rate_limiting import _check_api_rate_limit, _API_EXTRACT_LIMIT
 from schemas.email_ingest import EmailIngestRequest
 
@@ -54,12 +54,14 @@ class _MatchedAgent:
 def find_agents_by_email_tags(db: Session, tags: List[str]):
     """Trouve tous les agents dont email_tags contient au moins un des tags.
 
-    Uses SET LOCAL app.service_bypass to bypass RLS (Row-Level Security),
-    since this function is called from service endpoints authenticated by
-    API key, not by a user JWT — so no tenant context is set on the session.
+    Uses a direct engine connection to bypass RLS entirely — email ingestion
+    is authenticated by API key (not JWT) so no tenant context exists.
+    A direct connection from engine.connect() is not subject to the
+    SessionLocal after_begin listener and we explicitly SET LOCAL
+    app.service_bypass = 'true' for safety.
 
     Returns _MatchedAgent objects (not ORM instances) and sets the correct
-    tenant context on the session for subsequent operations.
+    tenant context on the *session* for subsequent operations.
     """
     if not tags:
         return []
@@ -68,18 +70,18 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
 
     from sqlalchemy import text
 
-    # Enable service_bypass RLS policy for this transaction.
-    # SET LOCAL is scoped to the current transaction only.
+    # Use a direct engine connection to query across ALL companies.
+    # This avoids any RLS filtering that the session might impose.
     try:
-        db.execute(text("SET LOCAL app.service_bypass = 'true'"))
-        rows = db.execute(
-            text("SELECT id, name, user_id, email_tags, company_id FROM agents "
-                 "WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
-        ).fetchall()
+        with engine.connect() as conn:
+            conn.execute(text("SET LOCAL app.service_bypass = 'true'"))
+            rows = conn.execute(
+                text("SELECT id, name, user_id, email_tags, company_id FROM agents "
+                     "WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
+            ).fetchall()
     except Exception as e:
         logger.error(f"Failed to query agents for email_tags: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        db.rollback()
         return []
 
     matched_agents = []
@@ -103,8 +105,8 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
         logger.info(f"No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)")
         return []
 
-    # Set the tenant context so subsequent ORM operations (document insert,
-    # dedup check, etc.) work correctly under RLS.
+    # Set the tenant context on the request session so subsequent ORM
+    # operations (document insert, dedup check, etc.) work under RLS.
     if matched_company_id is not None:
         set_current_company_id(matched_company_id)
         db.execute(text("SET LOCAL app.company_id = :cid"), {"cid": str(int(matched_company_id))})
