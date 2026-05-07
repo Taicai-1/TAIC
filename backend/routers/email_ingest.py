@@ -328,53 +328,73 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
             chunk_embeddings.append(avg_embedding)
 
         # 5. Créer un document pour CHAQUE agent trouvé
+        from sqlalchemy import text as _text
         document_ids = []
         for agent in target_agents:
-            # Vérifier les doublons pour cet agent spécifique
-            # L'identifiant unique est stocké dans gcs_url pour la déduplication
+            # Dedup via direct engine connection (bypasses RLS entirely)
             unique_id = f"email_{payload.source_id}_agent_{agent.id}"
-            existing_doc = db.query(Document).filter(Document.gcs_url == unique_id).first()
+            trace_unique_id = f"email_trace_{payload.source_id}_agent_{agent.id}"
 
-            if existing_doc:
-                logger.info(f"Email already ingested for agent {agent.name}: {payload.source_id}")
-                document_ids.append(existing_doc.id)
+            rag_exists = False
+            trace_exists = False
+            existing_rag_id = None
+
+            with engine.connect() as conn:
+                conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
+                row = conn.execute(
+                    _text("SELECT id FROM documents WHERE gcs_url = :uid LIMIT 1"),
+                    {"uid": unique_id}
+                ).first()
+                if row:
+                    rag_exists = True
+                    existing_rag_id = row[0]
+                trace_row = conn.execute(
+                    _text("SELECT id FROM documents WHERE gcs_url = :uid LIMIT 1"),
+                    {"uid": trace_unique_id}
+                ).first()
+                if trace_row:
+                    trace_exists = True
+
+            if rag_exists and trace_exists:
+                logger.info(f"[DEDUP] Email already fully ingested for agent {agent.name}: {payload.source_id}")
+                document_ids.append(existing_rag_id)
                 continue
 
-            # Créer le document pour cet agent
-            # Le filename affiche le titre de l'email (sujet) pour une meilleure lisibilité
-            # On garde unique_id dans gcs_url pour la déduplication
-            document = Document(
-                filename=payload.title,  # Titre de l'email comme nom du document
-                content=enriched_content,
-                user_id=agent.user_id,
-                agent_id=agent.id,
-                company_id=agent.company_id,
-                gcs_url=unique_id,  # Identifiant unique pour la déduplication
-            )
-            db.add(document)
-            db.commit()
-            db.refresh(document)
-
-            logger.info(f"Document created for agent {agent.name} with ID: {document.id}")
-
-            # Créer les chunks avec les embeddings pré-calculés (pgvector)
-            for i, chunk in enumerate(chunks):
-                doc_chunk = DocumentChunk(
-                    document_id=document.id,
+            if rag_exists:
+                logger.info(f"[DEDUP] RAG doc exists for agent {agent.name}, checking traceability")
+                document_ids.append(existing_rag_id)
+            else:
+                # Créer le document RAG
+                document = Document(
+                    filename=payload.title,
+                    content=enriched_content,
+                    user_id=agent.user_id,
+                    agent_id=agent.id,
                     company_id=agent.company_id,
-                    chunk_text=chunk,
-                    embedding_vec=chunk_embeddings[i] if chunk_embeddings[i] else None,
-                    chunk_index=i,
+                    gcs_url=unique_id,
                 )
-                db.add(doc_chunk)
+                db.add(document)
+                db.commit()
+                db.refresh(document)
 
-            db.commit()
-            document_ids.append(document.id)
+                logger.info(f"RAG document created for agent {agent.name} with ID: {document.id}")
 
-            # Document de traçabilité pour le corps de l'email
-            trace_unique_id = f"email_trace_{payload.source_id}_agent_{agent.id}"
-            existing_trace = db.query(Document).filter(Document.gcs_url == trace_unique_id).first()
-            if not existing_trace:
+                # Créer les chunks avec les embeddings pré-calculés
+                for i, chunk in enumerate(chunks):
+                    doc_chunk = DocumentChunk(
+                        document_id=document.id,
+                        company_id=agent.company_id,
+                        chunk_text=chunk,
+                        embedding_vec=chunk_embeddings[i] if chunk_embeddings[i] else None,
+                        chunk_index=i,
+                    )
+                    db.add(doc_chunk)
+
+                db.commit()
+                document_ids.append(document.id)
+
+            # Document de traçabilité
+            if not trace_exists:
                 trace_doc = Document(
                     filename=f"[Email] {payload.title}",
                     content=enriched_content,
@@ -415,30 +435,28 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
     Route vers les agents basé sur les @tags passés dans le form data.
 
     Authentification via X-API-Key header.
+
+    Creates exactly:
+      - 1 RAG document  (chunked + embedded, filename prefixed with [Email PJ])
+      - 1 traceability document (full text, same prefix, document_type='traceability')
+    per matched agent.  Dedup uses source_id (Gmail message ID) + filename + agent_id
+    via a direct engine connection to bypass RLS entirely.
     """
-    # Vérifier l'API Key
     verify_email_api_key(request)
 
     try:
-        # Récupérer les données du formulaire
         form = await request.form()
         email_subject = form.get("email_subject", "")
         source_id = form.get("source_id", "")
 
-        logger.info(f"Uploading attachment: {file.filename} for email: {email_subject}")
+        logger.info(f"Uploading attachment: {file.filename} for email: {email_subject} (source_id: {source_id})")
 
-        # Extraire les @tags du sujet de l'email
+        # --- 1. Find target agents by @tags (cross-tenant, uses engine.connect) ---
         extracted_tags = extract_email_tags_from_title(email_subject) if email_subject else []
         logger.info(f"Extracted tags from email subject: {extracted_tags}")
 
-        # Trouver les agents correspondants
-        if extracted_tags:
-            target_agents = find_agents_by_email_tags(db, extracted_tags)
-            logger.info(f"Found {len(target_agents)} agents matching tags")
-        else:
-            target_agents = []
+        target_agents = find_agents_by_email_tags(db, extracted_tags) if extracted_tags else []
 
-        # Si aucun agent matché, ignorer
         if not target_agents:
             logger.info(f"No matching agents for attachment: {file.filename} - skipping")
             return {
@@ -448,87 +466,99 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                 "message": "Aucun companion correspondant - pièce jointe ignorée",
             }
 
-        # Vérifier le type de fichier
+        # --- 2. Validate file ---
         allowed_types = [".pdf", ".txt", ".docx"]
         if not any(file.filename.lower().endswith(ext) for ext in allowed_types):
             logger.warning(f"Unsupported file type: {file.filename}")
             return {"success": False, "message": f"Type de fichier non supporté: {file.filename}"}
 
-        # Lire le contenu du fichier
         content = await file.read()
-
-        # Vérifier la taille (10MB max)
         if len(content) > 10 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="Fichier trop volumineux (max 10MB)")
 
-        # Importer les fonctions nécessaires
+        # --- 3. Process each agent ---
         from rag_engine import process_document_for_user
+        from sqlalchemy import text as _text
 
-        # Créer un document RAG + traçabilité pour CHAQUE agent trouvé
         prefixed_filename = f"[Email PJ] {file.filename}"
         document_ids = []
-        from sqlalchemy import text as _text
+
         for agent in target_agents:
-            # Re-apply service_bypass (may be lost after commits in process_document_for_user)
-            db.execute(_text("SET LOCAL app.service_bypass = 'true'"))
-            # Déduplication : vérifier via raw SQL (bypass RLS) si le doc existe déjà
-            existing_row = db.execute(
-                _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'rag' LIMIT 1"),
-                {"fname": prefixed_filename, "aid": agent.id}
-            ).first()
-            if existing_row:
-                logger.info(f"RAG doc already exists for agent {agent.name}: {prefixed_filename} (doc_id: {existing_row[0]})")
-                document_ids.append(existing_row[0])
-                # Check traçabilité also exists
-                existing_trace = db.execute(
-                    _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'traceability' LIMIT 1"),
-                    {"fname": prefixed_filename, "aid": agent.id}
-                ).first()
-                if not existing_trace:
-                    logger.info(f"Traceability doc missing, will create for agent {agent.name}")
-                else:
+            try:
+                # --- Dedup check via direct engine connection (bypasses RLS) ---
+                # Build a stable dedup key from source_id + filename + agent_id.
+                # source_id is the Gmail message ID — unique per email.
+                dedup_key = f"email_pj_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
+
+                rag_exists = False
+                trace_exists = False
+                existing_rag_id = None
+
+                with engine.connect() as conn:
+                    conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
+
+                    # Check RAG doc
+                    if dedup_key:
+                        row = conn.execute(
+                            _text("SELECT id FROM documents WHERE gcs_url LIKE :key AND agent_id = :aid AND document_type = 'rag' LIMIT 1"),
+                            {"key": f"%{dedup_key}%", "aid": agent.id}
+                        ).first()
+                    else:
+                        # Fallback: dedup by prefixed filename
+                        row = conn.execute(
+                            _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'rag' LIMIT 1"),
+                            {"fname": prefixed_filename, "aid": agent.id}
+                        ).first()
+                    if row:
+                        rag_exists = True
+                        existing_rag_id = row[0]
+
+                    # Check traceability doc
+                    trace_row = conn.execute(
+                        _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'traceability' LIMIT 1"),
+                        {"fname": prefixed_filename, "aid": agent.id}
+                    ).first()
+                    if trace_row:
+                        trace_exists = True
+
+                if rag_exists and trace_exists:
+                    logger.info(f"[DEDUP] Both RAG and traceability docs exist for agent {agent.name}: {prefixed_filename}")
+                    document_ids.append(existing_rag_id)
                     continue
 
-            try:
-                if not existing_row:
-                    # 1. Document RAG (chunked + embedded) — avec préfixe [Email PJ]
+                # --- Create RAG document if needed ---
+                if not rag_exists:
                     doc_id = process_document_for_user(
                         filename=prefixed_filename, content=content, user_id=agent.user_id,
                         db=db, agent_id=agent.id, company_id=agent.company_id,
                     )
                     document_ids.append(doc_id)
-                    logger.info(f"RAG doc uploaded for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
-
-                # 2. Document de traçabilité (no chunking/embedding)
-                # Re-apply service_bypass after process_document_for_user commits
-                db.execute(_text("SET LOCAL app.service_bypass = 'true'"))
-                trace_unique_id = f"email_attachment_trace_{source_id}_{file.filename}_agent_{agent.id}"
-                existing_trace_doc = db.execute(
-                    _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'traceability' LIMIT 1"),
-                    {"fname": prefixed_filename, "aid": agent.id}
-                ).first()
-                if existing_trace_doc:
-                    logger.info(f"Traceability doc already exists for agent {agent.name}: {prefixed_filename}")
+                    logger.info(f"RAG doc created for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
                 else:
-                    trace_text = form.get("extracted_text", "")
-                    if not trace_text:
-                        try:
-                            if file.filename.lower().endswith(".pdf"):
-                                import tempfile as _tempfile
-                                with _tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                                    tmp.write(content)
-                                    tmp_path = tmp.name
-                                try:
-                                    from file_loader import load_text_from_pdf
-                                    trace_text = load_text_from_pdf(tmp_path) or ""
-                                finally:
-                                    import os as _os
-                                    _os.unlink(tmp_path)
-                            else:
-                                trace_text = content.decode("utf-8", errors="replace")
-                        except Exception:
-                            trace_text = ""
+                    document_ids.append(existing_rag_id)
+                    logger.info(f"[DEDUP] RAG doc already exists for agent {agent.name} (doc_id: {existing_rag_id})")
 
+                # --- Create traceability document if needed ---
+                if not trace_exists:
+                    trace_text = ""
+                    try:
+                        if file.filename.lower().endswith(".pdf"):
+                            import tempfile as _tempfile
+                            with _tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                                tmp.write(content)
+                                tmp_path = tmp.name
+                            try:
+                                from file_loader import load_text_from_pdf
+                                trace_text = load_text_from_pdf(tmp_path) or ""
+                            finally:
+                                import os as _os
+                                _os.unlink(tmp_path)
+                        else:
+                            trace_text = content.decode("utf-8", errors="replace")
+                    except Exception:
+                        trace_text = ""
+
+                    trace_unique_id = f"email_pj_trace_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
                     trace_doc = Document(
                         filename=prefixed_filename,
                         content=trace_text,
@@ -543,7 +573,8 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                     logger.info(f"Traceability doc created for agent {agent.name}: {prefixed_filename}")
 
             except Exception as e:
-                logger.error(f"Failed to upload attachment for agent {agent.name}: {e}")
+                logger.error(f"Failed to process attachment for agent {agent.name}: {e}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 continue
 
         return {
