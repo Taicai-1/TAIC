@@ -485,48 +485,38 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
 
         for agent in target_agents:
             try:
-                # --- Dedup check via direct engine connection (bypasses RLS) ---
-                # Build a stable dedup key from source_id + filename + agent_id.
-                # source_id is the Gmail message ID — unique per email.
-                dedup_key = f"email_pj_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
+                # Stable dedup keys using gcs_url (exact match, consistent with ingest_email)
+                rag_key = f"email_pj_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
+                trace_key = f"email_pj_trace_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
 
+                # Single connection to check both RAG and traceability existence
                 rag_exists = False
                 trace_exists = False
                 existing_rag_id = None
 
-                with engine.connect() as conn:
-                    conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
-
-                    # Check RAG doc
-                    if dedup_key:
+                if rag_key:
+                    with engine.connect() as conn:
+                        conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
                         row = conn.execute(
-                            _text("SELECT id FROM documents WHERE gcs_url LIKE :key AND agent_id = :aid AND document_type = 'rag' LIMIT 1"),
-                            {"key": f"%{dedup_key}%", "aid": agent.id}
+                            _text("SELECT id FROM documents WHERE gcs_url = :key LIMIT 1"),
+                            {"key": rag_key}
                         ).first()
-                    else:
-                        # Fallback: dedup by prefixed filename
-                        row = conn.execute(
-                            _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'rag' LIMIT 1"),
-                            {"fname": prefixed_filename, "aid": agent.id}
+                        if row:
+                            rag_exists = True
+                            existing_rag_id = row[0]
+                        trace_row = conn.execute(
+                            _text("SELECT id FROM documents WHERE gcs_url = :key LIMIT 1"),
+                            {"key": trace_key}
                         ).first()
-                    if row:
-                        rag_exists = True
-                        existing_rag_id = row[0]
-
-                    # Check traceability doc
-                    trace_row = conn.execute(
-                        _text("SELECT id FROM documents WHERE filename = :fname AND agent_id = :aid AND document_type = 'traceability' LIMIT 1"),
-                        {"fname": prefixed_filename, "aid": agent.id}
-                    ).first()
-                    if trace_row:
-                        trace_exists = True
+                        if trace_row:
+                            trace_exists = True
 
                 if rag_exists and trace_exists:
-                    logger.info(f"[DEDUP] Both RAG and traceability docs exist for agent {agent.name}: {prefixed_filename}")
+                    logger.info(f"[DEDUP] Both docs exist for agent {agent.name}: {prefixed_filename}")
                     document_ids.append(existing_rag_id)
                     continue
 
-                # --- Create RAG document if needed ---
+                # Create RAG document if needed
                 if not rag_exists:
                     doc_id = process_document_for_user(
                         filename=prefixed_filename, content=content, user_id=agent.user_id,
@@ -534,11 +524,19 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                     )
                     document_ids.append(doc_id)
                     logger.info(f"RAG doc created for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
+
+                    # Set gcs_url on the newly created RAG doc for future dedup
+                    if rag_key:
+                        db.execute(
+                            _text("UPDATE documents SET gcs_url = :key WHERE id = :did"),
+                            {"key": rag_key, "did": doc_id}
+                        )
+                        db.commit()
                 else:
                     document_ids.append(existing_rag_id)
-                    logger.info(f"[DEDUP] RAG doc already exists for agent {agent.name} (doc_id: {existing_rag_id})")
+                    logger.info(f"[DEDUP] RAG doc exists for agent {agent.name} (doc_id: {existing_rag_id})")
 
-                # --- Create traceability document if needed ---
+                # Create traceability document if needed
                 if not trace_exists:
                     trace_text = ""
                     try:
@@ -558,14 +556,13 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                     except Exception:
                         trace_text = ""
 
-                    trace_unique_id = f"email_pj_trace_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
                     trace_doc = Document(
                         filename=prefixed_filename,
                         content=trace_text,
                         user_id=agent.user_id,
                         agent_id=agent.id,
                         company_id=agent.company_id,
-                        gcs_url=trace_unique_id,
+                        gcs_url=trace_key,
                         document_type="traceability",
                     )
                     db.add(trace_doc)

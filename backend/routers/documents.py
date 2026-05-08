@@ -711,7 +711,7 @@ async def get_user_documents(user_id: str = Depends(verify_token), db: Session =
         else:
             query = db.query(Document).filter(Document.user_id == uid)
 
-        documents = query.order_by(Document.created_at.desc()).all()
+        documents = query.filter(Document.document_type != "traceability").order_by(Document.created_at.desc()).all()
         logger.info(f"Found {len(documents)} documents for user {user_id}, agent {agent_id}")
 
         result = []
@@ -726,6 +726,7 @@ async def get_user_documents(user_id: str = Depends(verify_token), db: Session =
                     "notion_link_id": doc.notion_link_id,
                     "drive_link_id": getattr(doc, "drive_link_id", None),
                     "source_url": getattr(doc, "source_url", None),
+                    "document_type": getattr(doc, "document_type", "rag"),
                 }
                 # Safely try to add agent_id if it exists
                 if hasattr(doc, "agent_id"):
