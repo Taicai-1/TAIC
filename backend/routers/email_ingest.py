@@ -348,14 +348,14 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
                 with conn.begin():
                     conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
                     row = conn.execute(
-                        _text("SELECT id FROM documents WHERE gcs_url = :uid LIMIT 1"),
+                        _text("SELECT id FROM documents WHERE source_url = :uid LIMIT 1"),
                         {"uid": unique_id}
                     ).first()
                     if row:
                         rag_exists = True
                         existing_rag_id = row[0]
                     trace_row = conn.execute(
-                        _text("SELECT id FROM documents WHERE gcs_url = :uid LIMIT 1"),
+                        _text("SELECT id FROM documents WHERE source_url = :uid LIMIT 1"),
                         {"uid": trace_unique_id}
                     ).first()
                     if trace_row:
@@ -377,7 +377,7 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
                     user_id=agent.user_id,
                     agent_id=agent.id,
                     company_id=agent.company_id,
-                    gcs_url=unique_id,
+                    source_url=unique_id,
                 )
                 db.add(document)
                 db.commit()
@@ -407,7 +407,7 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
                     user_id=agent.user_id,
                     agent_id=agent.id,
                     company_id=agent.company_id,
-                    gcs_url=trace_unique_id,
+                    source_url=trace_unique_id,
                     document_type="traceability",
                 )
                 db.add(trace_doc)
@@ -491,7 +491,7 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
 
         for agent in target_agents:
             try:
-                # Stable dedup keys using gcs_url (exact match, consistent with ingest_email)
+                # Stable dedup keys stored in source_url (gcs_url keeps the real GCS path)
                 rag_key = f"email_pj_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
                 trace_key = f"email_pj_trace_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
 
@@ -505,14 +505,14 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                         with conn.begin():
                             conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
                             row = conn.execute(
-                                _text("SELECT id FROM documents WHERE gcs_url = :key LIMIT 1"),
+                                _text("SELECT id FROM documents WHERE source_url = :key LIMIT 1"),
                                 {"key": rag_key}
                             ).first()
                             if row:
                                 rag_exists = True
                                 existing_rag_id = row[0]
                             trace_row = conn.execute(
-                                _text("SELECT id FROM documents WHERE gcs_url = :key LIMIT 1"),
+                                _text("SELECT id FROM documents WHERE source_url = :key LIMIT 1"),
                                 {"key": trace_key}
                             ).first()
                             if trace_row:
@@ -532,10 +532,10 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                     document_ids.append(doc_id)
                     logger.info(f"RAG doc created for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
 
-                    # Set gcs_url on the newly created RAG doc for future dedup
+                    # Store dedup key in source_url (gcs_url already has the real GCS path)
                     if rag_key:
                         db.execute(
-                            _text("UPDATE documents SET gcs_url = :key WHERE id = :did"),
+                            _text("UPDATE documents SET source_url = :key WHERE id = :did"),
                             {"key": rag_key, "did": doc_id}
                         )
                         db.commit()
@@ -569,7 +569,7 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                         user_id=agent.user_id,
                         agent_id=agent.id,
                         company_id=agent.company_id,
-                        gcs_url=trace_key,
+                        source_url=trace_key,
                         document_type="traceability",
                     )
                     db.add(trace_doc)

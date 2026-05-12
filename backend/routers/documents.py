@@ -794,11 +794,6 @@ async def get_signed_download_url(
         gcs_url = document.gcs_url
         _logger.info(f"Generating signed URL for document {document_id}, gcs_url={gcs_url}")
 
-        # Email-ingested documents have a dedup key (not a real GCS URL) — use proxy download
-        if gcs_url.startswith("email_"):
-            _logger.info(f"Document {document_id} is email-ingested, using proxy download")
-            return {"proxy_url": f"/documents/{document_id}/download"}
-
         # Parse bucket and blob name (supports storage.googleapis.com and gs:// formats)
         from urllib.parse import unquote
 
@@ -882,17 +877,6 @@ async def proxy_download_document(
             _user_can_access_agent(int(user_id), document.agent_id, db)
         else:
             raise HTTPException(status_code=403, detail="Access denied")
-
-    # Email-ingested documents: serve content directly from DB
-    if document.gcs_url.startswith("email_"):
-        from fastapi.responses import Response
-        content = document.content or ""
-        filename = document.filename or f"document_{document_id}.txt"
-        return Response(
-            content=content.encode("utf-8"),
-            media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
 
     from urllib.parse import urlparse, unquote
 
