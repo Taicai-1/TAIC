@@ -684,7 +684,7 @@ def ensure_rls_policies():
     1. Adds a 'service_bypass' policy on tenant-scoped tables that allows
        SELECT when the session variable app.service_bypass = 'true'.
     2. Recreates 'tenant_isolation' policies with NULLIF to handle empty
-       string from current_setting (prevents '""::int' cast errors).
+       string from current_setting (prevents ''::int cast errors).
     """
     tables = [
         "agents", "agent_shares", "documents", "document_chunks",
@@ -709,19 +709,38 @@ def ensure_rls_policies():
                     else:
                         logger.warning(f"ensure_rls_policies: {table} skipped: {e}")
 
-                # Fix tenant_isolation policy: use NULLIF to prevent ''::int error
+            # Fix tenant_isolation policies: use NULLIF to prevent ''::int error.
+            # Check if already fixed by looking at policy definition.
+            try:
+                row = conn.execute(text(
+                    "SELECT polqual::text FROM pg_policy "
+                    "WHERE polname = 'tenant_isolation' AND polrelid = 'agents'::regclass"
+                )).first()
+                needs_fix = row is not None and "nullif" not in (row[0] or "").lower()
+            except Exception:
+                conn.rollback()
+                needs_fix = False
+
+            if needs_fix:
+                logger.info("ensure_rls_policies: fixing tenant_isolation policies (adding NULLIF)")
                 try:
-                    conn.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {table}"))
-                    conn.execute(text(
-                        f"CREATE POLICY tenant_isolation ON {table} "
-                        f"USING (company_id = NULLIF(current_setting('app.company_id', true), '')::int) "
-                        f"WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::int)"
-                    ))
+                    # Use lock_timeout to avoid blocking startup if tables are locked
+                    conn.execute(text("SET lock_timeout = '5s'"))
+                    for table in tables:
+                        conn.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {table}"))
+                        conn.execute(text(
+                            f"CREATE POLICY tenant_isolation ON {table} "
+                            f"USING (company_id = NULLIF(current_setting('app.company_id', true), '')::int) "
+                            f"WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::int)"
+                        ))
                     conn.commit()
-                    logger.info(f"ensure_rls_policies: tenant_isolation on {table} fixed")
+                    logger.info("ensure_rls_policies: tenant_isolation policies fixed")
                 except Exception as e:
                     conn.rollback()
-                    logger.warning(f"ensure_rls_policies: tenant_isolation fix on {table} failed: {e}")
+                    logger.warning(f"ensure_rls_policies: tenant_isolation fix failed (will retry next startup): {e}")
+            else:
+                logger.info("ensure_rls_policies: tenant_isolation policies already use NULLIF")
+
         logger.info("ensure_rls_policies completed")
     except Exception as e:
         logger.error(f"ensure_rls_policies failed: {e}")
