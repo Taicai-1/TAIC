@@ -18,6 +18,15 @@ from redis_client import get_cached_user
 from validation import sanitize_filename
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_source_url(source_url):
+    """Return source_url only if it's a real URL, not an email dedup key."""
+    if not source_url:
+        return None
+    if source_url.startswith("email_"):
+        return None
+    return source_url
 router = APIRouter()
 
 
@@ -335,7 +344,7 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
                 "has_file": bool(d.gcs_url),
                 "notion_link_id": d.notion_link_id,
                 "drive_link_id": getattr(d, "drive_link_id", None),
-                "source_url": getattr(d, "source_url", None),
+                "source_url": _clean_source_url(getattr(d, "source_url", None)),
             }
             for d in docs
         ],
