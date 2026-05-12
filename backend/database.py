@@ -693,6 +693,9 @@ def ensure_rls_policies():
     ]
     try:
         with engine.connect() as conn:
+            # Set lock_timeout early to prevent blocking on any DDL
+            conn.execute(text("SET lock_timeout = '5s'"))
+
             for table in tables:
                 # service_bypass policy
                 try:
@@ -701,16 +704,17 @@ def ensure_rls_policies():
                         f"USING (current_setting('app.service_bypass', true) = 'true')"
                     ))
                     conn.commit()
-                    logger.info(f"ensure_rls_policies: service_bypass on {table} created")
+                    print(f"ensure_rls_policies: service_bypass on {table} created", flush=True)
                 except Exception as e:
                     conn.rollback()
                     if "already exists" in str(e):
-                        logger.info(f"ensure_rls_policies: service_bypass on {table} already exists")
+                        pass  # expected
                     else:
-                        logger.warning(f"ensure_rls_policies: {table} skipped: {e}")
+                        print(f"ensure_rls_policies: {table} skipped: {e}", flush=True)
 
             # Fix tenant_isolation policies: use NULLIF to prevent ''::int error.
             # Check if already fixed by looking at policy definition.
+            needs_fix = False
             try:
                 row = conn.execute(text(
                     "SELECT polqual::text FROM pg_policy "
@@ -719,13 +723,10 @@ def ensure_rls_policies():
                 needs_fix = row is not None and "nullif" not in (row[0] or "").lower()
             except Exception:
                 conn.rollback()
-                needs_fix = False
 
             if needs_fix:
-                logger.info("ensure_rls_policies: fixing tenant_isolation policies (adding NULLIF)")
+                print("ensure_rls_policies: fixing tenant_isolation policies (adding NULLIF)", flush=True)
                 try:
-                    # Use lock_timeout to avoid blocking startup if tables are locked
-                    conn.execute(text("SET lock_timeout = '5s'"))
                     for table in tables:
                         conn.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {table}"))
                         conn.execute(text(
@@ -734,16 +735,16 @@ def ensure_rls_policies():
                             f"WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::int)"
                         ))
                     conn.commit()
-                    logger.info("ensure_rls_policies: tenant_isolation policies fixed")
+                    print("ensure_rls_policies: tenant_isolation policies fixed", flush=True)
                 except Exception as e:
                     conn.rollback()
-                    logger.warning(f"ensure_rls_policies: tenant_isolation fix failed (will retry next startup): {e}")
+                    print(f"ensure_rls_policies: tenant_isolation fix failed (will retry next startup): {e}", flush=True)
             else:
-                logger.info("ensure_rls_policies: tenant_isolation policies already use NULLIF")
+                print("ensure_rls_policies: tenant_isolation already OK", flush=True)
 
-        logger.info("ensure_rls_policies completed")
+        print("ensure_rls_policies completed", flush=True)
     except Exception as e:
-        logger.error(f"ensure_rls_policies failed: {e}")
+        print(f"ensure_rls_policies failed: {e}", flush=True)
 
 
 def migrate_existing_company_memberships():
