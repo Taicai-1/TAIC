@@ -72,20 +72,24 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
 
     # Use a direct engine connection to query across ALL companies.
     # This avoids any RLS filtering that the session might impose.
+    # IMPORTANT: wrap in conn.begin() so SET LOCAL takes effect within a transaction.
     try:
         with engine.connect() as conn:
-            conn.execute(text("SET LOCAL app.service_bypass = 'true'"))
-            rows = conn.execute(
-                text("SELECT id, name, user_id, email_tags, company_id FROM agents "
-                     "WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
-            ).fetchall()
+            with conn.begin():
+                conn.execute(text("SET LOCAL app.service_bypass = 'true'"))
+                rows = conn.execute(
+                    text("SELECT id, name, user_id, email_tags, company_id FROM agents "
+                         "WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
+                ).fetchall()
     except Exception as e:
+        print(f"[EMAIL_INGEST] Failed to query agents for email_tags: {e}", flush=True)
         logger.error(f"Failed to query agents for email_tags: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return []
 
     matched_agents = []
     matched_company_id = None
+    print(f"[EMAIL_INGEST] [TAG_MATCH] Searching for tags {lower_tags} across {len(rows)} agents with email_tags", flush=True)
     logger.info(f"[TAG_MATCH] Searching for tags {lower_tags} across {len(rows)} agents with email_tags")
     for row in rows:
         agent_id, agent_name, user_id, email_tags_raw, company_id = row
@@ -102,6 +106,7 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
             continue
 
     if not matched_agents:
+        print(f"[EMAIL_INGEST] No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)", flush=True)
         logger.info(f"No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)")
         return []
 
@@ -340,20 +345,21 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
             existing_rag_id = None
 
             with engine.connect() as conn:
-                conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
-                row = conn.execute(
-                    _text("SELECT id FROM documents WHERE gcs_url = :uid LIMIT 1"),
-                    {"uid": unique_id}
-                ).first()
-                if row:
-                    rag_exists = True
-                    existing_rag_id = row[0]
-                trace_row = conn.execute(
-                    _text("SELECT id FROM documents WHERE gcs_url = :uid LIMIT 1"),
-                    {"uid": trace_unique_id}
-                ).first()
-                if trace_row:
-                    trace_exists = True
+                with conn.begin():
+                    conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
+                    row = conn.execute(
+                        _text("SELECT id FROM documents WHERE gcs_url = :uid LIMIT 1"),
+                        {"uid": unique_id}
+                    ).first()
+                    if row:
+                        rag_exists = True
+                        existing_rag_id = row[0]
+                    trace_row = conn.execute(
+                        _text("SELECT id FROM documents WHERE gcs_url = :uid LIMIT 1"),
+                        {"uid": trace_unique_id}
+                    ).first()
+                    if trace_row:
+                        trace_exists = True
 
             if rag_exists and trace_exists:
                 logger.info(f"[DEDUP] Email already fully ingested for agent {agent.name}: {payload.source_id}")
@@ -496,20 +502,21 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
 
                 if rag_key:
                     with engine.connect() as conn:
-                        conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
-                        row = conn.execute(
-                            _text("SELECT id FROM documents WHERE gcs_url = :key LIMIT 1"),
-                            {"key": rag_key}
-                        ).first()
-                        if row:
-                            rag_exists = True
-                            existing_rag_id = row[0]
-                        trace_row = conn.execute(
-                            _text("SELECT id FROM documents WHERE gcs_url = :key LIMIT 1"),
-                            {"key": trace_key}
-                        ).first()
-                        if trace_row:
-                            trace_exists = True
+                        with conn.begin():
+                            conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
+                            row = conn.execute(
+                                _text("SELECT id FROM documents WHERE gcs_url = :key LIMIT 1"),
+                                {"key": rag_key}
+                            ).first()
+                            if row:
+                                rag_exists = True
+                                existing_rag_id = row[0]
+                            trace_row = conn.execute(
+                                _text("SELECT id FROM documents WHERE gcs_url = :key LIMIT 1"),
+                                {"key": trace_key}
+                            ).first()
+                            if trace_row:
+                                trace_exists = True
 
                 if rag_exists and trace_exists:
                     logger.info(f"[DEDUP] Both docs exist for agent {agent.name}: {prefixed_filename}")
