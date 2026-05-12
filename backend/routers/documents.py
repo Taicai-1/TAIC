@@ -36,6 +36,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _clean_source_url(source_url):
+    """Return source_url only if it's a real URL, not an email dedup key."""
+    if not source_url:
+        return None
+    if source_url.startswith("email_"):
+        return None
+    return source_url
+
+
 def _fetch_and_parse_url(url: str) -> tuple[str, str]:
     """Fetch a URL, parse HTML, and return (cleaned_text_content, filename).
 
@@ -725,7 +734,7 @@ async def get_user_documents(user_id: str = Depends(verify_token), db: Session =
                     "gcs_url": doc.gcs_url,
                     "notion_link_id": doc.notion_link_id,
                     "drive_link_id": getattr(doc, "drive_link_id", None),
-                    "source_url": getattr(doc, "source_url", None),
+                    "source_url": _clean_source_url(getattr(doc, "source_url", None)),
                     "document_type": getattr(doc, "document_type", "rag"),
                 }
                 # Safely try to add agent_id if it exists
