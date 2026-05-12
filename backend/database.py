@@ -679,13 +679,12 @@ def ensure_columns():
 
 
 def ensure_rls_policies():
-    """Create RLS bypass policies for service-to-service operations.
+    """Create RLS bypass policies and fix tenant_isolation policies.
 
-    Adds a 'service_bypass' policy on tenant-scoped tables that allows
-    SELECT when the session variable app.service_bypass = 'true'.
-    This is scoped to the transaction (SET LOCAL) so it doesn't affect
-    other connections — unlike ALTER TABLE DISABLE ROW LEVEL SECURITY
-    which is a global table-level change.
+    1. Adds a 'service_bypass' policy on tenant-scoped tables that allows
+       SELECT when the session variable app.service_bypass = 'true'.
+    2. Recreates 'tenant_isolation' policies with NULLIF to handle empty
+       string from current_setting (prevents '""::int' cast errors).
     """
     tables = [
         "agents", "agent_shares", "documents", "document_chunks",
@@ -695,6 +694,7 @@ def ensure_rls_policies():
     try:
         with engine.connect() as conn:
             for table in tables:
+                # service_bypass policy
                 try:
                     conn.execute(text(
                         f"CREATE POLICY service_bypass ON {table} FOR SELECT "
@@ -703,12 +703,25 @@ def ensure_rls_policies():
                     conn.commit()
                     logger.info(f"ensure_rls_policies: service_bypass on {table} created")
                 except Exception as e:
-                    # Policy already exists — skip
                     conn.rollback()
                     if "already exists" in str(e):
                         logger.info(f"ensure_rls_policies: service_bypass on {table} already exists")
                     else:
                         logger.warning(f"ensure_rls_policies: {table} skipped: {e}")
+
+                # Fix tenant_isolation policy: use NULLIF to prevent ''::int error
+                try:
+                    conn.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {table}"))
+                    conn.execute(text(
+                        f"CREATE POLICY tenant_isolation ON {table} "
+                        f"USING (company_id = NULLIF(current_setting('app.company_id', true), '')::int) "
+                        f"WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::int)"
+                    ))
+                    conn.commit()
+                    logger.info(f"ensure_rls_policies: tenant_isolation on {table} fixed")
+                except Exception as e:
+                    conn.rollback()
+                    logger.warning(f"ensure_rls_policies: tenant_isolation fix on {table} failed: {e}")
         logger.info("ensure_rls_policies completed")
     except Exception as e:
         logger.error(f"ensure_rls_policies failed: {e}")
