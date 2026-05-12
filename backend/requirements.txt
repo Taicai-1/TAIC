@@ -28,7 +28,7 @@ google-cloud-monitoring==2.27.2
 google-api-python-client==2.185.0
 Pillow==11.2.1
 openai==1.91.0
-mistralai==2.4.3
+mistralai @ git+https://github.com/mistralai/client-python.git@v2.4.5
 httpx==0.28.1
 python-multipart==0.0.20
 redis==7.4.0
