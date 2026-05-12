@@ -794,6 +794,18 @@ async def get_signed_download_url(
         gcs_url = document.gcs_url
         _logger.info(f"Generating signed URL for document {document_id}, gcs_url={gcs_url}")
 
+        # Email-ingested documents have a dedup key (not a real GCS URL) — serve content directly
+        if gcs_url.startswith("email_") or gcs_url.startswith("email_pj_"):
+            _logger.info(f"Document {document_id} is email-ingested, serving content directly")
+            content = document.content or ""
+            filename = document.filename or f"document_{document_id}.txt"
+            from fastapi.responses import Response
+            return Response(
+                content=content.encode("utf-8"),
+                media_type="text/plain; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
         # Parse bucket and blob name (supports storage.googleapis.com and gs:// formats)
         from urllib.parse import unquote
 
