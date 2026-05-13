@@ -1003,7 +1003,7 @@ export default function CompanionSettings() {
                       value={form.recap_frequency}
                       onChange={e => setForm(f => ({ ...f, recap_frequency: e.target.value }))}
                     >
-                      {["6h", "daily", "2days", "weekly"].map(freq => (
+                      {["daily", "weekly", "monthly"].map(freq => (
                         <option key={freq} value={freq}>
                           {t(`agents:form.weeklyRecap.frequencyOptions.${freq}`)}
                         </option>

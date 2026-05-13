@@ -20,27 +20,22 @@ scheduler = BackgroundScheduler()
 PARIS_TZ = pytz.timezone("Europe/Paris")
 
 
-def _get_send_hours(recap_hour: int) -> set[int]:
-    """For 6h frequency, return the 4 send hours in a day."""
-    return {(recap_hour + offset) % 24 for offset in (0, 6, 12, 18)}
-
-
 def _is_due(agent: Agent, now: datetime, db) -> bool:
     """Check if an agent is due for a recap right now."""
     freq = agent.recap_frequency or "weekly"
     hour = agent.recap_hour if agent.recap_hour is not None else 9
     current_hour = now.hour
 
-    if freq == "6h":
-        if current_hour not in _get_send_hours(hour):
-            return False
-    elif freq in ("daily", "2days", "weekly"):
+    if freq in ("daily", "weekly", "monthly"):
         if current_hour != hour:
             return False
     else:
         return False
 
     if freq == "weekly" and now.weekday() != 0:  # Monday = 0
+        return False
+
+    if freq == "monthly" and now.day != 1:  # 1st of the month
         return False
 
     # Check last send time to avoid duplicates
@@ -55,7 +50,7 @@ def _is_due(agent: Agent, now: datetime, db) -> bool:
     )
 
     if last_log and last_log.sent_at:
-        min_gap = {"6h": timedelta(hours=5), "daily": timedelta(hours=23), "2days": timedelta(hours=47), "weekly": timedelta(days=6)}
+        min_gap = {"daily": timedelta(hours=23), "weekly": timedelta(days=6), "monthly": timedelta(days=27)}
         if now.replace(tzinfo=None) - last_log.sent_at < min_gap.get(freq, timedelta(days=6)):
             return False
 

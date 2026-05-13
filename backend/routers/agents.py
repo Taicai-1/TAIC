@@ -7,6 +7,7 @@ import time
 import hmac
 import logging
 import traceback
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
@@ -218,7 +219,7 @@ async def create_agent(
             weekly_recap_recipients=weekly_recap_recipients
             if weekly_recap_recipients and weekly_recap_recipients.strip()
             else None,
-            recap_frequency=recap_frequency if recap_frequency in ("6h", "daily", "2days", "weekly") else "weekly",
+            recap_frequency=recap_frequency if recap_frequency in ("daily", "weekly", "monthly") else "weekly",
             recap_hour=max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9,
             user_id=int(user_id),
             company_id=caller_company_id,
@@ -545,7 +546,7 @@ async def update_agent(
         agent.weekly_recap_recipients = (
             weekly_recap_recipients if weekly_recap_recipients and weekly_recap_recipients.strip() else None
         )
-        agent.recap_frequency = recap_frequency if recap_frequency in ("6h", "daily", "2days", "weekly") else "weekly"
+        agent.recap_frequency = recap_frequency if recap_frequency in ("daily", "weekly", "monthly") else "weekly"
         agent.recap_hour = max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9
 
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
@@ -589,7 +590,9 @@ async def update_agent(
 
 @router.post("/api/weekly-recap/trigger")
 async def trigger_weekly_recap(request: Request, db: Session = Depends(get_db)):
-    """Trigger weekly recap for all enabled agents. Protected by X-API-Key."""
+    """Trigger weekly recap for all due agents. Protected by X-API-Key.
+    Designed to be called every hour by Cloud Scheduler.
+    Checks each agent's recap_frequency and recap_hour before sending."""
     api_key = request.headers.get("X-API-Key", "")
     expected_key = os.getenv("WEEKLY_RECAP_API_KEY", "")
 
@@ -599,14 +602,20 @@ async def trigger_weekly_recap(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
     from weekly_recap import process_agent_recap
+    from recap_scheduler import _is_due, PARIS_TZ
 
+    now = datetime.now(PARIS_TZ)
     agents = db.query(Agent).filter(Agent.weekly_recap_enabled == True).all()
     results = []
+    skipped = 0
     for agent in agents:
+        if not _is_due(agent, now, db):
+            skipped += 1
+            continue
         result = process_agent_recap(agent, db)
         results.append({"agent_id": agent.id, "agent_name": agent.name, **result})
 
-    return {"processed": len(results), "results": results}
+    return {"processed": len(results), "skipped": skipped, "results": results}
 
 
 @router.post("/api/agents/{agent_id}/recap-preview")

@@ -25,7 +25,7 @@ def get_model_id_for_agent(agent: Agent) -> str:
         return "mistral:mistral-large-latest"
 
 
-FREQUENCY_DAYS = {"6h": 1, "daily": 1, "2days": 2, "weekly": 7}
+FREQUENCY_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
 
 
 def get_days_back(agent: Agent) -> int:

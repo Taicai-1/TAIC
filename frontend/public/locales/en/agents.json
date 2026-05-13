@@ -82,7 +82,15 @@
       "promptHelpText": "Leave empty to use the default prompt (3 sections: Completed projects, Deadlines, Key issues).",
       "recipientsLabel": "Additional recipients",
       "recipientsPlaceholder": "email@example.com",
-      "recipientsHelpText": "The agent owner always receives the recap. Add team members here."
+      "recipientsHelpText": "The agent owner always receives the recap. Add team members here.",
+      "frequencyLabel": "Frequency",
+      "frequencyOptions": {
+        "daily": "Once a day",
+        "weekly": "Once a week",
+        "monthly": "Once a month"
+      },
+      "hourLabel": "Send time",
+      "hourSuffix": "h"
     }
   },
   "slack": {

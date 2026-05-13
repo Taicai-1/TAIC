@@ -85,10 +85,9 @@
       "recipientsHelpText": "Le propriétaire de l'agent reçoit toujours le recap. Ajoutez des membres de l'équipe ici.",
       "frequencyLabel": "Fréquence",
       "frequencyOptions": {
-        "6h": "Toutes les 6 heures",
         "daily": "1 fois par jour",
-        "2days": "1 fois tous les 2 jours",
-        "weekly": "1 fois par semaine"
+        "weekly": "1 fois par semaine",
+        "monthly": "1 fois par mois"
       },
       "hourLabel": "Heure d'envoi",
       "hourSuffix": "h"

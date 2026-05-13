@@ -45,4 +45,37 @@ gcloud scheduler jobs create http taic-daily-routine-prod \
   --attempt-deadline=300s \
   || echo "Job already exists. Use 'gcloud scheduler jobs update http ...' to modify."
 
+# ---- Recap email scheduler (hourly) ----
+RECAP_API_KEY=$(gcloud secrets versions access latest --secret=WEEKLY_RECAP_API_KEY --project="${PROJECT_ID}" 2>/dev/null || echo "")
+
+echo "Creating hourly recap scheduler job for dev..."
+gcloud scheduler jobs create http taic-recap-hourly-dev \
+  --project="${PROJECT_ID}" \
+  --location="${REGION}" \
+  --schedule="0 * * * *" \
+  --time-zone="Europe/Paris" \
+  --uri="${DEV_BACKEND_URL}/api/weekly-recap/trigger" \
+  --http-method=POST \
+  --headers="X-API-Key=${RECAP_API_KEY}" \
+  --oidc-service-account-email="${SERVICE_ACCOUNT}" \
+  --oidc-token-audience="${DEV_BACKEND_URL}" \
+  --description="Hourly recap email trigger (dev)" \
+  --attempt-deadline=300s \
+  || echo "Job already exists. Use 'gcloud scheduler jobs update http ...' to modify."
+
+echo "Creating hourly recap scheduler job for production..."
+gcloud scheduler jobs create http taic-recap-hourly-prod \
+  --project="${PROJECT_ID}" \
+  --location="${REGION}" \
+  --schedule="0 * * * *" \
+  --time-zone="Europe/Paris" \
+  --uri="${PROD_BACKEND_URL}/api/weekly-recap/trigger" \
+  --http-method=POST \
+  --headers="X-API-Key=${RECAP_API_KEY}" \
+  --oidc-service-account-email="${SERVICE_ACCOUNT}" \
+  --oidc-token-audience="${PROD_BACKEND_URL}" \
+  --description="Hourly recap email trigger (prod)" \
+  --attempt-deadline=300s \
+  || echo "Job already exists. Use 'gcloud scheduler jobs update http ...' to modify."
+
 echo "Done. Verify with: gcloud scheduler jobs list --project=${PROJECT_ID} --location=${REGION}"
