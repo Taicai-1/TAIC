@@ -473,7 +473,7 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
             }
 
         # --- 2. Validate file ---
-        allowed_types = [".pdf", ".txt", ".docx"]
+        allowed_types = [".pdf", ".txt", ".docx", ".json"]
         if not any(file.filename.lower().endswith(ext) for ext in allowed_types):
             logger.warning(f"Unsupported file type: {file.filename}")
             return {"success": False, "message": f"Type de fichier non supporté: {file.filename}"}

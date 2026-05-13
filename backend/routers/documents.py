@@ -495,7 +495,7 @@ async def upload_file(
                 except Exception as e:
                     logger.error(f"XLSX extraction error: {e}")
             os.unlink(tmp.name)
-        elif filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".ics"):
+        elif filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".ics") or filename.endswith(".json"):
             logger.info("Tentative extraction fichier texte/csv/ics")
             try:
                 text = content.decode("utf-8", errors="ignore")
@@ -634,7 +634,7 @@ async def upload_file_for_agent(
             raise HTTPException(status_code=413, detail="File too large (max 10MB)")
 
         # Check file type
-        allowed_types = [".pdf", ".txt", ".docx", ".ics"]
+        allowed_types = [".pdf", ".txt", ".docx", ".ics", ".json"]
         if not any(file.filename.lower().endswith(ext) for ext in allowed_types):
             raise HTTPException(status_code=400, detail="File type not supported")
 

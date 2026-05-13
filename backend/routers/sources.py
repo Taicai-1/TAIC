@@ -37,7 +37,7 @@ async def upload_traceability_doc(
     """Upload a traceability document (no chunking/embedding)."""
     agent = _user_can_edit_agent(int(user_id), agent_id, db)
 
-    allowed_ext = {".pdf", ".txt", ".docx", ".xlsx", ".xls", ".csv"}
+    allowed_ext = {".pdf", ".txt", ".docx", ".xlsx", ".xls", ".csv", ".json"}
     file_ext = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""
     if file_ext not in allowed_ext:
         raise HTTPException(status_code=400, detail=f"Unsupported format. Use: {', '.join(allowed_ext)}")
