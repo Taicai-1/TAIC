@@ -522,10 +522,10 @@ export default function CompanionSettings() {
     const ext = '.' + file.name.split('.').pop().toLowerCase();
 
     if (type === 'rag') {
-      if (['.pdf', '.txt', '.doc', '.docx'].includes(ext)) uploadDocument(file);
+      if (['.pdf', '.txt', '.doc', '.docx', '.json'].includes(ext)) uploadDocument(file);
       else toast.error(t('agents:toast.unsupportedFormat'));
     } else {
-      if (['.pdf', '.txt', '.docx', '.xlsx', '.xls', '.csv'].includes(ext)) uploadTraceabilityDoc(file);
+      if (['.pdf', '.txt', '.docx', '.xlsx', '.xls', '.csv', '.json'].includes(ext)) uploadTraceabilityDoc(file);
       else toast.error(t('agents:toast.unsupportedTraceabilityFormat'));
     }
   };
@@ -836,7 +836,7 @@ export default function CompanionSettings() {
             </p>
             <p className="text-xs text-gray-500 mb-3">{t('agents:documents.formats')}</p>
             <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
-              <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx" disabled={uploadingDoc}
+              <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.json" disabled={uploadingDoc}
                 onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
               {uploadingDoc ? <><Loader2 className="w-4 h-4 animate-spin" /><span>{t('agents:buttons.uploading')}</span></> : <><Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span></>}
             </label>
@@ -943,7 +943,7 @@ export default function CompanionSettings() {
             </p>
             <p className="text-xs text-gray-500 mb-3">{t('agents:traceabilityDocs.formats')}</p>
             <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-sm hover:from-amber-600 hover:to-orange-600 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
-              <input type="file" className="hidden" accept=".pdf,.txt,.docx,.xlsx,.xls,.csv" disabled={uploadingTraceabilityDoc}
+              <input type="file" className="hidden" accept=".pdf,.txt,.docx,.xlsx,.xls,.csv,.json" disabled={uploadingTraceabilityDoc}
                 onChange={e => { if (e.target.files?.[0]) { uploadTraceabilityDoc(e.target.files[0]); e.target.value = ''; } }} />
               {uploadingTraceabilityDoc ? <><Loader2 className="w-4 h-4 animate-spin" /><span>{t('agents:buttons.uploading')}</span></> : <><Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span></>}
             </label>

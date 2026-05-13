@@ -29,7 +29,7 @@
     "orClickToChoose": "or click to choose",
     "success": "Document \"{{filename}}\" added successfully!",
     "error": "Error adding document",
-    "unsupportedFormat": "Unsupported format. Use PDF, TXT or DOCX"
+    "unsupportedFormat": "Unsupported format. Use PDF, TXT, DOCX or JSON"
   },
   "urlUpload": {
     "title": "Add from URL",
