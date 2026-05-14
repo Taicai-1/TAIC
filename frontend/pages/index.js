@@ -4,7 +4,8 @@ import toast, { Toaster } from "react-hot-toast";
 import {
   ArrowLeft, Bot, MessageCircle, Save, Camera, Trash2, Plus,
   Upload, Loader2, FileText, Database, Link, Zap, Users, TrendingUp,
-  LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive, Globe
+  LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive, Globe,
+  Pencil, Sparkles
 } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -96,6 +97,11 @@ export default function CompanionSettings() {
   const [savingSlack, setSavingSlack] = useState(false);
   const [testingSlack, setTestingSlack] = useState(false);
   const [sendingRecap, setSendingRecap] = useState(false);
+
+  // Improve context by AI
+  const [improvingContext, setImprovingContext] = useState(false);
+  const [improvedContext, setImprovedContext] = useState(null);
+  const [showImproveModal, setShowImproveModal] = useState(false);
   const [recapRecipientInput, setRecapRecipientInput] = useState("");
 
   // Neo4j
@@ -298,6 +304,30 @@ export default function CompanionSettings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const improveContext = async () => {
+    if (!form.contexte.trim()) {
+      toast.error(t('agents:toast.noContextToImprove', { defaultValue: 'Aucun contexte à améliorer' }));
+      return;
+    }
+    setImprovingContext(true);
+    try {
+      const res = await api.post(`/api/agents/${currentAgent.id}/improve-context`);
+      setImprovedContext(res.data.improved);
+      setShowImproveModal(true);
+    } catch (error) {
+      toast.error(t('agents:toast.improveError', { defaultValue: "Erreur lors de l'amélioration du contexte" }));
+    } finally {
+      setImprovingContext(false);
+    }
+  };
+
+  const acceptImprovedContext = () => {
+    setForm(f => ({ ...f, contexte: improvedContext }));
+    setShowImproveModal(false);
+    setImprovedContext(null);
+    toast.success(t('agents:toast.contextImproved', { defaultValue: 'Contexte amélioré appliqué ! N\'oubliez pas de sauvegarder.' }));
   };
 
   const pollUploadStatus = async (taskId, agentId) => {
@@ -603,13 +633,16 @@ export default function CompanionSettings() {
 
               {/* Name + Info */}
               <div className="flex-1 text-center sm:text-left w-full">
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="text-3xl font-bold text-gray-900 bg-transparent border-none outline-none w-full placeholder-gray-300 focus:ring-0"
-                  placeholder={t('agents:form.name.placeholder')}
-                />
+                <div className="group/name relative flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    className="text-3xl font-bold text-gray-900 bg-transparent border-b-2 border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full placeholder-gray-300 transition-colors duration-200"
+                    placeholder={t('agents:form.name.placeholder')}
+                  />
+                  <Pencil className="w-5 h-5 text-gray-400 opacity-0 group-hover/name:opacity-100 transition-opacity duration-200 flex-shrink-0 pointer-events-none" />
+                </div>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className={`inline-flex items-center px-3 py-1 ${typeConfig.color} text-white text-xs font-semibold rounded-full shadow-sm`}>
                     <typeConfig.icon className="w-3 h-3 mr-1" />
@@ -670,6 +703,22 @@ export default function CompanionSettings() {
                 value={form.contexte}
                 onChange={e => setForm(f => ({ ...f, contexte: e.target.value }))}
               />
+              <button
+                type="button"
+                onClick={improveContext}
+                disabled={improvingContext || !form.contexte.trim()}
+                className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-sm font-semibold rounded-button shadow-sm hover:shadow-card transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {improvingContext ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                {improvingContext
+                  ? t('agents:buttons.improving', { defaultValue: 'Amélioration en cours...' })
+                  : t('agents:buttons.improveContext', { defaultValue: 'Améliorer par IA' })
+                }
+              </button>
             </div>
             <div>
               <label className="text-sm font-semibold text-gray-700 mb-1 block">{t('agents:form.biography.placeholder')}</label>
@@ -1432,6 +1481,64 @@ export default function CompanionSettings() {
         {/* Bottom spacer */}
         <div className="h-8" />
       </div>
+
+      {/* Improve Context Modal */}
+      {showImproveModal && improvedContext && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-card shadow-floating w-full max-w-4xl mx-auto max-h-[85vh] overflow-auto border border-gray-200 animate-fade-in">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <h2 className="text-lg font-heading font-bold text-gray-900">
+                  {t('agents:improve.title', { defaultValue: 'Amélioration du contexte par IA' })}
+                </h2>
+              </div>
+              <button
+                onClick={() => { setShowImproveModal(false); setImprovedContext(null); }}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-sm transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
+              <div>
+                <label className="text-sm font-semibold text-gray-500 mb-2 block uppercase tracking-wide">
+                  {t('agents:improve.original', { defaultValue: 'Original' })}
+                </label>
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-input text-sm text-gray-700 whitespace-pre-wrap min-h-[200px] max-h-[400px] overflow-auto">
+                  {form.contexte}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-amber-600 mb-2 block uppercase tracking-wide flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {t('agents:improve.improved', { defaultValue: 'Amélioré par IA' })}
+                </label>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-input text-sm text-gray-700 whitespace-pre-wrap min-h-[200px] max-h-[400px] overflow-auto">
+                  {improvedContext}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => { setShowImproveModal(false); setImprovedContext(null); }}
+                className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-button hover:bg-gray-50 font-semibold text-sm transition-colors"
+              >
+                {t('agents:improve.cancel', { defaultValue: 'Annuler' })}
+              </button>
+              <button
+                onClick={acceptImprovedContext}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-button font-semibold text-sm shadow-sm hover:shadow-card transition-all flex items-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                {t('agents:improve.accept', { defaultValue: 'Accepter' })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

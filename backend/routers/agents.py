@@ -669,3 +669,44 @@ async def recap_send(agent_id: int, user_id: str = Depends(verify_token), db: Se
 
     result = process_agent_recap(agent, db)
     return result
+
+
+@router.post("/api/agents/{agent_id}/improve-context")
+async def improve_agent_context(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+    """Use Mistral AI to improve the agent's context prompt via prompt engineering."""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    if not _user_can_edit_agent(agent, int(user_id), db):
+        raise HTTPException(status_code=403, detail="Not authorized to edit this agent")
+
+    if not agent.contexte or not agent.contexte.strip():
+        raise HTTPException(status_code=400, detail="Agent has no context to improve")
+
+    from mistral_client import generate_text
+
+    prompt = (
+        "Tu es un expert en prompt engineering spécialisé dans la création d'instructions système "
+        "pour des chatbots basés sur le RAG (Retrieval-Augmented Generation).\n\n"
+        "Voici le contexte actuel d'un agent chatbot :\n"
+        "---\n"
+        f"{agent.contexte}\n"
+        "---\n\n"
+        "Améliore ce contexte en appliquant les principes suivants :\n"
+        "1. Structure claire avec des sections si nécessaire\n"
+        "2. Instructions précises sur le ton, le style et le comportement attendu\n"
+        "3. Définition claire du rôle et du périmètre de l'agent\n"
+        "4. Directives sur comment utiliser les documents fournis (RAG)\n"
+        "5. Gestion des cas limites (questions hors sujet, informations manquantes)\n"
+        "6. Conserve l'intention et le domaine d'expertise originaux\n"
+        "7. Garde la même langue que le texte original\n\n"
+        "Retourne UNIQUEMENT le contexte amélioré, sans commentaire, sans explication, sans guillemets englobants."
+    )
+
+    try:
+        improved = generate_text(prompt, model_name="mistral-large-latest", temperature=0.4, max_tokens=4000)
+        return {"original": agent.contexte, "improved": improved.strip()}
+    except Exception as e:
+        logger.error(f"Failed to improve context for agent {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to improve context")
