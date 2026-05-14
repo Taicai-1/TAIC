@@ -317,7 +317,9 @@ export default function CompanionSettings() {
       setImprovedContext(res.data.improved);
       setShowImproveModal(true);
     } catch (error) {
-      toast.error(t('agents:toast.improveError', { defaultValue: "Erreur lors de l'amélioration du contexte" }));
+      const detail = error.response?.data?.detail || error.response?.status || error.message;
+      console.error("Improve context error:", error.response?.status, error.response?.data);
+      toast.error(`${t('agents:toast.improveError', { defaultValue: "Erreur lors de l'amélioration du contexte" })} (${detail})`);
     } finally {
       setImprovingContext(false);
     }
