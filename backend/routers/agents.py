@@ -10,6 +10,7 @@ import traceback
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from google.cloud import storage
 
@@ -671,14 +672,21 @@ async def recap_send(agent_id: int, user_id: str = Depends(verify_token), db: Se
     return result
 
 
+class ImproveContextRequest(BaseModel):
+    contexte: str | None = None
+
+
 @router.post("/api/agents/{agent_id}/improve-context")
-async def improve_agent_context(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+async def improve_agent_context(agent_id: int, body: ImproveContextRequest = ImproveContextRequest(), user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Use Mistral AI to improve the agent's context prompt via prompt engineering."""
     agent = db.query(Agent).filter(Agent.id == agent_id, Agent.user_id == int(user_id)).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    if not agent.contexte or not agent.contexte.strip():
+    # Use contexte from request body if provided, otherwise fall back to DB
+    contexte = (body.contexte or "").strip() if body.contexte else (agent.contexte or "").strip()
+
+    if not contexte:
         raise HTTPException(status_code=400, detail="Agent has no context to improve")
 
     from mistral_client import generate_text
@@ -700,14 +708,14 @@ async def improve_agent_context(agent_id: int, user_id: str = Depends(verify_tok
         "- Reste concis (pas plus de 2x la longueur originale)\n\n"
         "PROMPT ORIGINAL À AMÉLIORER :\n"
         "---\n"
-        f"{agent.contexte}\n"
+        f"{contexte}\n"
         "---\n\n"
         "Retourne UNIQUEMENT le prompt amélioré. Aucun commentaire, aucune explication, aucun guillemet englobant."
     )
 
     try:
         improved = generate_text(prompt, model_name="mistral-large-latest", temperature=0.4, max_tokens=4000)
-        return {"original": agent.contexte, "improved": improved.strip()}
+        return {"original": contexte, "improved": improved.strip()}
     except Exception as e:
         logger.error(f"Failed to improve context for agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to improve context")

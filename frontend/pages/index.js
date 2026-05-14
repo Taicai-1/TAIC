@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/router";
 import toast, { Toaster } from "react-hot-toast";
 import {
-  ArrowLeft, Bot, MessageCircle, Save, Camera, Trash2, Plus,
+  ArrowLeft, Bot, MessageCircle, Check, Camera, Trash2, Plus,
   Upload, Loader2, FileText, Database, Link, Zap, Users, TrendingUp,
   LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive, Globe,
-  Pencil, Sparkles
+  Pencil, Sparkles, AlertCircle
 } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -51,7 +51,7 @@ export default function CompanionSettings() {
   const { user, loading: authLoading, authenticated, logout: authLogout } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false); // kept for Slack config save
   const [currentAgent, setCurrentAgent] = useState(null);
 
   // Form state
@@ -98,6 +98,12 @@ export default function CompanionSettings() {
   const [testingSlack, setTestingSlack] = useState(false);
   const [sendingRecap, setSendingRecap] = useState(false);
 
+  // Auto-save
+  const [autoSaveStatus, setAutoSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  const autoSaveTimer = useRef(null);
+  const formLoaded = useRef(false); // prevent auto-save on initial load
+  const prevFormRef = useRef(null);
+
   // Improve context by AI
   const [improvingContext, setImprovingContext] = useState(false);
   const [improvedContext, setImprovedContext] = useState(null);
@@ -127,6 +133,7 @@ export default function CompanionSettings() {
 
       setCurrentAgent(agent);
       setAgentDocuments(docsRes.data.documents || []);
+      formLoaded.current = false; // reset so auto-save skips the next setForm
 
       let parsedEmailTags = [];
       if (agent.email_tags) {
@@ -263,48 +270,68 @@ export default function CompanionSettings() {
     }
   }, [authenticated, authLoading, urlAgentId, router.isReady]);
 
-  // --- Actions ---
-  const saveAgent = async () => {
-    if (!form.name.trim()) { toast.error(t('agents:toast.nameRequired')); return; }
-    setSaving(true);
+  // --- Auto-save ---
+  const saveAgent = useCallback(async (formSnapshot) => {
+    if (!currentAgent?.id) return;
+    const f = formSnapshot || form;
+    if (!f.name.trim()) return; // don't save with empty name
+    setAutoSaveStatus('saving');
     try {
       const formData = new FormData();
-      formData.append("name", form.name);
-      formData.append("contexte", form.contexte);
-      formData.append("biographie", form.biographie);
-      if (form.profile_photo) formData.append("profile_photo", form.profile_photo);
-      formData.append("type", form.type || 'conversationnel');
-      formData.append("email_tags", form.email_tags.length > 0 ? JSON.stringify(form.email_tags) : "[]");
-      formData.append("neo4j_enabled", form.neo4j_enabled ? "true" : "false");
-      if (form.neo4j_person_name) formData.append("neo4j_person_name", form.neo4j_person_name);
-      formData.append("neo4j_depth", String(form.neo4j_depth || 1));
-      formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
-      if (form.weekly_recap_prompt) formData.append("weekly_recap_prompt", form.weekly_recap_prompt);
-      if (form.weekly_recap_recipients && form.weekly_recap_recipients.length > 0) {
-        formData.append("weekly_recap_recipients", JSON.stringify(form.weekly_recap_recipients));
+      formData.append("name", f.name);
+      formData.append("contexte", f.contexte);
+      formData.append("biographie", f.biographie);
+      if (f.profile_photo) formData.append("profile_photo", f.profile_photo);
+      formData.append("type", f.type || 'conversationnel');
+      formData.append("email_tags", f.email_tags.length > 0 ? JSON.stringify(f.email_tags) : "[]");
+      formData.append("neo4j_enabled", f.neo4j_enabled ? "true" : "false");
+      if (f.neo4j_person_name) formData.append("neo4j_person_name", f.neo4j_person_name);
+      formData.append("neo4j_depth", String(f.neo4j_depth || 1));
+      formData.append("weekly_recap_enabled", f.weekly_recap_enabled ? "true" : "false");
+      if (f.weekly_recap_prompt) formData.append("weekly_recap_prompt", f.weekly_recap_prompt);
+      if (f.weekly_recap_recipients && f.weekly_recap_recipients.length > 0) {
+        formData.append("weekly_recap_recipients", JSON.stringify(f.weekly_recap_recipients));
       }
-      formData.append("recap_frequency", form.recap_frequency);
-      formData.append("recap_hour", String(form.recap_hour));
+      formData.append("recap_frequency", f.recap_frequency);
+      formData.append("recap_hour", String(f.recap_hour));
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
-      toast.success(t('agents:toast.modifySuccess'));
-      // Reload to get fresh data (including new photo URL)
-      await loadAgentData(currentAgent.id);
-    } catch (error) {
-      const detail = error.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        toast.error(detail.map(err => err.msg || JSON.stringify(err)).join(', '));
-      } else if (typeof detail === 'string') {
-        toast.error(detail);
-      } else {
-        toast.error(t('agents:toast.modifyError'));
-      }
-    } finally {
-      setSaving(false);
+      setAutoSaveStatus('saved');
+      // If photo was uploaded, reload to get new URL
+      if (f.profile_photo) await loadAgentData(currentAgent.id);
+      setTimeout(() => setAutoSaveStatus(s => s === 'saved' ? 'idle' : s), 2000);
+    } catch {
+      setAutoSaveStatus('error');
     }
-  };
+  }, [currentAgent?.id, form, loadAgentData]);
+
+  // Debounced auto-save: watches form changes
+  useEffect(() => {
+    if (!currentAgent?.id) return;
+    // Skip the first render (initial form load from API)
+    if (!formLoaded.current) {
+      formLoaded.current = true;
+      prevFormRef.current = JSON.stringify(form);
+      return;
+    }
+    // Skip if form hasn't actually changed
+    const formStr = JSON.stringify(form);
+    if (formStr === prevFormRef.current) return;
+    prevFormRef.current = formStr;
+
+    // Immediate save for photo uploads
+    if (form.profile_photo) {
+      saveAgent(form);
+      return;
+    }
+
+    // Debounced save for other changes
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => saveAgent(form), 1500);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [form, currentAgent?.id, saveAgent]);
 
   const improveContext = async () => {
     if (!form.contexte.trim()) {
@@ -313,7 +340,7 @@ export default function CompanionSettings() {
     }
     setImprovingContext(true);
     try {
-      const res = await api.post(`/api/agents/${currentAgent.id}/improve-context`);
+      const res = await api.post(`/api/agents/${currentAgent.id}/improve-context`, { contexte: form.contexte });
       setImprovedContext(res.data.improved);
       setShowImproveModal(true);
     } catch (error) {
@@ -663,22 +690,32 @@ export default function CompanionSettings() {
                 </div>
               </div>
 
-              {/* Save & Chat buttons - desktop */}
-              <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+              {/* Chat button + auto-save indicator - desktop */}
+              <div className="hidden sm:flex items-center gap-3 flex-shrink-0">
+                {autoSaveStatus === 'saving' && (
+                  <span className="flex items-center gap-1.5 text-sm text-gray-400 animate-pulse">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {t('agents:autosave.saving', { defaultValue: 'Sauvegarde...' })}
+                  </span>
+                )}
+                {autoSaveStatus === 'saved' && (
+                  <span className="flex items-center gap-1.5 text-sm text-green-600">
+                    <Check className="w-4 h-4" />
+                    {t('agents:autosave.saved', { defaultValue: 'Sauvegardé' })}
+                  </span>
+                )}
+                {autoSaveStatus === 'error' && (
+                  <span className="flex items-center gap-1.5 text-sm text-red-500 cursor-pointer" onClick={() => saveAgent()}>
+                    <AlertCircle className="w-4 h-4" />
+                    {t('agents:autosave.error', { defaultValue: 'Erreur – cliquer pour réessayer' })}
+                  </span>
+                )}
                 <button
                   onClick={() => router.push(`/chat/${currentAgent.id}`)}
-                  className="flex items-center space-x-2 px-6 py-3 bg-white text-gray-700 border border-gray-200 rounded-button hover:bg-gray-50 hover:border-gray-300 hover:text-primary-600 transition-all font-semibold shadow-subtle hover:shadow-card"
+                  className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all"
                 >
                   <MessageCircle className="w-5 h-5" />
                   <span>{t('agents:buttons.openChat', { defaultValue: 'Ouvrir le chat' })}</span>
-                </button>
-                <button
-                  onClick={saveAgent}
-                  disabled={saving}
-                  className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                  <span>{saving ? t('agents:buttons.modifying') : t('agents:settings.save')}</span>
                 </button>
               </div>
             </div>
@@ -1459,25 +1496,24 @@ export default function CompanionSettings() {
           )}
         </Section>
 
-        {/* Mobile Save & Chat Buttons */}
+        {/* Mobile Chat Button + auto-save indicator */}
         <div className="sm:hidden sticky bottom-4 flex flex-col gap-2">
+          {autoSaveStatus !== 'idle' && (
+            <div className="flex items-center justify-center gap-1.5 py-1 text-sm">
+              {autoSaveStatus === 'saving' && <><Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" /><span className="text-gray-400">{t('agents:autosave.saving', { defaultValue: 'Sauvegarde...' })}</span></>}
+              {autoSaveStatus === 'saved' && <><Check className="w-3.5 h-3.5 text-green-600" /><span className="text-green-600">{t('agents:autosave.saved', { defaultValue: 'Sauvegardé' })}</span></>}
+              {autoSaveStatus === 'error' && <><AlertCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-500" onClick={() => saveAgent()}>{t('agents:autosave.error', { defaultValue: 'Erreur – cliquer pour réessayer' })}</span></>}
+            </div>
+          )}
           {currentAgent?.id && (
             <button
               onClick={() => router.push(`/chat/${currentAgent.id}`)}
-              className="w-full flex items-center justify-center space-x-2 px-6 py-4 bg-white text-gray-700 border border-gray-200 rounded-button hover:bg-gray-50 hover:border-gray-300 hover:text-primary-600 transition-all font-semibold shadow-subtle hover:shadow-card"
+              className="w-full flex items-center justify-center space-x-2 px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all"
             >
               <MessageCircle className="w-5 h-5" />
               <span>{t('agents:buttons.openChat', { defaultValue: 'Ouvrir le chat' })}</span>
             </button>
           )}
-          <button
-            onClick={saveAgent}
-            disabled={saving}
-            className="w-full flex items-center justify-center space-x-2 px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-            <span>{saving ? t('agents:buttons.modifying') : t('agents:settings.save')}</span>
-          </button>
         </div>
 
         {/* Bottom spacer */}
