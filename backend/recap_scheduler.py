@@ -11,6 +11,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import pytz
 
+from sqlalchemy import text
 from database import SessionLocal, Agent, WeeklyRecapLog
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,8 @@ def _run_scheduled_recaps():
     db = SessionLocal()
 
     try:
+        # Bypass RLS — scheduler has no user context
+        db.execute(text("SET LOCAL app.service_bypass = 'true'"))
         agents = db.query(Agent).filter(Agent.weekly_recap_enabled == True).all()
         due_count = 0
 

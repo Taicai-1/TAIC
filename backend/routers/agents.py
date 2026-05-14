@@ -604,6 +604,10 @@ async def trigger_weekly_recap(request: Request, db: Session = Depends(get_db)):
 
     from weekly_recap import process_agent_recap
     from recap_scheduler import _is_due, PARIS_TZ
+    from sqlalchemy import text
+
+    # Bypass RLS — this endpoint has no user context, only API key auth
+    db.execute(text("SET LOCAL app.service_bypass = 'true'"))
 
     now = datetime.now(PARIS_TZ)
     agents = db.query(Agent).filter(Agent.weekly_recap_enabled == True).all()
