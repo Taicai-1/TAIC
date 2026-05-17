@@ -143,14 +143,14 @@
   "traceabilityDocs": {
     "title": "Documents de traçabilité ({{count}})",
     "dragDrop": "Glissez-déposez vos documents de traçabilité",
-    "formats": "PDF, TXT, DOCX, XLSX, XLS, CSV",
+    "formats": "PDF, TXT, DOCX, XLSX, XLS, CSV, JSON",
     "noDocuments": "Aucun document de traçabilité ajouté"
   },
   "documents": {
     "title": "Documents RAG ({{count}})",
     "dragDrop": "Glissez-déposez vos documents",
     "dropHere": "Déposez le fichier ici !",
-    "formats": "PDF, TXT, DOC, DOCX",
+    "formats": "PDF, TXT, DOC, DOCX, JSON",
     "noDocuments": "Aucun document ajouté"
   },
   "toast": {
