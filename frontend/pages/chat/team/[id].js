@@ -210,7 +210,6 @@ export default function TeamChatPage() {
                 setMessages(prev => prev.map((m, i) =>
                   i === streamingMsgIdx.current ? { ...m, content: iaAnswer } : m
                 ));
-                scrollToBottom(false);
               });
             }
           },
@@ -226,7 +225,6 @@ export default function TeamChatPage() {
               i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
             ));
             streamSuccess = true;
-            scrollToBottom(true);
           },
           onError: () => {}
         }, controller.signal);
@@ -299,13 +297,19 @@ export default function TeamChatPage() {
     } finally {
       setLoading(false);
       setPendingUserMessage(null);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     }
   };
 
   useEffect(() => {
-    isNearBottomRef.current = true;
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    if (messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role === "user") {
+      isNearBottomRef.current = true;
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    } else if (!loading) {
+      isNearBottomRef.current = true;
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
   }, [messages.length]);
 
   if (!team) {
@@ -325,7 +329,7 @@ export default function TeamChatPage() {
       <Toaster position="top-right" />
 
       {/* Sidebar: Conversations */}
-      <div className="w-full md:w-80 md:min-w-[20rem] md:max-w-xs h-full flex flex-col bg-white border-r border-gray-200 shadow-card overflow-hidden">
+      <div className="w-full md:w-80 md:min-w-[20rem] md:max-w-xs h-full flex flex-col bg-white border-r border-gray-200 shadow-card overflow-hidden shrink-0">
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 p-6 shadow-card border-b border-purple-700">
           <div className="flex items-center justify-between mb-4">
@@ -454,9 +458,9 @@ export default function TeamChatPage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col h-screen">
+      <div className="flex-1 min-w-0 flex flex-col h-screen">
         {/* Chat Messages */}
-        <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-4 md:px-8 py-8 space-y-6">
+        <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-8 py-8 space-y-6">
           {messages.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="relative mb-6">
@@ -482,7 +486,7 @@ export default function TeamChatPage() {
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}
                 >
                   <div
-                    className={`rounded-card px-5 py-4 max-w-[75%] transition-all duration-300 ${
+                    className={`rounded-card px-5 py-4 max-w-[75%] overflow-hidden transition-all duration-300 ${
                       msg.role === "user"
                         ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-none shadow-card"
                         : "bg-white text-gray-900 rounded-bl-none border border-gray-100 shadow-subtle"

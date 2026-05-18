@@ -408,7 +408,6 @@ const handleDeleteConversation = async (convId) => {
                 setMessages(prev => prev.map((m, i) =>
                   i === streamingMsgIdx.current ? { ...m, content: iaAnswer } : m
                 ));
-                scrollToBottom(false);
               });
             }
           },
@@ -425,7 +424,6 @@ const handleDeleteConversation = async (convId) => {
               i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
             ));
             streamSuccess = true;
-            scrollToBottom(true);
           },
           onError: () => {
             // Will fallback to /ask below
@@ -512,15 +510,24 @@ const handleDeleteConversation = async (convId) => {
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     }
   };
 
   useEffect(() => {
-    // Only auto-scroll on message count changes (new message added, conversation loaded)
-    // NOT on streaming content updates (which only change content, not length)
-    isNearBottomRef.current = true;
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    if (messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    // Scroll to bottom when user sends a message (so they can see their own message)
+    if (lastMsg.role === "user") {
+      isNearBottomRef.current = true;
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+    // Scroll to bottom when loading a conversation (not during active sending)
+    else if (!loading) {
+      isNearBottomRef.current = true;
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+    // During agent response (loading=true, role=agent/system): don't scroll,
+    // so the user stays at the top of the response and reads naturally
   }, [messages.length]);
 
   // Fonctions de reconnaissance vocale
@@ -586,7 +593,7 @@ const handleDeleteConversation = async (convId) => {
   return (
     <div className="h-screen flex flex-row bg-gray-50 overflow-hidden">
       {/* Colonne gauche : liste des conversations - Version améliorée */}
-      <div className="w-80 min-w-[18rem] max-w-xs h-full flex flex-col border-r border-gray-200 bg-white shadow-subtle overflow-hidden">
+      <div className="w-80 min-w-[18rem] max-w-xs h-full flex flex-col border-r border-gray-200 bg-white shadow-subtle overflow-hidden shrink-0">
         {/* Header avec profil agent */}
         <div className="p-4 border-b border-gray-200 bg-white flex items-center gap-3">
           {agent.profile_photo ? (
@@ -720,7 +727,7 @@ const handleDeleteConversation = async (convId) => {
       </div>
 
       {/* Colonne droite : chat - Version améliorée */}
-      <div className="flex-1 flex flex-col h-screen">
+      <div className="flex-1 min-w-0 flex flex-col h-screen">
         {/* Header - Version Desktop & Mobile */}
         <div className="flex items-center justify-between px-6 py-4 bg-white shadow-subtle border-b border-gray-200">
           <div className="flex items-center space-x-3">
@@ -754,7 +761,7 @@ const handleDeleteConversation = async (convId) => {
         </div>
 
         {/* Chat area - Version améliorée */}
-        <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col space-y-4">{selectedConv ? (
+        <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-8 py-6 flex flex-col space-y-4">{selectedConv ? (
             <>
           {messages.map((msg, idx) => {
             const isLastAgentMsg =
@@ -778,7 +785,7 @@ const handleDeleteConversation = async (convId) => {
                     <Bot className="w-3.5 h-3.5 text-primary-600" />
                   </div>
                 )}
-                <div className={`rounded-card px-5 py-3.5 shadow-subtle max-w-[70%] whitespace-pre-line transition-all duration-200 ${
+                <div className={`rounded-card px-5 py-3.5 shadow-subtle max-w-[70%] whitespace-pre-line overflow-hidden transition-all duration-200 ${
                   msg.role === "user"
                     ? "bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-br-none"
                     : msg.role === "system"
