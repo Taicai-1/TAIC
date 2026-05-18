@@ -8,8 +8,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
-GITHUB_REPO = os.getenv("GITHUB_REPO", "")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
+GITHUB_REPO = os.getenv("GITHUB_REPO", "").strip()
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
 
 

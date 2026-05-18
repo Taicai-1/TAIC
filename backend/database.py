@@ -699,10 +699,8 @@ def ensure_rls_policies():
             for table in tables:
                 # service_bypass policy
                 try:
-                    conn.execute(text(
-                        f"CREATE POLICY service_bypass ON {table} FOR SELECT "
-                        f"USING (current_setting('app.service_bypass', true) = 'true')"
-                    ))
+                    stmt = "CREATE POLICY service_bypass ON " + table + " FOR SELECT USING (current_setting('app.service_bypass', true) = 'true')"
+                    conn.execute(text(stmt))
                     conn.commit()
                     print(f"ensure_rls_policies: service_bypass on {table} created", flush=True)
                 except Exception as e:
@@ -728,12 +726,14 @@ def ensure_rls_policies():
                 print("ensure_rls_policies: fixing tenant_isolation policies (adding NULLIF)", flush=True)
                 try:
                     for table in tables:
-                        conn.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {table}"))
-                        conn.execute(text(
-                            f"CREATE POLICY tenant_isolation ON {table} "
-                            f"USING (company_id = NULLIF(current_setting('app.company_id', true), '')::int) "
-                            f"WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::int)"
-                        ))
+                        drop_stmt = "DROP POLICY IF EXISTS tenant_isolation ON " + table
+                        conn.execute(text(drop_stmt))
+                        create_stmt = (
+                            "CREATE POLICY tenant_isolation ON " + table + " "
+                            "USING (company_id = NULLIF(current_setting('app.company_id', true), '')::int) "
+                            "WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::int)"
+                        )
+                        conn.execute(text(create_stmt))
                     conn.commit()
                     print("ensure_rls_policies: tenant_isolation policies fixed", flush=True)
                 except Exception as e:

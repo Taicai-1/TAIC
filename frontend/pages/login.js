@@ -205,7 +205,8 @@ export default function Login() {
         </div>
 
         <div className="relative z-10 flex gap-5">
-          {['taic.co', 'Contact', 'CGU'].map(l => (
+          <a href="https://taic.co" target="_blank" rel="noopener noreferrer" className="text-xs text-white/30 cursor-pointer hover:text-white/60 transition-colors">taic.co</a>
+          {['Contact', 'CGU'].map(l => (
             <span key={l} className="text-xs text-white/30 cursor-pointer hover:text-white/60 transition-colors">{l}</span>
           ))}
         </div>

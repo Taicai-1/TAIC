@@ -7,9 +7,9 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
-BILLING_ACCOUNT_ID = os.getenv("BILLING_ACCOUNT_ID", "")
-BILLING_BQ_DATASET = os.getenv("BILLING_BQ_DATASET", "")
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "").strip()
+BILLING_ACCOUNT_ID = os.getenv("BILLING_ACCOUNT_ID", "").strip()
+BILLING_BQ_DATASET = os.getenv("BILLING_BQ_DATASET", "").strip()
 
 
 def _fetch_costs_from_bigquery() -> Optional[dict[str, Any]]:
