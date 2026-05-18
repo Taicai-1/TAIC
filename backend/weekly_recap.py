@@ -53,9 +53,18 @@ def fetch_weekly_messages(agent_id: int, db: Session, days_back: int = 7) -> lis
     return [{"role": m.role, "content": m.content, "timestamp": m.timestamp.isoformat()} for m in messages]
 
 
-def fetch_traceability_documents(agent_id: int, db: Session) -> list[dict]:
-    """Fetch content of traceability documents attached to the agent."""
-    docs = db.query(Document).filter(Document.agent_id == agent_id, Document.document_type == "traceability").all()
+def fetch_traceability_documents(agent_id: int, db: Session, days_back: int = 7) -> list[dict]:
+    """Fetch content of traceability documents imported in the last N days for a given agent."""
+    cutoff = datetime.utcnow() - timedelta(days=days_back)
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.agent_id == agent_id,
+            Document.document_type == "traceability",
+            Document.created_at >= cutoff,
+        )
+        .all()
+    )
 
     return [{"filename": d.filename, "content": (d.content or "")[:10000]} for d in docs]
 
@@ -103,10 +112,20 @@ def fetch_notion_content(agent_id: int, db: Session) -> list[dict]:
     return results
 
 
+FREQUENCY_LABELS = {
+    "daily": {"period": "de la journée", "adj": "quotidien", "no_data": "aujourd'hui"},
+    "weekly": {"period": "de la semaine", "adj": "hebdomadaire", "no_data": "cette semaine"},
+    "monthly": {"period": "du mois", "adj": "mensuel", "no_data": "ce mois-ci"},
+}
+
+
 def build_recap_prompt(
-    agent: Agent, messages: list[dict], docs: list[dict], notion_pages: list[dict] | None = None
+    agent: Agent, messages: list[dict], docs: list[dict], notion_pages: list[dict] | None = None,
+    frequency: str = "weekly",
 ) -> list[dict]:
-    """Build the structured prompt for the LLM to generate the weekly recap."""
+    """Build the structured prompt for the LLM to generate the recap."""
+    labels = FREQUENCY_LABELS.get(frequency, FREQUENCY_LABELS["weekly"])
+
     # Build messages summary
     messages_text = ""
     for m in messages:
@@ -114,7 +133,7 @@ def build_recap_prompt(
         messages_text += f"[{m['timestamp']}] {role_label}: {m['content'][:500]}\n"
 
     if not messages_text:
-        messages_text = "(Aucun message cette semaine)"
+        messages_text = f"(Aucun message {labels['no_data']})"
 
     # Build traceability docs summary
     docs_text = ""
@@ -138,26 +157,26 @@ Utilise des <h2> pour les titres de section et des <ul>/<li> pour les listes."""
     else:
         system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
 
-Tu dois générer un recap hebdomadaire structuré en HTML à partir des conversations et documents de la semaine.
+Tu dois générer un recap {labels['adj']} structuré en HTML à partir des conversations et documents {labels['period']}.
 
 IMPORTANT: Génère UNIQUEMENT le contenu HTML des 3 sections ci-dessous, sans balises <html>, <head>, <body>.
 
 Les 3 sections obligatoires:
-1. **Projets réalisés** - Ce qui a été accompli cette semaine
+1. **Projets réalisés** - Ce qui a été accompli {labels['period']}
 2. **Deadlines à venir** - Échéances et dates importantes identifiées
 3. **Enjeux clés** - Points d'attention et risques
 
 Format HTML attendu:
-<h2 style="color: #6366f1; margin-top: 20px;">📋 Projets réalisés</h2>
+<h2 style="color: #6366f1; margin-top: 20px;">Projets réalisés</h2>
 <ul>...</ul>
 
-<h2 style="color: #8b5cf6; margin-top: 20px;">⏰ Deadlines à venir</h2>
+<h2 style="color: #8b5cf6; margin-top: 20px;">Deadlines à venir</h2>
 <ul>...</ul>
 
-<h2 style="color: #a855f7; margin-top: 20px;">🎯 Enjeux clés</h2>
+<h2 style="color: #a855f7; margin-top: 20px;">Enjeux clés</h2>
 <ul>...</ul>
 
-Si une section n'a pas de contenu pertinent, indique "Aucun élément identifié cette semaine."
+Si une section n'a pas de contenu pertinent, indique "Aucun élément identifié {labels['no_data']}."
 Sois concis et actionnable. Utilise des <li> pour chaque point."""
 
     # Build Notion pages summary
@@ -169,16 +188,16 @@ Sois concis et actionnable. Utilise des <li> pour chaque point."""
     if not notion_text:
         notion_text = "(Aucune page Notion liée)"
 
-    user_prompt = f"""Voici les conversations de la semaine:
+    user_prompt = f"""Voici les conversations {labels['period']}:
 {messages_text}
 
-Voici les documents de traçabilité:
+Voici les documents de traçabilité {labels['period']}:
 {docs_text}
 
 Voici le contenu des pages Notion liées:
 {notion_text}
 
-Génère le recap hebdomadaire HTML maintenant."""
+Génère le recap {labels['adj']} HTML maintenant."""
 
     return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
@@ -190,10 +209,10 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
         return {"status": "error", "error": "User not found"}
 
     try:
-        # 1. Fetch data
+        # 1. Fetch data scoped to the recap period
         days_back = get_days_back(agent)
         messages = fetch_weekly_messages(agent.id, db, days_back=days_back)
-        docs = fetch_traceability_documents(agent.id, db)
+        docs = fetch_traceability_documents(agent.id, db, days_back=days_back)
         notion_pages = fetch_notion_content(agent.id, db)
 
         if not messages and not docs and not notion_pages:
@@ -205,7 +224,8 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
             return {"status": "no_data", "message": "No messages or documents this week"}
 
         # 2. Build prompt and call LLM
-        prompt_messages = build_recap_prompt(agent, messages, docs, notion_pages)
+        freq = getattr(agent, "recap_frequency", "weekly")
+        prompt_messages = build_recap_prompt(agent, messages, docs, notion_pages, frequency=freq)
         model_id = get_model_id_for_agent(agent)
         recap_content = get_chat_response(prompt_messages, model_id=model_id)
 

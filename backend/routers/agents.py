@@ -637,17 +637,20 @@ async def recap_preview(agent_id: int, user_id: str = Depends(verify_token), db:
         build_recap_prompt,
         generate_recap_html,
         get_model_id_for_agent,
+        get_days_back,
     )
     from openai_client import get_chat_response as _get_chat_response
 
-    messages = fetch_weekly_messages(agent.id, db)
-    docs = fetch_traceability_documents(agent.id, db)
+    days_back = get_days_back(agent)
+    freq = getattr(agent, "recap_frequency", "weekly")
+    messages = fetch_weekly_messages(agent.id, db, days_back=days_back)
+    docs = fetch_traceability_documents(agent.id, db, days_back=days_back)
     notion_pages = fetch_notion_content(agent.id, db)
 
     if not messages and not docs and not notion_pages:
-        return {"status": "no_data", "message": "No messages or documents this week", "html": None}
+        return {"status": "no_data", "message": "No messages or documents for this period", "html": None}
 
-    prompt_messages = build_recap_prompt(agent, messages, docs, notion_pages)
+    prompt_messages = build_recap_prompt(agent, messages, docs, notion_pages, frequency=freq)
     model_id = get_model_id_for_agent(agent)
     recap_content = _get_chat_response(prompt_messages, model_id=model_id)
     html = generate_recap_html(agent.name, recap_content)
