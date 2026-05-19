@@ -629,9 +629,10 @@ async def upload_file_for_agent(
             raise HTTPException(status_code=400, detail="agent_id is required")
 
         agent_id = int(agent_id)
-        # Check file size (10MB limit)
-        if file.size > 10 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="File too large (max 10MB)")
+        # Check file size
+        if file.size > MAX_FILE_SIZE:
+            max_size_mb = MAX_FILE_SIZE / (1024 * 1024)
+            raise HTTPException(status_code=413, detail=f"File too large (max {max_size_mb:.0f}MB)")
 
         # Check file type
         allowed_types = [".pdf", ".txt", ".docx", ".ics", ".json"]
