@@ -124,7 +124,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onToggle }) {
                 {user?.username || user?.email || '—'}
               </p>
               <p className="text-xs text-gray-400">
-                {user?.role === 'admin' ? 'Administrateur' : 'Membre'}
+                {user?.role === 'admin' ? t('roles.admin') : t('roles.member')}
               </p>
             </div>
             <button

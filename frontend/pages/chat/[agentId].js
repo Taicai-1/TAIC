@@ -345,7 +345,7 @@ const handleDeleteConversation = async (convId) => {
         // Tronquer le texte extrait pour éviter de dépasser la limite de tokens LLM
         const MAX_ATTACHMENT_CHARS = 12000;
         if (extractedText.length > MAX_ATTACHMENT_CHARS) {
-          extractedText = extractedText.slice(0, MAX_ATTACHMENT_CHARS) + "\n\n[... document tronqué]";
+          extractedText = extractedText.slice(0, MAX_ATTACHMENT_CHARS) + "\n\n" + t('chat:messages.documentTruncated');
         }
       } catch (e) {
         extractedText = t('chat:messages.attachmentError');

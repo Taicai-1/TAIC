@@ -32,7 +32,8 @@
     "fullSize": "Taille réelle",
     "attachmentError": "[Erreur extraction pièce jointe]",
     "attachmentContentLabel": "Contenu pièce jointe:",
-    "aiError": "[Erreur IA]"
+    "aiError": "[Erreur IA]",
+    "documentTruncated": "[... document tronqué]"
   },
   "emptyState": {
     "title": "Sélectionnez une conversation",

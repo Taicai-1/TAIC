@@ -36,7 +36,9 @@
     "uploading": "Uploading...",
     "clickToChoose": "Or click to choose",
     "sendRecapNow": "Send recap now",
-    "sendingRecap": "Sending..."
+    "sendingRecap": "Sending...",
+    "improving": "Improving...",
+    "improveContext": "Improve with AI"
   },
   "modal": {
     "titleEdit": "Edit companion",
@@ -175,7 +177,11 @@
     "urlAddSuccess": "URL added successfully",
     "urlAddError": "Error adding URL",
     "urlRefreshSuccess": "URL content updated",
-    "urlRefreshError": "Error refreshing URL content"
+    "urlRefreshError": "Error refreshing URL content",
+    "noContextToImprove": "No context to improve",
+    "improveError": "Error improving context",
+    "contextImproved": "Improved context applied! Don't forget to save.",
+    "documentProcessing": "Document processing..."
   },
   "url": {
     "placeholder": "https://example.com/page",
@@ -209,6 +215,18 @@
     "subtitle": "Create your first companion to get started",
     "noOrgTitle": "No companions available",
     "noOrgSubtitle": "Join or create an organization to start creating companions."
+  },
+  "autosave": {
+    "saving": "Saving...",
+    "saved": "Saved",
+    "error": "Error – click to retry"
+  },
+  "improve": {
+    "title": "AI context improvement",
+    "original": "Original",
+    "improved": "Improved by AI",
+    "cancel": "Cancel",
+    "accept": "Accept"
   },
   "feedback": {
     "button": "Report an issue",

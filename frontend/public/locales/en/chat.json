@@ -32,7 +32,8 @@
     "fullSize": "Full size",
     "attachmentError": "[Attachment extraction error]",
     "attachmentContentLabel": "Attachment content:",
-    "aiError": "[AI Error]"
+    "aiError": "[AI Error]",
+    "documentTruncated": "[... document truncated]"
   },
   "emptyState": {
     "title": "Select a conversation",

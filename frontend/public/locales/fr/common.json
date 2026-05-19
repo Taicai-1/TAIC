@@ -30,6 +30,10 @@
     "expand": "Déplier",
     "collapse": "Replier"
   },
+  "roles": {
+    "admin": "Administrateur",
+    "member": "Membre"
+  },
   "labels": {
     "email": "Email",
     "password": "Mot de passe",

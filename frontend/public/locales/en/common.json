@@ -30,6 +30,10 @@
     "expand": "Expand",
     "collapse": "Collapse"
   },
+  "roles": {
+    "admin": "Administrator",
+    "member": "Member"
+  },
   "labels": {
     "email": "Email",
     "password": "Password",

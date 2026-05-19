@@ -3,9 +3,9 @@ import { useTranslation } from 'next-i18next';
 import { getApiUrl } from '../lib/api';
 
 const TYPE_META = {
-  conversationnel: { label: 'Conversationnel', Icon: Users,      color: 'text-primary-600',   bg: 'bg-primary-50',   stripe: 'bg-primary-600'  },
-  recherche_live:  { label: 'Recherche Live',  Icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50', stripe: 'bg-violet-600' },
-  visuel:          { label: 'Visuel',          Icon: ImageIcon,  color: 'text-pink-600',   bg: 'bg-pink-50',   stripe: 'bg-pink-600'   },
+  conversationnel: { labelKey: 'types.conversationnel.name', Icon: Users,      color: 'text-primary-600',   bg: 'bg-primary-50',   stripe: 'bg-primary-600'  },
+  recherche_live:  { labelKey: 'types.recherche_live.name',  Icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50', stripe: 'bg-violet-600' },
+  visuel:          { labelKey: 'types.visuel.name',          Icon: ImageIcon,  color: 'text-pink-600',   bg: 'bg-pink-50',   stripe: 'bg-pink-600'   },
 };
 
 export default function AgentCard({ agent, onChat, onEdit, onDelete }) {
@@ -58,7 +58,7 @@ export default function AgentCard({ agent, onChat, onEdit, onDelete }) {
         <div className="flex flex-wrap gap-1.5 mb-3">
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${meta.bg} ${meta.color}`}>
             <meta.Icon className="w-2.5 h-2.5" />
-            {meta.label}
+            {t(meta.labelKey)}
           </span>
           {agent.neo4j_enabled && (
             <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700">Neo4j</span>

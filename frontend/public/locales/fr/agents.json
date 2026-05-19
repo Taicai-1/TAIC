@@ -36,7 +36,9 @@
     "uploading": "Upload...",
     "clickToChoose": "Ou cliquez pour choisir",
     "sendRecapNow": "Envoyer le recap maintenant",
-    "sendingRecap": "Envoi en cours..."
+    "sendingRecap": "Envoi en cours...",
+    "improving": "Amélioration en cours...",
+    "improveContext": "Améliorer par IA"
   },
   "modal": {
     "titleEdit": "Modifier le companion",
@@ -192,7 +194,11 @@
     "urlAddSuccess": "URL ajoutée avec succès",
     "urlAddError": "Erreur lors de l'ajout de l'URL",
     "urlRefreshSuccess": "Contenu URL mis à jour",
-    "urlRefreshError": "Erreur lors du rafraîchissement de l'URL"
+    "urlRefreshError": "Erreur lors du rafraîchissement de l'URL",
+    "noContextToImprove": "Aucun contexte à améliorer",
+    "improveError": "Erreur lors de l'amélioration du contexte",
+    "contextImproved": "Contexte amélioré appliqué ! N'oubliez pas de sauvegarder.",
+    "documentProcessing": "Document en cours de traitement..."
   },
   "url": {
     "placeholder": "https://example.com/page",
@@ -227,6 +233,18 @@
     "subtitle": "Créez votre premier companion pour commencer",
     "noOrgTitle": "Aucun companion disponible",
     "noOrgSubtitle": "Rejoignez ou créez une organisation pour pouvoir créer des companions."
+  },
+  "autosave": {
+    "saving": "Sauvegarde...",
+    "saved": "Sauvegardé",
+    "error": "Erreur – cliquer pour réessayer"
+  },
+  "improve": {
+    "title": "Amélioration du contexte par IA",
+    "original": "Original",
+    "improved": "Amélioré par IA",
+    "cancel": "Annuler",
+    "accept": "Accepter"
   },
   "feedback": {
     "button": "Signaler un problème",

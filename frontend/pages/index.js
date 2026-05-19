@@ -335,7 +335,7 @@ export default function CompanionSettings() {
 
   const improveContext = async () => {
     if (!form.contexte.trim()) {
-      toast.error(t('agents:toast.noContextToImprove', { defaultValue: 'Aucun contexte à améliorer' }));
+      toast.error(t('agents:toast.noContextToImprove'));
       return;
     }
     setImprovingContext(true);
@@ -346,7 +346,7 @@ export default function CompanionSettings() {
     } catch (error) {
       const detail = error.response?.data?.detail || error.response?.status || error.message;
       console.error("Improve context error:", error.response?.status, error.response?.data);
-      toast.error(`${t('agents:toast.improveError', { defaultValue: "Erreur lors de l'amélioration du contexte" })} (${detail})`);
+      toast.error(`${t('agents:toast.improveError')} (${detail})`);
     } finally {
       setImprovingContext(false);
     }
@@ -356,7 +356,7 @@ export default function CompanionSettings() {
     setForm(f => ({ ...f, contexte: improvedContext }));
     setShowImproveModal(false);
     setImprovedContext(null);
-    toast.success(t('agents:toast.contextImproved', { defaultValue: 'Contexte amélioré appliqué ! N\'oubliez pas de sauvegarder.' }));
+    toast.success(t('agents:toast.contextImproved'));
   };
 
   const pollUploadStatus = async (taskId, agentId) => {
@@ -392,7 +392,7 @@ export default function CompanionSettings() {
       });
       const data = response.data;
       if (data.status === 'processing' && data.task_id) {
-        toast(t('agents:toast.documentProcessing', 'Document en cours de traitement...'));
+        toast(t('agents:toast.documentProcessing'));
         await pollUploadStatus(data.task_id, currentAgent.id);
       } else {
         toast.success(t('agents:toast.documentAdded'));
@@ -419,12 +419,12 @@ export default function CompanionSettings() {
     setAddingUrl(true);
     try {
       await api.post("/upload-url", { url: urlInput.trim(), agent_id: currentAgent.id });
-      toast.success(t('agents:toast.urlAddSuccess', 'URL ajoutée avec succès'));
+      toast.success(t('agents:toast.urlAddSuccess'));
       setUrlInput("");
       const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
       setAgentDocuments(res.data.documents || []);
     } catch (error) {
-      toast.error(error.response?.data?.detail || t('agents:toast.urlAddError', "Erreur lors de l'ajout de l'URL"));
+      toast.error(error.response?.data?.detail || t('agents:toast.urlAddError'));
     } finally { setAddingUrl(false); }
   };
 
@@ -432,11 +432,11 @@ export default function CompanionSettings() {
     setRefreshingDocId(docId);
     try {
       await api.post(`/documents/${docId}/refresh-url`);
-      toast.success(t('agents:toast.urlRefreshSuccess', 'Contenu URL mis à jour'));
+      toast.success(t('agents:toast.urlRefreshSuccess'));
       const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
       setAgentDocuments(res.data.documents || []);
     } catch (error) {
-      toast.error(error.response?.data?.detail || t('agents:toast.urlRefreshError', 'Erreur lors du rafraîchissement'));
+      toast.error(error.response?.data?.detail || t('agents:toast.urlRefreshError'));
     } finally { setRefreshingDocId(null); }
   };
 
@@ -695,19 +695,19 @@ export default function CompanionSettings() {
                 {autoSaveStatus === 'saving' && (
                   <span className="flex items-center gap-1.5 text-sm text-gray-400 animate-pulse">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {t('agents:autosave.saving', { defaultValue: 'Sauvegarde...' })}
+                    {t('agents:autosave.saving')}
                   </span>
                 )}
                 {autoSaveStatus === 'saved' && (
                   <span className="flex items-center gap-1.5 text-sm text-green-600">
                     <Check className="w-4 h-4" />
-                    {t('agents:autosave.saved', { defaultValue: 'Sauvegardé' })}
+                    {t('agents:autosave.saved')}
                   </span>
                 )}
                 {autoSaveStatus === 'error' && (
                   <span className="flex items-center gap-1.5 text-sm text-red-500 cursor-pointer" onClick={() => saveAgent()}>
                     <AlertCircle className="w-4 h-4" />
-                    {t('agents:autosave.error', { defaultValue: 'Erreur – cliquer pour réessayer' })}
+                    {t('agents:autosave.error')}
                   </span>
                 )}
                 <button
@@ -715,7 +715,7 @@ export default function CompanionSettings() {
                   className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all"
                 >
                   <MessageCircle className="w-5 h-5" />
-                  <span>{t('agents:buttons.openChat', { defaultValue: 'Ouvrir le chat' })}</span>
+                  <span>{t('agents:buttons.openChat')}</span>
                 </button>
               </div>
             </div>
@@ -754,8 +754,8 @@ export default function CompanionSettings() {
                   <Sparkles className="w-4 h-4" />
                 )}
                 {improvingContext
-                  ? t('agents:buttons.improving', { defaultValue: 'Amélioration en cours...' })
-                  : t('agents:buttons.improveContext', { defaultValue: 'Améliorer par IA' })
+                  ? t('agents:buttons.improving')
+                  : t('agents:buttons.improveContext')
                 }
               </button>
             </div>
@@ -981,7 +981,7 @@ export default function CompanionSettings() {
                       onClick={() => handleRefreshUrl(doc.id)}
                       disabled={refreshingDocId === doc.id}
                       className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-sm transition-all opacity-0 group-hover:opacity-100 disabled:opacity-100"
-                      title={t('agents:url.refresh', 'Rafraîchir')}
+                      title={t('agents:url.refresh')}
                     >
                       {refreshingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-primary-500" /> : <RefreshCw className="w-4 h-4" />}
                     </button>
@@ -1500,9 +1500,9 @@ export default function CompanionSettings() {
         <div className="sm:hidden sticky bottom-4 flex flex-col gap-2">
           {autoSaveStatus !== 'idle' && (
             <div className="flex items-center justify-center gap-1.5 py-1 text-sm">
-              {autoSaveStatus === 'saving' && <><Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" /><span className="text-gray-400">{t('agents:autosave.saving', { defaultValue: 'Sauvegarde...' })}</span></>}
-              {autoSaveStatus === 'saved' && <><Check className="w-3.5 h-3.5 text-green-600" /><span className="text-green-600">{t('agents:autosave.saved', { defaultValue: 'Sauvegardé' })}</span></>}
-              {autoSaveStatus === 'error' && <><AlertCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-500" onClick={() => saveAgent()}>{t('agents:autosave.error', { defaultValue: 'Erreur – cliquer pour réessayer' })}</span></>}
+              {autoSaveStatus === 'saving' && <><Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" /><span className="text-gray-400">{t('agents:autosave.saving')}</span></>}
+              {autoSaveStatus === 'saved' && <><Check className="w-3.5 h-3.5 text-green-600" /><span className="text-green-600">{t('agents:autosave.saved')}</span></>}
+              {autoSaveStatus === 'error' && <><AlertCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-500" onClick={() => saveAgent()}>{t('agents:autosave.error')}</span></>}
             </div>
           )}
           {currentAgent?.id && (
@@ -1511,7 +1511,7 @@ export default function CompanionSettings() {
               className="w-full flex items-center justify-center space-x-2 px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all"
             >
               <MessageCircle className="w-5 h-5" />
-              <span>{t('agents:buttons.openChat', { defaultValue: 'Ouvrir le chat' })}</span>
+              <span>{t('agents:buttons.openChat')}</span>
             </button>
           )}
         </div>
@@ -1528,7 +1528,7 @@ export default function CompanionSettings() {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-500" />
                 <h2 className="text-lg font-heading font-bold text-gray-900">
-                  {t('agents:improve.title', { defaultValue: 'Amélioration du contexte par IA' })}
+                  {t('agents:improve.title')}
                 </h2>
               </div>
               <button
@@ -1542,7 +1542,7 @@ export default function CompanionSettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
               <div>
                 <label className="text-sm font-semibold text-gray-500 mb-2 block uppercase tracking-wide">
-                  {t('agents:improve.original', { defaultValue: 'Original' })}
+                  {t('agents:improve.original')}
                 </label>
                 <div className="p-4 bg-gray-50 border border-gray-200 rounded-input text-sm text-gray-700 whitespace-pre-wrap min-h-[200px] max-h-[400px] overflow-auto">
                   {form.contexte}
@@ -1551,7 +1551,7 @@ export default function CompanionSettings() {
               <div>
                 <label className="text-sm font-semibold text-amber-600 mb-2 block uppercase tracking-wide flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5" />
-                  {t('agents:improve.improved', { defaultValue: 'Amélioré par IA' })}
+                  {t('agents:improve.improved')}
                 </label>
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-input text-sm text-gray-700 whitespace-pre-wrap min-h-[200px] max-h-[400px] overflow-auto">
                   {improvedContext}
@@ -1564,14 +1564,14 @@ export default function CompanionSettings() {
                 onClick={() => { setShowImproveModal(false); setImprovedContext(null); }}
                 className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-button hover:bg-gray-50 font-semibold text-sm transition-colors"
               >
-                {t('agents:improve.cancel', { defaultValue: 'Annuler' })}
+                {t('agents:improve.cancel')}
               </button>
               <button
                 onClick={acceptImprovedContext}
                 className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-button font-semibold text-sm shadow-sm hover:shadow-card transition-all flex items-center gap-2"
               >
                 <CheckCircle className="w-4 h-4" />
-                {t('agents:improve.accept', { defaultValue: 'Accepter' })}
+                {t('agents:improve.accept')}
               </button>
             </div>
           </div>
