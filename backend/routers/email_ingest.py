@@ -491,6 +491,12 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
 
         for agent in target_agents:
             try:
+                # Set RLS context for THIS agent's company
+                print(f"[EMAIL_INGEST] Processing agent {agent.id} ({agent.name}) company_id={agent.company_id}", flush=True)
+                if agent.company_id is not None:
+                    set_current_company_id(agent.company_id)
+                    db.execute(_text("SET LOCAL app.company_id = :cid"), {"cid": str(int(agent.company_id))})
+
                 # Stable dedup keys stored in source_url (gcs_url keeps the real GCS path)
                 rag_key = f"email_pj_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
                 trace_key = f"email_pj_trace_{source_id}_{file.filename}_agent_{agent.id}" if source_id else ""
@@ -519,6 +525,7 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                                 trace_exists = True
 
                 if rag_exists and trace_exists:
+                    print(f"[EMAIL_INGEST] [DEDUP] Both docs exist for agent {agent.name} (id={agent.id}): rag_id={existing_rag_id}", flush=True)
                     logger.info(f"[DEDUP] Both docs exist for agent {agent.name}: {prefixed_filename}")
                     document_ids.append(existing_rag_id)
                     continue
@@ -530,6 +537,7 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                         db=db, agent_id=agent.id, company_id=agent.company_id,
                     )
                     document_ids.append(doc_id)
+                    print(f"[EMAIL_INGEST] RAG doc created for agent {agent.name} (id={agent.id}): doc_id={doc_id}", flush=True)
                     logger.info(f"RAG doc created for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
 
                     # Store dedup key in source_url (gcs_url already has the real GCS path)
@@ -577,6 +585,7 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                     logger.info(f"Traceability doc created for agent {agent.name}: {prefixed_filename}")
 
             except Exception as e:
+                print(f"[EMAIL_INGEST] FAILED for agent {agent.name} (id={agent.id}): {e}", flush=True)
                 logger.error(f"Failed to process attachment for agent {agent.name}: {e}")
                 logger.error(f"Traceback: {traceback.format_exc()}")
                 continue
