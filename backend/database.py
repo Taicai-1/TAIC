@@ -687,9 +687,16 @@ def ensure_rls_policies():
        string from current_setting (prevents ''::int cast errors).
     """
     tables = [
-        "agents", "agent_shares", "documents", "document_chunks",
-        "agent_actions", "teams", "conversations", "messages",
-        "notion_links", "weekly_recap_logs",
+        "agents",
+        "agent_shares",
+        "documents",
+        "document_chunks",
+        "agent_actions",
+        "teams",
+        "conversations",
+        "messages",
+        "notion_links",
+        "weekly_recap_logs",
     ]
     try:
         with engine.connect() as conn:
@@ -699,7 +706,11 @@ def ensure_rls_policies():
             for table in tables:
                 # service_bypass policy
                 try:
-                    stmt = "CREATE POLICY service_bypass ON " + table + " FOR SELECT USING (current_setting('app.service_bypass', true) = 'true')"
+                    stmt = (
+                        "CREATE POLICY service_bypass ON "
+                        + table
+                        + " FOR SELECT USING (current_setting('app.service_bypass', true) = 'true')"
+                    )
                     conn.execute(text(stmt))
                     conn.commit()
                     print(f"ensure_rls_policies: service_bypass on {table} created", flush=True)
@@ -714,10 +725,12 @@ def ensure_rls_policies():
             # Check if already fixed by looking at policy definition.
             needs_fix = False
             try:
-                row = conn.execute(text(
-                    "SELECT polqual::text FROM pg_policy "
-                    "WHERE polname = 'tenant_isolation' AND polrelid = 'agents'::regclass"
-                )).first()
+                row = conn.execute(
+                    text(
+                        "SELECT polqual::text FROM pg_policy "
+                        "WHERE polname = 'tenant_isolation' AND polrelid = 'agents'::regclass"
+                    )
+                ).first()
                 needs_fix = row is not None and "nullif" not in (row[0] or "").lower()
             except Exception:
                 conn.rollback()
@@ -738,7 +751,9 @@ def ensure_rls_policies():
                     print("ensure_rls_policies: tenant_isolation policies fixed", flush=True)
                 except Exception as e:
                     conn.rollback()
-                    print(f"ensure_rls_policies: tenant_isolation fix failed (will retry next startup): {e}", flush=True)
+                    print(
+                        f"ensure_rls_policies: tenant_isolation fix failed (will retry next startup): {e}", flush=True
+                    )
             else:
                 print("ensure_rls_policies: tenant_isolation already OK", flush=True)
 

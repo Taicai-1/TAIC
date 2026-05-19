@@ -27,7 +27,7 @@ def _check_cors() -> dict[str, Any]:
     # Check that localhost is only in development block
     dev_gated = 'if ENVIRONMENT == "development"' in content or "if ENVIRONMENT == 'development'" in content
     # Extract just the initial list assignment (up to the closing bracket)
-    list_match = re.search(r'allowed_origins\s*=\s*\[([^\]]*)\]', content, re.DOTALL)
+    list_match = re.search(r"allowed_origins\s*=\s*\[([^\]]*)\]", content, re.DOTALL)
     localhost_in_main_list = list_match and "localhost" in list_match.group(1) if list_match else False
 
     if has_wildcard:
@@ -58,8 +58,8 @@ def _check_security_headers() -> dict[str, Any]:
 
 def _check_hardcoded_secrets() -> dict[str, Any]:
     patterns = [
-        r'sk-[a-zA-Z0-9]{20,}',
-        r'AKIA[0-9A-Z]{16}',
+        r"sk-[a-zA-Z0-9]{20,}",
+        r"AKIA[0-9A-Z]{16}",
     ]
     findings = []
     for py_file in glob.glob(os.path.join(_BACKEND_DIR, "**", "*.py"), recursive=True):
@@ -97,7 +97,7 @@ def _check_admin_protection() -> dict[str, Any]:
             # Find the function body after this decorator
             func_start = match.end()
             # Look for require_role in the next ~500 chars (function body)
-            func_body = content[func_start:func_start + 500]
+            func_body = content[func_start : func_start + 500]
             # Token-based auth routes (org request) are intentionally unprotected
             if "/companies/request/" in path:
                 continue
@@ -150,7 +150,11 @@ def _check_sql_injection() -> dict[str, Any]:
             continue
 
     if findings:
-        return {"name": "sql_injection", "status": "warn", "detail": f"{len(findings)} f-string SQL patterns: {', '.join(findings)}"}
+        return {
+            "name": "sql_injection",
+            "status": "warn",
+            "detail": f"{len(findings)} f-string SQL patterns: {', '.join(findings)}",
+        }
     return {"name": "sql_injection", "status": "pass", "detail": "No unsafe SQL patterns"}
 
 

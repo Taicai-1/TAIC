@@ -78,8 +78,10 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
             with conn.begin():
                 conn.execute(text("SET LOCAL app.service_bypass = 'true'"))
                 rows = conn.execute(
-                    text("SELECT id, name, user_id, email_tags, company_id FROM agents "
-                         "WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2")
+                    text(
+                        "SELECT id, name, user_id, email_tags, company_id FROM agents "
+                        "WHERE email_tags IS NOT NULL AND LENGTH(email_tags) > 2"
+                    )
                 ).fetchall()
     except Exception as e:
         print(f"[EMAIL_INGEST] Failed to query agents for email_tags: {e}", flush=True)
@@ -89,14 +91,19 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
 
     matched_agents = []
     matched_company_id = None
-    print(f"[EMAIL_INGEST] [TAG_MATCH] Searching for tags {lower_tags} across {len(rows)} agents with email_tags", flush=True)
+    print(
+        f"[EMAIL_INGEST] [TAG_MATCH] Searching for tags {lower_tags} across {len(rows)} agents with email_tags",
+        flush=True,
+    )
     logger.info(f"[TAG_MATCH] Searching for tags {lower_tags} across {len(rows)} agents with email_tags")
     for row in rows:
         agent_id, agent_name, user_id, email_tags_raw, company_id = row
         try:
             agent_tags = json.loads(email_tags_raw) if isinstance(email_tags_raw, str) else []
             agent_tags_lower = [t.lower() for t in agent_tags if isinstance(t, str)]
-            logger.info(f"[TAG_MATCH] Agent {agent_id} ({agent_name}): tags={agent_tags_lower}, looking_for={lower_tags}, match={any(tag in agent_tags_lower for tag in lower_tags)}")
+            logger.info(
+                f"[TAG_MATCH] Agent {agent_id} ({agent_name}): tags={agent_tags_lower}, looking_for={lower_tags}, match={any(tag in agent_tags_lower for tag in lower_tags)}"
+            )
             if any(tag in agent_tags_lower for tag in lower_tags):
                 matched_agents.append(_MatchedAgent(agent_id, agent_name, user_id, company_id))
                 if company_id is not None:
@@ -106,7 +113,10 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
             continue
 
     if not matched_agents:
-        print(f"[EMAIL_INGEST] No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)", flush=True)
+        print(
+            f"[EMAIL_INGEST] No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)",
+            flush=True,
+        )
         logger.info(f"No agents matched tags {lower_tags} (checked {len(rows)} agents with email_tags)")
         return []
 
@@ -118,7 +128,6 @@ def find_agents_by_email_tags(db: Session, tags: List[str]):
         logger.info(f"Set tenant context to company_id={matched_company_id} for email ingestion")
 
     return matched_agents
-
 
 
 def verify_email_api_key(request: Request) -> bool:
@@ -334,6 +343,7 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
 
         # 5. Créer un document pour CHAQUE agent trouvé
         from sqlalchemy import text as _text
+
         document_ids = []
         for agent in target_agents:
             # Dedup via direct engine connection (bypasses RLS entirely)
@@ -348,15 +358,13 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
                 with conn.begin():
                     conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
                     row = conn.execute(
-                        _text("SELECT id FROM documents WHERE source_url = :uid LIMIT 1"),
-                        {"uid": unique_id}
+                        _text("SELECT id FROM documents WHERE source_url = :uid LIMIT 1"), {"uid": unique_id}
                     ).first()
                     if row:
                         rag_exists = True
                         existing_rag_id = row[0]
                     trace_row = conn.execute(
-                        _text("SELECT id FROM documents WHERE source_url = :uid LIMIT 1"),
-                        {"uid": trace_unique_id}
+                        _text("SELECT id FROM documents WHERE source_url = :uid LIMIT 1"), {"uid": trace_unique_id}
                     ).first()
                     if trace_row:
                         trace_exists = True
@@ -492,7 +500,10 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
         for agent in target_agents:
             try:
                 # Set RLS context for THIS agent's company
-                print(f"[EMAIL_INGEST] Processing agent {agent.id} ({agent.name}) company_id={agent.company_id}", flush=True)
+                print(
+                    f"[EMAIL_INGEST] Processing agent {agent.id} ({agent.name}) company_id={agent.company_id}",
+                    flush=True,
+                )
                 if agent.company_id is not None:
                     set_current_company_id(agent.company_id)
                     db.execute(_text("SET LOCAL app.company_id = :cid"), {"cid": str(int(agent.company_id))})
@@ -511,21 +522,22 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                         with conn.begin():
                             conn.execute(_text("SET LOCAL app.service_bypass = 'true'"))
                             row = conn.execute(
-                                _text("SELECT id FROM documents WHERE source_url = :key LIMIT 1"),
-                                {"key": rag_key}
+                                _text("SELECT id FROM documents WHERE source_url = :key LIMIT 1"), {"key": rag_key}
                             ).first()
                             if row:
                                 rag_exists = True
                                 existing_rag_id = row[0]
                             trace_row = conn.execute(
-                                _text("SELECT id FROM documents WHERE source_url = :key LIMIT 1"),
-                                {"key": trace_key}
+                                _text("SELECT id FROM documents WHERE source_url = :key LIMIT 1"), {"key": trace_key}
                             ).first()
                             if trace_row:
                                 trace_exists = True
 
                 if rag_exists and trace_exists:
-                    print(f"[EMAIL_INGEST] [DEDUP] Both docs exist for agent {agent.name} (id={agent.id}): rag_id={existing_rag_id}", flush=True)
+                    print(
+                        f"[EMAIL_INGEST] [DEDUP] Both docs exist for agent {agent.name} (id={agent.id}): rag_id={existing_rag_id}",
+                        flush=True,
+                    )
                     logger.info(f"[DEDUP] Both docs exist for agent {agent.name}: {prefixed_filename}")
                     document_ids.append(existing_rag_id)
                     continue
@@ -533,18 +545,25 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                 # Create RAG document if needed
                 if not rag_exists:
                     doc_id = process_document_for_user(
-                        filename=prefixed_filename, content=content, user_id=agent.user_id,
-                        db=db, agent_id=agent.id, company_id=agent.company_id,
+                        filename=prefixed_filename,
+                        content=content,
+                        user_id=agent.user_id,
+                        db=db,
+                        agent_id=agent.id,
+                        company_id=agent.company_id,
                     )
                     document_ids.append(doc_id)
-                    print(f"[EMAIL_INGEST] RAG doc created for agent {agent.name} (id={agent.id}): doc_id={doc_id}", flush=True)
+                    print(
+                        f"[EMAIL_INGEST] RAG doc created for agent {agent.name} (id={agent.id}): doc_id={doc_id}",
+                        flush=True,
+                    )
                     logger.info(f"RAG doc created for agent {agent.name}: {prefixed_filename} (doc_id: {doc_id})")
 
                     # Store dedup key in source_url (gcs_url already has the real GCS path)
                     if rag_key:
                         db.execute(
                             _text("UPDATE documents SET source_url = :key WHERE id = :did"),
-                            {"key": rag_key, "did": doc_id}
+                            {"key": rag_key, "did": doc_id},
                         )
                         db.commit()
                 else:
@@ -557,14 +576,17 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
                     try:
                         if file.filename.lower().endswith(".pdf"):
                             import tempfile as _tempfile
+
                             with _tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                                 tmp.write(content)
                                 tmp_path = tmp.name
                             try:
                                 from file_loader import load_text_from_pdf
+
                                 trace_text = load_text_from_pdf(tmp_path) or ""
                             finally:
                                 import os as _os
+
                                 _os.unlink(tmp_path)
                         else:
                             trace_text = content.decode("utf-8", errors="replace")

@@ -88,10 +88,7 @@ async def routine_latest(
     results = []
     for rtype in sorted(ROUTINE_TYPES):
         report = (
-            db.query(RoutineReport)
-            .filter(RoutineReport.type == rtype)
-            .order_by(desc(RoutineReport.created_at))
-            .first()
+            db.query(RoutineReport).filter(RoutineReport.type == rtype).order_by(desc(RoutineReport.created_at)).first()
         )
         if report:
             results.append(_serialize_report(report))
@@ -112,16 +109,13 @@ async def routine_reports(
     query = db.query(RoutineReport)
     if type:
         if type not in ROUTINE_TYPES:
-            raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(sorted(ROUTINE_TYPES))}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid type. Must be one of: {', '.join(sorted(ROUTINE_TYPES))}"
+            )
         query = query.filter(RoutineReport.type == type)
 
     total = query.count()
-    reports = (
-        query.order_by(desc(RoutineReport.created_at))
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    reports = query.order_by(desc(RoutineReport.created_at)).offset((page - 1) * page_size).limit(page_size).all()
 
     return {
         "reports": [_serialize_report(r) for r in reports],

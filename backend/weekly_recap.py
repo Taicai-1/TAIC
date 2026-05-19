@@ -120,7 +120,10 @@ FREQUENCY_LABELS = {
 
 
 def build_recap_prompt(
-    agent: Agent, messages: list[dict], docs: list[dict], notion_pages: list[dict] | None = None,
+    agent: Agent,
+    messages: list[dict],
+    docs: list[dict],
+    notion_pages: list[dict] | None = None,
     frequency: str = "weekly",
 ) -> list[dict]:
     """Build the structured prompt for the LLM to generate the recap."""
@@ -157,12 +160,12 @@ Utilise des <h2> pour les titres de section et des <ul>/<li> pour les listes."""
     else:
         system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
 
-Tu dois générer un recap {labels['adj']} structuré en HTML à partir des conversations et documents {labels['period']}.
+Tu dois générer un recap {labels["adj"]} structuré en HTML à partir des conversations et documents {labels["period"]}.
 
 IMPORTANT: Génère UNIQUEMENT le contenu HTML des 3 sections ci-dessous, sans balises <html>, <head>, <body>.
 
 Les 3 sections obligatoires:
-1. **Projets réalisés** - Ce qui a été accompli {labels['period']}
+1. **Projets réalisés** - Ce qui a été accompli {labels["period"]}
 2. **Deadlines à venir** - Échéances et dates importantes identifiées
 3. **Enjeux clés** - Points d'attention et risques
 
@@ -176,7 +179,7 @@ Format HTML attendu:
 <h2 style="color: #a855f7; margin-top: 20px;">Enjeux clés</h2>
 <ul>...</ul>
 
-Si une section n'a pas de contenu pertinent, indique "Aucun élément identifié {labels['no_data']}."
+Si une section n'a pas de contenu pertinent, indique "Aucun élément identifié {labels["no_data"]}."
 Sois concis et actionnable. Utilise des <li> pour chaque point."""
 
     # Build Notion pages summary
@@ -188,16 +191,16 @@ Sois concis et actionnable. Utilise des <li> pour chaque point."""
     if not notion_text:
         notion_text = "(Aucune page Notion liée)"
 
-    user_prompt = f"""Voici les conversations {labels['period']}:
+    user_prompt = f"""Voici les conversations {labels["period"]}:
 {messages_text}
 
-Voici les documents de traçabilité {labels['period']}:
+Voici les documents de traçabilité {labels["period"]}:
 {docs_text}
 
 Voici le contenu des pages Notion liées:
 {notion_text}
 
-Génère le recap {labels['adj']} HTML maintenant."""
+Génère le recap {labels["adj"]} HTML maintenant."""
 
     return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 

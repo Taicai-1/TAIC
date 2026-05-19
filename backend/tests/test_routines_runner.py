@@ -8,8 +8,10 @@ from routines.runner import run_one, run_all, ROUTINE_TYPES
 
 def _mock_runner(status="pass"):
     """Return a mock runner function that produces a JSON-serializable result."""
+
     def runner(db):
         return {"status": status, "checks": []}
+
     return runner
 
 
@@ -31,12 +33,15 @@ class TestRunOne:
 
 
 class TestRunAll:
-    @patch.dict("routines.runner._RUNNERS", {
-        "billing": _mock_runner("pass"),
-        "ci_cd": _mock_runner("pass"),
-        "health": _mock_runner("pass"),
-        "security": _mock_runner("warn"),
-    })
+    @patch.dict(
+        "routines.runner._RUNNERS",
+        {
+            "billing": _mock_runner("pass"),
+            "ci_cd": _mock_runner("pass"),
+            "health": _mock_runner("pass"),
+            "security": _mock_runner("warn"),
+        },
+    )
     def test_run_all_returns_4_results(self):
         db = MagicMock()
 

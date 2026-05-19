@@ -10,7 +10,12 @@ class TestGitHubActions:
     @patch("routines.ci_cd._fetch_github_runs")
     def test_success_run_returns_pass(self, mock_gh, mock_cb):
         mock_gh.return_value = {
-            "last_run": {"name": "CI", "conclusion": "success", "created_at": "2026-04-29T07:00:00Z", "url": "https://github.com/test/repo/actions/runs/1"},
+            "last_run": {
+                "name": "CI",
+                "conclusion": "success",
+                "created_at": "2026-04-29T07:00:00Z",
+                "url": "https://github.com/test/repo/actions/runs/1",
+            },
             "recent_runs": [],
         }
         mock_cb.return_value = {
@@ -28,7 +33,12 @@ class TestGitHubActions:
     @patch("routines.ci_cd._fetch_github_runs")
     def test_failed_run_returns_fail(self, mock_gh, mock_cb):
         mock_gh.return_value = {
-            "last_run": {"name": "CI", "conclusion": "failure", "created_at": "2026-04-29T07:00:00Z", "url": "https://github.com/test/repo/actions/runs/1"},
+            "last_run": {
+                "name": "CI",
+                "conclusion": "failure",
+                "created_at": "2026-04-29T07:00:00Z",
+                "url": "https://github.com/test/repo/actions/runs/1",
+            },
             "recent_runs": [],
         }
         mock_cb.return_value = {
@@ -44,7 +54,13 @@ class TestGitHubActions:
     @patch("routines.ci_cd._fetch_github_runs")
     def test_in_progress_returns_warn(self, mock_gh, mock_cb):
         mock_gh.return_value = {
-            "last_run": {"name": "CI", "conclusion": None, "status": "in_progress", "created_at": "2026-04-29T07:00:00Z", "url": "https://github.com/test/repo/actions/runs/1"},
+            "last_run": {
+                "name": "CI",
+                "conclusion": None,
+                "status": "in_progress",
+                "created_at": "2026-04-29T07:00:00Z",
+                "url": "https://github.com/test/repo/actions/runs/1",
+            },
             "recent_runs": [],
         }
         mock_cb.return_value = {

@@ -495,7 +495,12 @@ async def upload_file(
                 except Exception as e:
                     logger.error(f"XLSX extraction error: {e}")
             os.unlink(tmp.name)
-        elif filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".ics") or filename.endswith(".json"):
+        elif (
+            filename.endswith(".txt")
+            or filename.endswith(".csv")
+            or filename.endswith(".ics")
+            or filename.endswith(".json")
+        ):
             logger.info("Tentative extraction fichier texte/csv/ics")
             try:
                 text = content.decode("utf-8", errors="ignore")

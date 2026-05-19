@@ -8,9 +8,14 @@ class TestRunSecurityCheck:
         result = run_security_check()
         check_names = [c["name"] for c in result["checks"]]
         expected = [
-            "cors", "security_headers", "hardcoded_secrets",
-            "admin_protection", "rate_limiting", "jwt_validation",
-            "sql_injection", "dependency_pinning",
+            "cors",
+            "security_headers",
+            "hardcoded_secrets",
+            "admin_protection",
+            "rate_limiting",
+            "jwt_validation",
+            "sql_injection",
+            "dependency_pinning",
         ]
         assert check_names == expected
 

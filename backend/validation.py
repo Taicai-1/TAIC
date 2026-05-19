@@ -41,7 +41,21 @@ MAX_URL_LENGTH = 2048
 
 # File upload limits
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
-ALLOWED_FILE_EXTENSIONS = {"pdf", "txt", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "csv", "md", "html", "htm", "json"}
+ALLOWED_FILE_EXTENSIONS = {
+    "pdf",
+    "txt",
+    "docx",
+    "doc",
+    "pptx",
+    "ppt",
+    "xlsx",
+    "xls",
+    "csv",
+    "md",
+    "html",
+    "htm",
+    "json",
+}
 
 # Regex patterns
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")

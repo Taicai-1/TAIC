@@ -354,6 +354,7 @@ async def startup_event():
         # Start internal recap scheduler
         try:
             from recap_scheduler import start_scheduler
+
             start_scheduler()
             logger.info("Recap scheduler started")
         except Exception as e:
@@ -367,6 +368,7 @@ async def shutdown_event():
     """Gracefully shut down background services."""
     try:
         from recap_scheduler import shutdown_scheduler
+
         shutdown_scheduler()
     except Exception as e:
         logger.warning(f"Recap scheduler shutdown error: {e}")

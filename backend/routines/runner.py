@@ -14,21 +14,25 @@ ROUTINE_TYPES = {"health", "ci_cd", "security", "billing"}
 
 def _run_health(db: Session) -> dict[str, Any]:
     from routines.health import run_health_check
+
     return run_health_check(db)
 
 
 def _run_ci_cd(db: Session) -> dict[str, Any]:
     from routines.ci_cd import run_ci_cd_check
+
     return run_ci_cd_check()
 
 
 def _run_security(db: Session) -> dict[str, Any]:
     from routines.security import run_security_check
+
     return run_security_check()
 
 
 def _run_billing(db: Session) -> dict[str, Any]:
     from routines.billing import run_billing_check
+
     return run_billing_check()
 
 

@@ -684,7 +684,12 @@ class ImproveContextRequest(BaseModel):
 
 
 @router.post("/api/agents/{agent_id}/improve-context")
-async def improve_agent_context(agent_id: int, body: ImproveContextRequest = ImproveContextRequest(), user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+async def improve_agent_context(
+    agent_id: int,
+    body: ImproveContextRequest = ImproveContextRequest(),
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
     """Use Mistral AI to improve the agent's context prompt via prompt engineering."""
     agent = db.query(Agent).filter(Agent.id == agent_id, Agent.user_id == int(user_id)).first()
     if not agent:

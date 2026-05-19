@@ -120,7 +120,9 @@ def run_ci_cd_check() -> dict[str, Any]:
         build = cloud_build_data["last_build"]
         build_status = build["status"]
         if build_status == "SUCCESS":
-            checks.append({"name": "cloud_build", "status": "pass", "detail": f"Last build succeeded ({build['duration']})"})
+            checks.append(
+                {"name": "cloud_build", "status": "pass", "detail": f"Last build succeeded ({build['duration']})"}
+            )
         elif build_status in ("FAILURE", "INTERNAL_ERROR", "TIMEOUT"):
             checks.append({"name": "cloud_build", "status": "fail", "detail": f"Last build: {build_status}"})
         elif build_status == "WORKING":
