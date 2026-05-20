@@ -13,11 +13,18 @@ export async function streamAsk(path, body, callbacks, signal) {
   const { onToken, onDone, onError } = callbacks;
   const url = `${getApiUrl()}${path}`;
 
+  // Security: read CSRF cookie and send as header (Double Submit Cookie pattern)
+  const headers = { 'Content-Type': 'application/json' };
+  if (typeof document !== 'undefined') {
+    const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+    if (match) headers['X-CSRF-Token'] = decodeURIComponent(match[1]);
+  }
+
   let response;
   try {
     response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(body),
       signal,
@@ -35,8 +42,18 @@ export async function streamAsk(path, body, callbacks, signal) {
     return;
   }
   if (response.status === 403) {
-    if (typeof window !== 'undefined' && !window.location.pathname.includes('/setup-2fa')) {
-      window.location.href = '/setup-2fa';
+    // Check if it's a 2FA redirect or a CSRF/permission error
+    try {
+      const errBody = await response.clone().json();
+      if (errBody.detail && errBody.detail.includes('2FA')) {
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/setup-2fa')) {
+          window.location.href = '/setup-2fa';
+        }
+        return;
+      }
+      onError?.({ message: errBody.detail || 'Access denied', code: 'forbidden' });
+    } catch {
+      onError?.({ message: 'Access denied', code: 'forbidden' });
     }
     return;
   }

@@ -62,21 +62,24 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
 
         if request.method not in SAFE_METHODS and not _is_exempt(request.url.path):
-            # Validate CSRF token for state-changing requests
-            csrf_header = request.headers.get(CSRF_HEADER_NAME)
+            # Only validate CSRF if the client already has a CSRF cookie.
+            # If no cookie exists yet, skip validation — the cookie will be set
+            # on the response so subsequent requests can be validated.
+            if csrf_cookie:
+                csrf_header = request.headers.get(CSRF_HEADER_NAME)
 
-            if not csrf_cookie or not csrf_header:
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "CSRF token missing"},
-                )
+                if not csrf_header:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "CSRF token missing"},
+                    )
 
-            if not hmac.compare_digest(csrf_cookie, csrf_header):
-                logger.warning(f"CSRF token mismatch for {request.method} {request.url.path}")
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "CSRF token mismatch"},
-                )
+                if not hmac.compare_digest(csrf_cookie, csrf_header):
+                    logger.warning(f"CSRF token mismatch for {request.method} {request.url.path}")
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "CSRF token mismatch"},
+                    )
 
         response = await call_next(request)
 

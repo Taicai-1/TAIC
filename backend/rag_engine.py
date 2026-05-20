@@ -13,9 +13,19 @@ from file_loader import load_text_from_pdf, chunk_text
 from file_generator import FileGenerator
 from imagen_client import generate_image
 from imagen_gcs import upload_generated_image
-from validation import sanitize_html
+from validation import SCRIPT_PATTERN
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_prompt_text(text: str) -> str:
+    """Strip dangerous script tags from text destined for LLM prompts.
+    Only removes <script> tags — preserves other content that may be
+    meaningful in agent contexte (markdown, plain text, etc.).
+    """
+    if not text:
+        return text
+    return SCRIPT_PATTERN.sub("", text)
 
 # In-memory fallback cache (used when Redis is unavailable)
 _answer_cache = {}
@@ -145,7 +155,7 @@ def get_direct_gpt_response(question: str, db: Session, agent_id: int = None) ->
             contexte_agent = ""
         else:
             # Security: sanitize agent contexte to mitigate prompt injection
-            contexte_agent = sanitize_html(agent.contexte) if agent.contexte else ""
+            contexte_agent = _sanitize_prompt_text(agent.contexte) if agent.contexte else ""
         prompt = f"{contexte_agent}\n\nQuestion : {question}\n\nRéponse :"
         logger.info("Getting direct response from OpenAI (contexte personnalisé, pas de documents, agent_id)")
         response = get_chat_response(prompt)
@@ -279,7 +289,7 @@ def get_answer(
         if not agent:
             agent = db.query(Agent).filter(Agent.user_id == user_id).first()
         # Security: sanitize agent contexte to mitigate prompt injection via HTML/script tags
-        contexte_agent = sanitize_html(agent.contexte) if agent and agent.contexte else ""
+        contexte_agent = _sanitize_prompt_text(agent.contexte) if agent and agent.contexte else ""
 
         # Visuel agent: bypass RAG, generate image via Imagen 3
         if agent and getattr(agent, "type", "") == "visuel":
@@ -501,7 +511,7 @@ def get_answer_stream(
         if not agent:
             agent = db.query(Agent).filter(Agent.user_id == user_id).first()
         # Security: sanitize agent contexte to mitigate prompt injection via HTML/script tags
-        contexte_agent = sanitize_html(agent.contexte) if agent and agent.contexte else ""
+        contexte_agent = _sanitize_prompt_text(agent.contexte) if agent and agent.contexte else ""
 
         # Visuel agents: no streaming (image generation), yield complete response
         if agent and getattr(agent, "type", "") == "visuel":
