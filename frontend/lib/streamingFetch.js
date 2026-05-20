@@ -1,4 +1,4 @@
-import { getApiUrl } from './api';
+import { getApiUrl, getCsrfToken } from './api';
 
 /**
  * Stream an SSE response from a POST endpoint using fetch + ReadableStream.
@@ -13,12 +13,10 @@ export async function streamAsk(path, body, callbacks, signal) {
   const { onToken, onDone, onError } = callbacks;
   const url = `${getApiUrl()}${path}`;
 
-  // Security: read CSRF cookie and send as header (Double Submit Cookie pattern)
+  // Security: send CSRF token from shared memory store
   const headers = { 'Content-Type': 'application/json' };
-  if (typeof document !== 'undefined') {
-    const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
-    if (match) headers['X-CSRF-Token'] = decodeURIComponent(match[1]);
-  }
+  const csrfToken = getCsrfToken();
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
   let response;
   try {

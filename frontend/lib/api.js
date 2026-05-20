@@ -18,20 +18,27 @@ const api = axios.create({
   },
 });
 
-// Security: CSRF Double Submit Cookie — read csrf_token cookie and send as header
-api.interceptors.request.use((config) => {
-  if (typeof document !== 'undefined') {
-    const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
-    if (match) {
-      config.headers['X-CSRF-Token'] = decodeURIComponent(match[1]);
-    }
-  }
-  return config;
-});
+// --- CSRF token management (Response Header pattern) ---
+// The backend sends X-CSRF-Token in every response header.
+// We store it in memory and send it back on state-changing requests.
+let _csrfToken = null;
 
+export function getCsrfToken() {
+  return _csrfToken;
+}
+
+// Read CSRF token from every response
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const token = response.headers['x-csrf-token'];
+    if (token) _csrfToken = token;
+    return response;
+  },
   (error) => {
+    // Still capture token from error responses
+    const token = error.response?.headers?.['x-csrf-token'];
+    if (token) _csrfToken = token;
+
     if (typeof window !== 'undefined') {
       if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
@@ -46,5 +53,13 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Send CSRF token on every request
+api.interceptors.request.use((config) => {
+  if (_csrfToken) {
+    config.headers['X-CSRF-Token'] = _csrfToken;
+  }
+  return config;
+});
 
 export default api;

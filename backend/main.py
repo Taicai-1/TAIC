@@ -318,7 +318,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With", "X-CSRF-Token"],
-    expose_headers=["Content-Length", "Content-Type"],
+    expose_headers=["Content-Length", "Content-Type", "X-CSRF-Token"],
     max_age=600,
 )
 

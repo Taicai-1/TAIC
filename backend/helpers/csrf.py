@@ -1,19 +1,21 @@
-"""CSRF Protection Middleware — Double Submit Cookie pattern.
+"""CSRF Protection Middleware — Response Header Token pattern.
 
-Security: Prevents Cross-Site Request Forgery attacks by:
-1. Setting a random CSRF token as a non-HttpOnly cookie (readable by JS)
-2. Requiring state-changing requests (POST, PUT, DELETE, PATCH) to include
-   the same token in the X-CSRF-Token header
-3. Validating that both values match using constant-time comparison
+Security: Prevents Cross-Site Request Forgery attacks in a cross-origin SPA setup:
 
-The cookie is non-HttpOnly so the frontend can read and send it as a header.
-The attacker cannot read the cookie from a different origin (Same-Origin Policy),
-so they cannot forge the header value.
+1. The backend generates a random CSRF token per session (stored in a server-side
+   cookie for persistence) and sends it in the `X-CSRF-Token` response header.
+2. The frontend reads the token from any response header and sends it back
+   in the `X-CSRF-Token` request header on state-changing requests.
+3. The middleware validates that the request header matches the cookie.
+
+This works cross-origin because:
+- The response header is readable by the frontend (via CORS expose_headers).
+- An attacker on a different origin cannot read our response headers (Same-Origin Policy).
+- Therefore they cannot forge the `X-CSRF-Token` request header.
 """
 
 import hmac
 import logging
-import os
 import secrets
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -22,7 +24,7 @@ from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-# Endpoints exempt from CSRF validation (public APIs, webhooks, login/register)
+# Endpoints exempt from CSRF validation (public APIs, webhooks, auth)
 CSRF_EXEMPT_PATHS = {
     "/login",
     "/register",
@@ -38,15 +40,14 @@ CSRF_EXEMPT_PATHS = {
     "/reset-password",
 }
 
-# Methods that don't change state — no CSRF check needed
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 CSRF_COOKIE_NAME = "csrf_token"
 CSRF_HEADER_NAME = "x-csrf-token"
+CSRF_RESPONSE_HEADER = "X-CSRF-Token"
 
 
 def _is_exempt(path: str) -> bool:
-    """Check if the request path is exempt from CSRF validation."""
     for exempt in CSRF_EXEMPT_PATHS:
         if path == exempt or path.startswith(exempt):
             return True
@@ -54,26 +55,19 @@ def _is_exempt(path: str) -> bool:
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
-    """Double Submit Cookie CSRF protection middleware."""
 
     async def dispatch(self, request: Request, call_next):
-        # Always set CSRF cookie if not present (for any request)
-        response = None
         csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
 
+        # Validate CSRF on state-changing requests (only if client has a token)
         if request.method not in SAFE_METHODS and not _is_exempt(request.url.path):
-            # Only validate CSRF if the client already has a CSRF cookie.
-            # If no cookie exists yet, skip validation — the cookie will be set
-            # on the response so subsequent requests can be validated.
             if csrf_cookie:
                 csrf_header = request.headers.get(CSRF_HEADER_NAME)
-
                 if not csrf_header:
                     return JSONResponse(
                         status_code=403,
                         content={"detail": "CSRF token missing"},
                     )
-
                 if not hmac.compare_digest(csrf_cookie, csrf_header):
                     logger.warning(f"CSRF token mismatch for {request.method} {request.url.path}")
                     return JSONResponse(
@@ -83,18 +77,23 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        # Set CSRF cookie if not already present
+        # Generate token if client doesn't have one yet
         if not csrf_cookie:
             token = secrets.token_urlsafe(32)
             is_prod = request.url.hostname not in ["localhost", "127.0.0.1"]
             response.set_cookie(
                 key=CSRF_COOKIE_NAME,
                 value=token,
-                httponly=False,  # Must be readable by JavaScript
+                httponly=True,  # Not readable by JS — that's fine, we use the header
                 secure=is_prod,
                 samesite="none" if is_prod else "lax",
                 max_age=28800,
                 path="/",
             )
+            # Send the token in a response header so the frontend can store it
+            response.headers[CSRF_RESPONSE_HEADER] = token
+        else:
+            # Always echo the current token in the response header
+            response.headers[CSRF_RESPONSE_HEADER] = csrf_cookie
 
         return response
