@@ -34,12 +34,8 @@ export default function Setup2FA() {
   const codeInputRef = useRef(null);
 
   useEffect(() => {
-    const setupToken = sessionStorage.getItem("setup_token");
-    if (!setupToken) {
-      router.replace("/login");
-      return;
-    }
-    initSetup(setupToken);
+    // Security: setup_token is now stored in HttpOnly cookie, sent automatically
+    initSetup();
   }, []);
 
   useEffect(() => {
@@ -48,16 +44,16 @@ export default function Setup2FA() {
     }
   }, [step]);
 
-  const initSetup = async (token) => {
+  const initSetup = async () => {
     try {
+      // Security: setup_token sent automatically via HttpOnly cookie (withCredentials)
       const response = await axios.post(`${API_URL}/auth/2fa/setup`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
+        withCredentials: true
       });
       setQrCode(response.data.qr_code);
       setSecret(response.data.secret);
     } catch (error) {
       if (error.response?.status === 401) {
-        sessionStorage.removeItem("setup_token");
         toast.error(t('auth:twoFactor.sessionExpired'));
         router.replace("/login");
         return;
@@ -74,22 +70,12 @@ export default function Setup2FA() {
     setVerifying(true);
 
     try {
-      const setupToken = sessionStorage.getItem("setup_token");
-      if (!setupToken) {
-        toast.error(t('auth:twoFactor.sessionExpired'));
-        router.replace("/login");
-        return;
-      }
-
+      // Security: setup_token sent automatically via HttpOnly cookie (withCredentials)
       const response = await axios.post(`${API_URL}/auth/2fa/confirm-setup`, {
         code: verifyCode.trim()
       }, {
-        headers: { Authorization: `Bearer ${setupToken}` },
         withCredentials: true
       });
-
-      // Clean up setup token - cookie is set by backend
-      sessionStorage.removeItem("setup_token");
 
       toast.success(t('auth:twoFactor.setup.setupComplete'));
       window.location.href = "/agents";

@@ -140,6 +140,10 @@ if __name__ == "__main__":
     # Add health check route (Cloud Run liveness probe)
     app.routes.insert(0, Route("/health", lambda r: JSONResponse({"status": "ok"})))
 
+    _mcp_jwt_secret = os.getenv("MCP_JWT_SECRET")
+    if not _mcp_jwt_secret:
+        raise RuntimeError("MCP_JWT_SECRET is required. Set it in environment variables.")
+
     app.add_middleware(
         MCPAuthMiddleware,
         server_url=os.getenv(
@@ -148,7 +152,7 @@ if __name__ == "__main__":
         ),
         google_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
         google_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
-        jwt_secret=os.getenv("MCP_JWT_SECRET", "dev-secret-change-me"),
+        jwt_secret=_mcp_jwt_secret,
     )
 
     import uvicorn

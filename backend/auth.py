@@ -96,11 +96,22 @@ def _extract_token_from_header(request: Request) -> str:
     raise HTTPException(status_code=401, detail="Not authenticated")
 
 
+def _extract_restricted_token(request: Request, cookie_name: str) -> str:
+    """Extract a restricted token from its dedicated HttpOnly cookie, falling back to Authorization header.
+    Security: restricted tokens (pre_2fa, setup) are stored in HttpOnly cookies to prevent XSS theft.
+    """
+    token = request.cookies.get(cookie_name)
+    if token:
+        return token
+    # Fallback to Authorization header for backward compatibility
+    return _extract_token_from_header(request)
+
+
 def verify_pre_2fa_token(request: Request) -> str:
     """Verify a pre-2FA token (issued after password check, before TOTP verification).
-    Only accepts tokens with type='pre_2fa'. Reads from Authorization header only.
+    Only accepts tokens with type='pre_2fa'. Reads from HttpOnly cookie or Authorization header.
     """
-    token = _extract_token_from_header(request)
+    token = _extract_restricted_token(request, "pre_2fa_token")
     payload = _decode_token(token)
     if payload.get("type") != "pre_2fa":
         raise HTTPException(status_code=401, detail="Invalid pre-2FA token")
@@ -109,9 +120,9 @@ def verify_pre_2fa_token(request: Request) -> str:
 
 def verify_setup_token(request: Request) -> str:
     """Verify a 2FA setup token (issued for users who need to configure 2FA).
-    Only accepts tokens with type='needs_2fa_setup'. Reads from Authorization header only.
+    Only accepts tokens with type='needs_2fa_setup'. Reads from HttpOnly cookie or Authorization header.
     """
-    token = _extract_token_from_header(request)
+    token = _extract_restricted_token(request, "setup_token")
     payload = _decode_token(token)
     if payload.get("type") != "needs_2fa_setup":
         raise HTTPException(status_code=401, detail="Invalid setup token")

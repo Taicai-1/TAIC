@@ -110,8 +110,8 @@ export default function Login() {
 
       if (isLogin) {
         if (data.requires_email_verification) { setVerificationEmail(data.email); setShowEmailVerif(true); setLoading(false); return; }
-        if (data.requires_2fa_setup) { sessionStorage.setItem('setup_token', data.setup_token); toast.success(t('auth:twoFactor.setupRequired')); window.location.href = `${localePrefix}/setup-2fa`; return; }
-        if (data.requires_2fa) { sessionStorage.setItem('pre_2fa_token', data.pre_2fa_token); setShow2FA(true); setLoading(false); return; }
+        if (data.requires_2fa_setup) { toast.success(t('auth:twoFactor.setupRequired')); window.location.href = `${localePrefix}/setup-2fa`; return; }
+        if (data.requires_2fa) { setShow2FA(true); setLoading(false); return; }
         toast.success(t('auth:login.success'));
         window.location.href = `${localePrefix}/agents`;
       } else {
@@ -147,10 +147,8 @@ export default function Login() {
     if (!totpCode.trim()) return;
     setVerifying2FA(true);
     try {
-      const token = sessionStorage.getItem('pre_2fa_token');
-      if (!token) { toast.error(t('auth:twoFactor.sessionExpired')); setShow2FA(false); return; }
-      await axios.post(`${API_URL}/auth/2fa/verify`, { code: totpCode.trim() }, { headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
-      sessionStorage.removeItem('pre_2fa_token');
+      // Security: pre_2fa_token is now sent automatically via HttpOnly cookie (withCredentials)
+      await axios.post(`${API_URL}/auth/2fa/verify`, { code: totpCode.trim() }, { withCredentials: true });
       toast.success(t('auth:login.success'));
       window.location.href = `${localePrefix}/agents`;
     } catch (err) {
@@ -186,9 +184,11 @@ export default function Login() {
         </div>
 
         <div className="relative z-10">
-          <h2 className="font-heading font-extrabold text-[38px] text-white leading-[1.15] tracking-tight mb-5"
-            dangerouslySetInnerHTML={{ __html: t('auth:brandPanel.headline') }}
-          />
+          <h2 className="font-heading font-extrabold text-[38px] text-white leading-[1.15] tracking-tight mb-5">
+            {t('auth:brandPanel.headline').split(/<br\s*\/?>/).map((segment, i, arr) => (
+              <span key={i}>{segment}{i < arr.length - 1 && <br />}</span>
+            ))}
+          </h2>
           <p className="text-[15px] text-white/60 leading-relaxed mb-10">
             {t('auth:brandPanel.subtitle')}
           </p>
@@ -315,7 +315,7 @@ export default function Login() {
               </button>
             </form>
             <div className="px-6 py-4 bg-gray-50 rounded-b-card">
-              <button type="button" onClick={() => { setShow2FA(false); setTotpCode(''); sessionStorage.removeItem('pre_2fa_token'); }}
+              <button type="button" onClick={() => { setShow2FA(false); setTotpCode(''); }}
                 className="w-full py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors">
                 {t('auth:twoFactor.cancel')}
               </button>

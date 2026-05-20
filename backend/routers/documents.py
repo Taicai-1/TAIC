@@ -36,6 +36,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _validate_blob_name(blob_name: str) -> str:
+    """Validate and sanitize a GCS blob name to prevent path traversal.
+    Security: prevents access to unintended GCS objects via directory traversal.
+    """
+    if not blob_name:
+        raise HTTPException(status_code=400, detail="Invalid blob name")
+    # Block path traversal patterns
+    dangerous_patterns = ["..", "./", "//", "\x00", "\\"]
+    for pattern in dangerous_patterns:
+        if pattern in blob_name:
+            logger.warning(f"Path traversal attempt blocked in blob name: {blob_name}")
+            raise HTTPException(status_code=400, detail="Invalid file path")
+    # Block absolute paths
+    if blob_name.startswith("/"):
+        logger.warning(f"Absolute path attempt blocked in blob name: {blob_name}")
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    return blob_name
+
+
 def _clean_source_url(source_url):
     """Return source_url only if it's a real URL, not an email dedup key."""
     if not source_url:
@@ -825,6 +844,9 @@ async def get_signed_download_url(
             # URL-decode the blob name (handles %C3%A9, %2B, etc.)
             blob_name = unquote(blob_name_encoded)
 
+        # Security: validate blob name to prevent path traversal
+        blob_name = _validate_blob_name(blob_name)
+
         _logger.info(f"Blob name (encoded)={locals().get('blob_name_encoded', None)}, decoded={blob_name}")
 
         _logger.info(f"Parsed bucket={bucket_name}, blob={blob_name}")
@@ -902,6 +924,8 @@ async def proxy_download_document(
     bucket_name = path_parts[0]
     blob_name_encoded = "/".join(path_parts[1:])
     blob_name = unquote(blob_name_encoded)
+    # Security: validate blob name to prevent path traversal
+    blob_name = _validate_blob_name(blob_name)
     _logger = logging.getLogger("main.download_url")
     _logger.info(f"Proxy download: bucket={bucket_name}, blob_encoded={blob_name_encoded}, blob_decoded={blob_name}")
 

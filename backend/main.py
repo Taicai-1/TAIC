@@ -242,6 +242,13 @@ async def tenant_isolation_middleware(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
+# CSRF protection middleware (Double Submit Cookie)
+# ---------------------------------------------------------------------------
+from helpers.csrf import CSRFMiddleware
+app.add_middleware(CSRFMiddleware)
+
+
+# ---------------------------------------------------------------------------
 # Security headers middleware
 # ---------------------------------------------------------------------------
 @app.middleware("http")
@@ -310,7 +317,7 @@ app.add_middleware(
     else None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With", "X-CSRF-Token"],
     expose_headers=["Content-Length", "Content-Type"],
     max_age=600,
 )

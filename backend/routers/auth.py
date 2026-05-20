@@ -163,16 +163,26 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
             pre_2fa_token = create_access_token(
                 data={"sub": str(db_user.id), "type": "pre_2fa"}, expires_delta=timedelta(minutes=5)
             )
+            # Security: store pre_2fa token in HttpOnly cookie instead of response body
+            response.set_cookie(
+                key="pre_2fa_token", value=pre_2fa_token, httponly=True, secure=True,
+                samesite="none", max_age=300, path="/"
+            )
             logger.info(f"User {user.username} requires 2FA verification")
-            return {"requires_2fa": True, "pre_2fa_token": pre_2fa_token, "token_type": "bearer"}
+            return {"requires_2fa": True}
 
         if not getattr(db_user, "totp_setup_completed_at", None):
             # User has NOT set up 2FA yet → issue restricted setup token (30 min)
             setup_token = create_access_token(
                 data={"sub": str(db_user.id), "type": "needs_2fa_setup"}, expires_delta=timedelta(minutes=30)
             )
+            # Security: store setup token in HttpOnly cookie instead of response body
+            response.set_cookie(
+                key="setup_token", value=setup_token, httponly=True, secure=True,
+                samesite="none", max_age=1800, path="/"
+            )
             logger.info(f"User {user.username} needs 2FA setup")
-            return {"requires_2fa_setup": True, "setup_token": setup_token, "token_type": "bearer"}
+            return {"requires_2fa_setup": True}
 
         # 2FA completed → issue full access token
         access_token = create_access_token(data={"sub": str(db_user.id)})
@@ -496,6 +506,8 @@ async def confirm_2fa_setup(
     response.set_cookie(
         key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
     )
+    # Security: clear restricted setup cookie after successful setup
+    response.delete_cookie(key="setup_token", path="/")
 
     logger.info(f"2FA setup completed for user {db_user.username}")
     event_tracker.track_user_action(db_user.id, "2fa_setup_completed")
@@ -535,6 +547,8 @@ async def verify_2fa(body: TwoFactorVerifyRequest, request: Request, response: R
     response.set_cookie(
         key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
     )
+    # Security: clear restricted pre_2fa cookie after successful verification
+    response.delete_cookie(key="pre_2fa_token", path="/")
 
     logger.info(f"2FA verified for user {db_user.username}")
     event_tracker.track_user_action(db_user.id, "2fa_verified")

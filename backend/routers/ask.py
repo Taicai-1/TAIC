@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from auth import verify_token
 from database import get_db, User, Agent, Document, DocumentChunk, Conversation, Message, AgentAction, Team
 from helpers.agent_helpers import resolve_model_id, _user_can_access_agent
+from helpers.conversation_helpers import verify_conversation_owner
 from helpers.rate_limiting import _check_api_rate_limit, _API_ASK_LIMIT
 from helpers.tenant import _get_caller_company_id
 from mistral_embeddings import get_embedding
@@ -42,6 +43,8 @@ async def ask_question(
         # Récupérer l'historique complet de la conversation si conversation_id fourni
         history = []
         if hasattr(request, "conversation_id") and request.conversation_id:
+            # Security: verify the user owns this conversation before loading messages
+            verify_conversation_owner(request.conversation_id, user_id, db)
             msgs = (
                 db.query(Message)
                 .filter(Message.conversation_id == request.conversation_id)
@@ -105,9 +108,13 @@ async def ask_question(
                     pass
 
             # Récupérer les sous-agents depuis la base
+            # Security: filter by company_id to prevent cross-tenant agent access
             sub_agents = []
             if all_sub_agent_ids:
-                sub_agents = db.query(Agent).filter(Agent.id.in_(all_sub_agent_ids)).all()
+                q = db.query(Agent).filter(Agent.id.in_(all_sub_agent_ids))
+                if team.company_id:
+                    q = q.filter(Agent.company_id == team.company_id)
+                sub_agents = q.all()
 
             best_agent = None
             best_score = -1
@@ -190,6 +197,8 @@ async def ask_question_stream(
     # Retrieve conversation history
     history = []
     if hasattr(request, "conversation_id") and request.conversation_id:
+        # Security: verify the user owns this conversation before loading messages
+        verify_conversation_owner(request.conversation_id, user_id, db)
         msgs = (
             db.query(Message)
             .filter(Message.conversation_id == request.conversation_id)
@@ -247,9 +256,13 @@ async def ask_question_stream(
                     except Exception:
                         pass
 
+                # Security: filter by company_id to prevent cross-tenant agent access
                 sub_agents = []
                 if all_sub_agent_ids:
-                    sub_agents = db.query(Agent).filter(Agent.id.in_(all_sub_agent_ids)).all()
+                    q = db.query(Agent).filter(Agent.id.in_(all_sub_agent_ids))
+                    if team.company_id:
+                        q = q.filter(Agent.company_id == team.company_id)
+                    sub_agents = q.all()
 
                 best_agent = None
                 best_score = -1

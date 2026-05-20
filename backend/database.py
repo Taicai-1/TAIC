@@ -43,9 +43,11 @@ def get_database_url():
 
         return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}?sslmode=require"
     else:
-        # Development: Local database (no SSL needed locally)
-        logger.warning("DATABASE_URL not set — using local dev default. Do NOT use in production.")
-        return "postgresql://raguser:ragpassword@localhost:5432/ragdb"
+        # Development: require DATABASE_URL — no hardcoded credentials
+        raise RuntimeError(
+            "DATABASE_URL not set. "
+            "Set DATABASE_URL=postgresql://user:password@host:5432/dbname in your .env file."
+        )
 
 
 DATABASE_URL = get_database_url()
