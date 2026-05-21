@@ -108,7 +108,27 @@ def ingest_to_neo4j(
 
     driver = _get_driver(company_id=company_id)
     if driver is None:
-        raise RuntimeError(f"No Neo4j driver available for company {company_id}")
+        # Try to diagnose why
+        try:
+            from database import SessionLocal, Company
+            db = SessionLocal()
+            company = db.query(Company).filter(Company.id == company_id).first()
+            db.close()
+            if not company:
+                raise RuntimeError(f"Company {company_id} not found in database")
+            if not company._neo4j_uri:
+                raise RuntimeError(f"Neo4j URI not configured for company {company_id} (field is empty)")
+            uri = company.org_neo4j_uri
+            pwd = company.org_neo4j_password
+            if not uri:
+                raise RuntimeError(f"Neo4j URI decryption failed for company {company_id} (ENCRYPTION_KEY issue?)")
+            if not pwd:
+                raise RuntimeError(f"Neo4j password decryption failed for company {company_id}")
+            raise RuntimeError(f"Neo4j driver failed to connect to {uri[:30]}... for company {company_id} (verify_connectivity failed)")
+        except RuntimeError:
+            raise
+        except Exception as diag_e:
+            raise RuntimeError(f"No Neo4j driver for company {company_id}, diagnostic failed: {diag_e}")
 
     nodes_created = 0
     relations_created = 0

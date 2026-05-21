@@ -46,14 +46,21 @@ def _get_org_driver(company_id: int):
         company = db.query(Company).filter(Company.id == company_id).first()
         db.close()
 
-        if not company or not company._neo4j_uri:
+        if not company:
+            logger.warning(f"Company {company_id} not found in database")
+            return None
+        if not company._neo4j_uri:
+            logger.warning(f"Company {company_id} has no neo4j_uri stored (raw field is empty/null)")
             return None
 
         uri = company.org_neo4j_uri
         user = company.org_neo4j_user or "neo4j"
         password = company.org_neo4j_password
 
+        logger.info(f"Neo4j credentials for company {company_id}: uri={'set' if uri else 'EMPTY'}, user={user}, password={'set' if password else 'EMPTY'}")
+
         if not uri or not password:
+            logger.warning(f"Neo4j decrypted credentials incomplete for company {company_id}")
             return None
 
         from neo4j import GraphDatabase
@@ -64,7 +71,7 @@ def _get_org_driver(company_id: int):
         logger.info(f"Org Neo4j driver initialized for company {company_id}")
         return driver
     except Exception as e:
-        logger.warning(f"Failed to init org Neo4j driver for company {company_id}: {e}")
+        logger.error(f"Failed to init org Neo4j driver for company {company_id}: {type(e).__name__}: {e}", exc_info=True)
         return None
 
 
