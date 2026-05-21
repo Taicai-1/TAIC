@@ -66,7 +66,12 @@ def _get_org_driver(company_id: int):
         from neo4j import GraphDatabase
 
         driver = GraphDatabase.driver(uri, auth=(user, password))
-        driver.verify_connectivity()
+        try:
+            driver.verify_connectivity()
+        except Exception as conn_err:
+            logger.error(f"Neo4j verify_connectivity failed for company {company_id} at {uri}: {type(conn_err).__name__}: {conn_err}")
+            # Skip verification and try to use the driver anyway
+            logger.info(f"Proceeding without verify_connectivity for company {company_id}")
         _org_drivers[company_id] = driver
         logger.info(f"Org Neo4j driver initialized for company {company_id}")
         return driver
