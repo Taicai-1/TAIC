@@ -147,13 +147,32 @@ def _parse_extraction(raw_json: str) -> ExtractionResult:
 
         data = json.loads(cleaned)
 
+        # Parse relations with tolerance for field name variations from LLM
+        parsed_relations = []
+        for r in data.get("relations", []):
+            try:
+                normalized = {
+                    "source_type": r.get("source_type", r.get("type_source", "")),
+                    "source_nom": r.get("source_nom", r.get("nom_source", r.get("source", ""))),
+                    "relation": r.get("relation", r.get("type", r.get("rel_type", ""))),
+                    "target_type": r.get("target_type", r.get("type_cible", r.get("cible_type", ""))),
+                    "target_nom": r.get("target_nom", r.get("nom_cible", r.get("cible_nom", r.get("cible", r.get("target", ""))))),
+                    "properties": r.get("properties", r.get("proprietes", {})),
+                }
+                if normalized["source_nom"] and normalized["target_nom"] and normalized["relation"]:
+                    parsed_relations.append(ExtractedRelation(**normalized))
+                else:
+                    logger.warning(f"Skipping incomplete relation: {r}")
+            except Exception as rel_err:
+                logger.warning(f"Skipping unparseable relation: {r} — {rel_err}")
+
         return ExtractionResult(
             personnes=[ExtractedPerson(**p) for p in data.get("personnes", [])],
             projets=[ExtractedProjet(**p) for p in data.get("projets", [])],
             clients=[ExtractedClient(**c) for c in data.get("clients", [])],
             competences=[ExtractedCompetence(**c) for c in data.get("competences", [])],
             departements=[ExtractedDepartement(**d) for d in data.get("departements", [])],
-            relations=[ExtractedRelation(**r) for r in data.get("relations", [])],
+            relations=parsed_relations,
         )
     except (json.JSONDecodeError, TypeError, ValueError) as e:
         logger.error(f"Failed to parse extraction JSON: {e}\nRaw: {raw_json[:1000]}")
