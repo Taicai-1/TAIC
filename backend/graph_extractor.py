@@ -100,34 +100,31 @@ def extract_entities(
 
 
 def _extract_single(text: str, model_name: str = "mistral-small-latest") -> ExtractionResult:
-    """Single extraction call to Mistral."""
-    from mistral_client import _get_client
+    """Single extraction call to Mistral using the existing generate_text helper."""
+    from mistral_client import generate_text
 
-    client = _get_client()
-    prompt = _EXTRACTION_PROMPT + text
+    prompt = _EXTRACTION_PROMPT + text + "\n\nReponds UNIQUEMENT avec du JSON valide."
 
     try:
-        response = client.chat.complete(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": "Tu es un extracteur d'entites. Reponds UNIQUEMENT avec du JSON valide, sans texte avant ou apres."},
-                {"role": "user", "content": prompt},
-            ],
+        raw = generate_text(
+            prompt=prompt,
+            model_name=model_name,
             temperature=0.1,
             max_tokens=8000,
         )
 
-        if not response or not response.choices:
+        if not raw:
             logger.warning("Empty response from Mistral extraction")
             return ExtractionResult()
 
-        raw = response.choices[0].message.content
         logger.info(f"Mistral extraction raw response ({len(raw)} chars): {raw[:300]}")
         result = _parse_extraction(raw)
         total = len(result.personnes) + len(result.projets) + len(result.clients) + len(result.competences) + len(result.departements)
         logger.info(f"Extraction parsed: {total} entities, {len(result.relations)} relations")
         return result
 
+    except RuntimeError:
+        raise
     except Exception as e:
         logger.error(f"Mistral extraction failed: {e}", exc_info=True)
         raise RuntimeError(f"Extraction LLM echouee: {str(e)}")

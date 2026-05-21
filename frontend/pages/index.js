@@ -215,8 +215,10 @@ export default function CompanionSettings() {
       setGraphIngestSource("");
       loadNeo4jData();
     } catch (error) {
-      const detail = error?.response?.data?.detail || '';
-      toast.error(`${t('agents:form.neo4j.ingestError')}${detail ? ': ' + detail : ''}`);
+      const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || '';
+      const status = error?.response?.status || '';
+      console.error('Graph ingest error:', status, error?.response?.data, error);
+      toast.error(`${t('agents:form.neo4j.ingestError')}${status ? ' (' + status + ')' : ''}${detail ? ': ' + detail : ''}`);
     } finally {
       setGraphIngesting(false);
     }
