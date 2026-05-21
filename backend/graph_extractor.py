@@ -109,10 +109,12 @@ def _extract_single(text: str, model_name: str = "mistral-small-latest") -> Extr
     try:
         response = client.chat.complete(
             model=model_name,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "Tu es un extracteur d'entites. Reponds UNIQUEMENT avec du JSON valide, sans texte avant ou apres."},
+                {"role": "user", "content": prompt},
+            ],
             temperature=0.1,
             max_tokens=8000,
-            response_format={"type": "json_object"},
         )
 
         if not response or not response.choices:
@@ -135,6 +137,12 @@ def _parse_extraction(raw_json: str) -> ExtractionResult:
         if cleaned.startswith("```"):
             cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
             cleaned = re.sub(r"\s*```$", "", cleaned)
+
+        # Try to extract JSON object if surrounded by text
+        if not cleaned.startswith("{"):
+            match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+            if match:
+                cleaned = match.group(0)
 
         data = json.loads(cleaned)
 
