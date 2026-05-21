@@ -299,18 +299,31 @@ def get_answer(
             return f"![Image générée]({image_url})"
 
         # Neo4j Knowledge Graph context injection
-        if agent and getattr(agent, "neo4j_enabled", False) and getattr(agent, "neo4j_person_name", None):
+        if agent and getattr(agent, "neo4j_enabled", False):
             try:
-                from neo4j_client import get_person_context_cached
-
                 owner = db.query(User).filter(User.id == agent.user_id).first()
                 if owner and owner.company_id:
-                    neo4j_context = get_person_context_cached(
-                        owner.company_id, agent.neo4j_person_name, agent.neo4j_depth or 1
-                    )
-                    if neo4j_context:
-                        contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
-                        logger.info(f"Neo4j context injected for agent {agent_id}, person '{agent.neo4j_person_name}'")
+                    neo4j_person = getattr(agent, "neo4j_person_name", None)
+                    if neo4j_person:
+                        # Legacy person-centric path
+                        from neo4j_client import get_person_context_cached
+
+                        neo4j_context = get_person_context_cached(
+                            owner.company_id, neo4j_person, agent.neo4j_depth or 1
+                        )
+                        if neo4j_context:
+                            contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
+                            logger.info(f"Neo4j context injected for agent {agent_id}, person '{neo4j_person}'")
+                    else:
+                        # Keyword-based graph search using the user's question
+                        from neo4j_client import get_graph_context_by_keyword_cached
+
+                        neo4j_context = get_graph_context_by_keyword_cached(
+                            owner.company_id, question, depth=1
+                        )
+                        if neo4j_context:
+                            contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
+                            logger.info(f"Neo4j keyword context injected for agent {agent_id}, keyword='{question[:50]}'")
             except Exception as e:
                 logger.warning(f"Neo4j context retrieval failed (continuing without): {e}")
 
@@ -524,17 +537,27 @@ def get_answer_stream(
             return
 
         # Neo4j context
-        if agent and getattr(agent, "neo4j_enabled", False) and getattr(agent, "neo4j_person_name", None):
+        if agent and getattr(agent, "neo4j_enabled", False):
             try:
-                from neo4j_client import get_person_context_cached
-
                 owner = db.query(User).filter(User.id == agent.user_id).first()
                 if owner and owner.company_id:
-                    neo4j_context = get_person_context_cached(
-                        owner.company_id, agent.neo4j_person_name, agent.neo4j_depth or 1
-                    )
-                    if neo4j_context:
-                        contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
+                    neo4j_person = getattr(agent, "neo4j_person_name", None)
+                    if neo4j_person:
+                        from neo4j_client import get_person_context_cached
+
+                        neo4j_context = get_person_context_cached(
+                            owner.company_id, neo4j_person, agent.neo4j_depth or 1
+                        )
+                        if neo4j_context:
+                            contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
+                    else:
+                        from neo4j_client import get_graph_context_by_keyword_cached
+
+                        neo4j_context = get_graph_context_by_keyword_cached(
+                            owner.company_id, question, depth=1
+                        )
+                        if neo4j_context:
+                            contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
             except Exception as e:
                 logger.warning(f"Neo4j context retrieval failed (continuing without): {e}")
 
