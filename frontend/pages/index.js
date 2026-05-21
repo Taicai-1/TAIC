@@ -215,7 +215,8 @@ export default function CompanionSettings() {
       setGraphIngestSource("");
       loadNeo4jData();
     } catch (error) {
-      toast.error(t('agents:form.neo4j.ingestError'));
+      const detail = error?.response?.data?.detail || '';
+      toast.error(`${t('agents:form.neo4j.ingestError')}${detail ? ': ' + detail : ''}`);
     } finally {
       setGraphIngesting(false);
     }

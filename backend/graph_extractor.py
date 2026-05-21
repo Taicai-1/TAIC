@@ -122,11 +122,15 @@ def _extract_single(text: str, model_name: str = "mistral-small-latest") -> Extr
             return ExtractionResult()
 
         raw = response.choices[0].message.content
-        return _parse_extraction(raw)
+        logger.info(f"Mistral extraction raw response ({len(raw)} chars): {raw[:300]}")
+        result = _parse_extraction(raw)
+        total = len(result.personnes) + len(result.projets) + len(result.clients) + len(result.competences) + len(result.departements)
+        logger.info(f"Extraction parsed: {total} entities, {len(result.relations)} relations")
+        return result
 
     except Exception as e:
-        logger.error(f"Mistral extraction failed: {e}")
-        return ExtractionResult()
+        logger.error(f"Mistral extraction failed: {e}", exc_info=True)
+        raise RuntimeError(f"Extraction LLM echouee: {str(e)}")
 
 
 def _parse_extraction(raw_json: str) -> ExtractionResult:
@@ -155,8 +159,8 @@ def _parse_extraction(raw_json: str) -> ExtractionResult:
             relations=[ExtractedRelation(**r) for r in data.get("relations", [])],
         )
     except (json.JSONDecodeError, TypeError, ValueError) as e:
-        logger.error(f"Failed to parse extraction JSON: {e}\nRaw: {raw_json[:500]}")
-        return ExtractionResult()
+        logger.error(f"Failed to parse extraction JSON: {e}\nRaw: {raw_json[:1000]}")
+        raise RuntimeError(f"JSON parsing echoue: {str(e)}. Debut de la reponse: {raw_json[:200]}")
 
 
 def _split_text(text: str, max_chars: int, overlap: int) -> list:
