@@ -71,7 +71,16 @@
       "selectPerson": "-- Select a person --",
       "depth": "Relationship depth",
       "depth1": "Level 1 - Direct relationships",
-      "depth2": "Level 2 - Second-degree relationships"
+      "depth2": "Level 2 - Second-degree relationships",
+      "ingestLabel": "Feed the graph",
+      "ingestPlaceholder": "Paste text here to extract entities and relationships...",
+      "ingestButton": "Extract & ingest",
+      "ingestSourceName": "Source name",
+      "ingestSourcePlaceholder": "E.g. annual-report-2024",
+      "ingesting": "Extracting...",
+      "ingestSuccess": "entities extracted and injected into the graph",
+      "ingestError": "Error during ingestion",
+      "ingestEmpty": "No entities found in the text"
     },
     "photo": {
       "preview": "Preview"

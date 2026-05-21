@@ -71,7 +71,16 @@
       "selectPerson": "-- Selectionnez une personne --",
       "depth": "Profondeur des relations",
       "depth1": "Niveau 1 - Relations directes",
-      "depth2": "Niveau 2 - Relations de second degre"
+      "depth2": "Niveau 2 - Relations de second degre",
+      "ingestLabel": "Alimenter le graphe",
+      "ingestPlaceholder": "Collez ici le texte a analyser pour extraire les entites et relations...",
+      "ingestButton": "Extraire et alimenter",
+      "ingestSourceName": "Nom de la source",
+      "ingestSourcePlaceholder": "Ex: rapport-annuel-2024",
+      "ingesting": "Extraction en cours...",
+      "ingestSuccess": "entites extraites et injectees dans le graphe",
+      "ingestError": "Erreur lors de l'ingestion",
+      "ingestEmpty": "Aucune entite trouvee dans le texte"
     },
     "photo": {
       "preview": "Aperçu"

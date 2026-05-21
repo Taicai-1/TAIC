@@ -33,6 +33,9 @@ export default function AgentsPage() {
   const [creating, setCreating] = useState(false);
   const [neo4jPersons, setNeo4jPersons] = useState([]);
   const [userCompany, setUserCompany] = useState(null);
+  const [graphIngestText, setGraphIngestText] = useState("");
+  const [graphIngestSource, setGraphIngestSource] = useState("");
+  const [graphIngesting, setGraphIngesting] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackType, setFeedbackType] = useState("bug");
   const [feedbackMessage, setFeedbackMessage] = useState("");
@@ -85,6 +88,32 @@ export default function AgentsPage() {
       setNeo4jPersons(personsRes.data.persons || []);
     } catch (error) {
       // Neo4j data is optional, silent fail
+    }
+  };
+
+  const handleGraphIngest = async () => {
+    if (!graphIngestText.trim() || !graphIngestSource.trim()) return;
+    setGraphIngesting(true);
+    try {
+      const res = await api.post('/api/graph/ingest', {
+        text: graphIngestText,
+        source_name: graphIngestSource,
+        source_type: 'document',
+      });
+      const data = res.data;
+      if (data.nodes_created === 0 && data.relations_created === 0) {
+        toast(t('agents:form.neo4j.ingestEmpty'), { icon: '🔍' });
+      } else {
+        toast.success(`${data.nodes_created} noeuds, ${data.relations_created} relations — ${t('agents:form.neo4j.ingestSuccess')}`);
+      }
+      setGraphIngestText("");
+      setGraphIngestSource("");
+      // Refresh person list after ingestion
+      loadNeo4jData();
+    } catch (error) {
+      toast.error(t('agents:form.neo4j.ingestError'));
+    } finally {
+      setGraphIngesting(false);
     }
   };
 
@@ -347,6 +376,42 @@ export default function AgentsPage() {
                           <option value={1}>{t('agents:form.neo4j.depth1')}</option>
                           <option value={2}>{t('agents:form.neo4j.depth2')}</option>
                         </select>
+                      </div>
+                      {/* Graph Ingest Section */}
+                      <div className="pt-3 mt-3 border-t border-teal-200">
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">{t('agents:form.neo4j.ingestLabel')}</label>
+                        <input
+                          type="text"
+                          placeholder={t('agents:form.neo4j.ingestSourcePlaceholder')}
+                          className="w-full px-3 py-2 mb-2 border border-teal-200 rounded-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition-all outline-none bg-white text-sm"
+                          value={graphIngestSource}
+                          onChange={e => setGraphIngestSource(e.target.value)}
+                        />
+                        <textarea
+                          placeholder={t('agents:form.neo4j.ingestPlaceholder')}
+                          className="w-full px-3 py-2 border border-teal-200 rounded-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition-all outline-none bg-white text-sm resize-y"
+                          rows={4}
+                          value={graphIngestText}
+                          onChange={e => setGraphIngestText(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          disabled={graphIngesting || !graphIngestText.trim() || !graphIngestSource.trim()}
+                          onClick={handleGraphIngest}
+                          className="mt-2 px-4 py-2 bg-teal-600 text-white rounded-button hover:bg-teal-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        >
+                          {graphIngesting ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                              {t('agents:form.neo4j.ingesting')}
+                            </>
+                          ) : (
+                            <>
+                              <Send className="w-4 h-4 mr-2" />
+                              {t('agents:form.neo4j.ingestButton')}
+                            </>
+                          )}
+                        </button>
                       </div>
                     </div>
                   )}
