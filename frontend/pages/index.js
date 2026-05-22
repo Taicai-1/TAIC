@@ -116,6 +116,8 @@ export default function CompanionSettings() {
   const [graphIngestText, setGraphIngestText] = useState("");
   const [graphIngestSource, setGraphIngestSource] = useState("");
   const [graphIngesting, setGraphIngesting] = useState(false);
+  const [graphFileUploading, setGraphFileUploading] = useState(false);
+  const graphFileInputRef = useRef(null);
 
   const AGENT_TYPES = useMemo(() => ({
     conversationnel: { ...AGENT_TYPES_CONFIG.conversationnel, name: t('agents:types.conversationnel.name'), description: t('agents:types.conversationnel.description') },
@@ -221,6 +223,38 @@ export default function CompanionSettings() {
       toast.error(`${t('agents:form.neo4j.ingestError')}${status ? ' (' + status + ')' : ''}${detail ? ': ' + detail : ''}`);
     } finally {
       setGraphIngesting(false);
+    }
+  };
+
+  const handleGraphFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setGraphFileUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (graphIngestSource.trim()) {
+        formData.append("source_name", graphIngestSource.trim());
+      }
+      const res = await api.post('/api/graph/ingest-file', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const data = res.data;
+      if (data.nodes_created === 0 && data.relations_created === 0) {
+        toast(t('agents:form.neo4j.ingestEmpty'), { icon: '\uD83D\uDD0D' });
+      } else {
+        toast.success(`${data.nodes_created} noeuds, ${data.relations_created} relations — ${t('agents:form.neo4j.ingestSuccess')}`);
+      }
+      setGraphIngestSource("");
+      loadNeo4jData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || '';
+      const status = error?.response?.status || '';
+      console.error('Graph file ingest error:', status, error?.response?.data, error);
+      toast.error(`${t('agents:form.neo4j.ingestError')}${status ? ' (' + status + ')' : ''}${detail ? ': ' + detail : ''}`);
+    } finally {
+      setGraphFileUploading(false);
+      if (graphFileInputRef.current) graphFileInputRef.current.value = "";
     }
   };
 
@@ -962,6 +996,38 @@ export default function CompanionSettings() {
                     </>
                   )}
                 </button>
+                {/* File upload separator */}
+                <div className="flex items-center gap-3 mt-4 mb-2">
+                  <div className="flex-1 border-t border-teal-200" />
+                  <span className="text-xs text-gray-400 uppercase font-medium">{t('agents:form.neo4j.ingestFileOr')}</span>
+                  <div className="flex-1 border-t border-teal-200" />
+                </div>
+                <input
+                  ref={graphFileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,.docx"
+                  className="hidden"
+                  onChange={handleGraphFileUpload}
+                />
+                <button
+                  type="button"
+                  disabled={graphFileUploading}
+                  onClick={() => graphFileInputRef.current?.click()}
+                  className="px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-300 rounded-button hover:bg-teal-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  {graphFileUploading ? (
+                    <>
+                      <Loader2 className="animate-spin w-4 h-4 mr-2" />
+                      {t('agents:form.neo4j.ingestFileUploading')}
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      {t('agents:form.neo4j.ingestFileButton')}
+                    </>
+                  )}
+                </button>
+                <p className="text-xs text-gray-400 mt-1">{t('agents:form.neo4j.ingestFileAccept')}</p>
               </div>
               </div>
             )}

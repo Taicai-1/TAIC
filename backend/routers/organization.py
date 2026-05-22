@@ -764,12 +764,24 @@ async def update_company_integrations(
     body = await request.json()
 
     # Neo4j
+    neo4j_changed = False
     if "neo4j_uri" in body:
         company.org_neo4j_uri = body["neo4j_uri"] or None
+        neo4j_changed = True
     if "neo4j_user" in body:
         company.org_neo4j_user = body["neo4j_user"] or None
+        neo4j_changed = True
     if "neo4j_password" in body:
         company.org_neo4j_password = body["neo4j_password"] or None
+        neo4j_changed = True
+    # Purge cached Neo4j driver so new credentials take effect immediately
+    if neo4j_changed:
+        try:
+            from neo4j_client import _org_drivers
+            _org_drivers.pop(membership.company_id, None)
+            logger.info(f"Neo4j driver cache purged for company {membership.company_id}")
+        except Exception:
+            pass
 
     # Notion
     if "notion_api_key" in body:

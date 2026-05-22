@@ -80,7 +80,11 @@
       "ingesting": "Extracting...",
       "ingestSuccess": "entities extracted and injected into the graph",
       "ingestError": "Error during ingestion",
-      "ingestEmpty": "No entities found in the text"
+      "ingestEmpty": "No entities found in the text",
+      "ingestFileOr": "or",
+      "ingestFileButton": "Upload a file",
+      "ingestFileUploading": "Uploading...",
+      "ingestFileAccept": "PDF, TXT, DOCX"
     },
     "photo": {
       "preview": "Preview"
