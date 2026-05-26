@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 # SMTP configuration — defaults to Brevo (France)
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_EMAIL = os.getenv("SMTP_EMAIL", "contact@taic.co")
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")  # SMTP login (Brevo account email)
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "contact@taic.co")  # Sender address
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "TAIC Companion")
 
 
@@ -45,7 +46,7 @@ def send_email(to: str, subject: str, html_body: str):
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_EMAIL}>"
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
     msg["To"] = to
 
     msg.attach(MIMEText(html_body, "html", "utf-8"))
@@ -366,8 +367,8 @@ def send_feedback_email(from_user_email: str, username: str, feedback_type: str,
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[TAIC Feedback] {type_label} - {username}"
-    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_EMAIL}>"
-    msg["To"] = SMTP_EMAIL
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    msg["To"] = SMTP_FROM_EMAIL
     msg["Reply-To"] = from_user_email
 
     msg.attach(MIMEText(html, "html", "utf-8"))
