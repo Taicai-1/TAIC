@@ -32,6 +32,22 @@ variable "db_password" {
   sensitive   = true
 }
 
+# -------------------------------------------------------------------
+# Cloud Storage buckets – EU location enforced for data sovereignty
+# -------------------------------------------------------------------
+resource "google_storage_bucket" "documents" {
+  name          = "applydi-documents"
+  location      = var.region
+  storage_class = "STANDARD"
+  force_destroy = false
+
+  uniform_bucket_level_access = true
+
+  versioning {
+    enabled = true
+  }
+}
+
 # Cloud SQL instance
 resource "google_sql_database_instance" "main" {
   name             = "rag-ceo-db"

@@ -358,6 +358,26 @@ async def startup_event():
         migrate_existing_company_memberships()
         logger.info("Database initialization completed successfully")
 
+        # Validate GCS bucket is in EU (data sovereignty check)
+        try:
+            bucket_name = os.getenv("GCS_BUCKET_NAME", "applydi-documents")
+            from google.cloud import storage as _gcs_storage
+
+            _gcs_client = _gcs_storage.Client()
+            _bucket = _gcs_client.get_bucket(bucket_name)
+            _loc = (_bucket.location or "").upper()
+            _eu_prefixes = ("EU", "EUROPE")
+            if not any(_loc.startswith(p) for p in _eu_prefixes):
+                logger.error(
+                    f"DATA SOVEREIGNTY VIOLATION: GCS bucket '{bucket_name}' "
+                    f"is located in {_loc}, expected EU region. "
+                    f"Migrate the bucket to europe-west1."
+                )
+            else:
+                logger.info(f"GCS bucket '{bucket_name}' location: {_loc} (EU compliant)")
+        except Exception as e:
+            logger.warning(f"Could not verify GCS bucket location: {e}")
+
         # Start internal recap scheduler
         try:
             from recap_scheduler import start_scheduler

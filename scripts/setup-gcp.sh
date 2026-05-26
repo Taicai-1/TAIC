@@ -104,9 +104,9 @@ create_database() {
 
 # Créer un bucket pour les fichiers
 create_storage() {
-    echo "📦 Création du bucket de stockage..."
-    gsutil mb gs://$PROJECT_ID-rag-storage || echo "Bucket existe déjà"
-    echo "✅ Bucket créé"
+    echo "📦 Création du bucket de stockage (EU - data sovereignty)..."
+    gsutil mb -l europe-west1 gs://$PROJECT_ID-documents || echo "Bucket existe déjà"
+    echo "✅ Bucket créé en europe-west1"
 }
 
 # Donner les permissions nécessaires
