@@ -1,6 +1,9 @@
 """
 Centralized email service for TAIC Companion.
-All outbound emails go through this module using contact@taic.co (Google Workspace).
+All outbound emails go through this module via SMTP relay.
+
+Default provider: Brevo (ex-Sendinblue) — French company, EU data residency.
+Override via SMTP_HOST / SMTP_PORT env vars for other providers.
 """
 
 import os
@@ -13,12 +16,26 @@ from email.mime.multipart import MIMEMultipart
 
 logger = logging.getLogger(__name__)
 
-# SMTP configuration
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+# SMTP configuration — defaults to Brevo (France)
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "contact@taic.co")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "TAIC Companion")
+
+
+def _smtp_connect():
+    """Create an authenticated SMTP connection.
+
+    Supports both STARTTLS (port 587, Brevo default) and SSL (port 465).
+    """
+    if SMTP_PORT == 465:
+        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+    else:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.starttls()
+    server.login(SMTP_EMAIL, SMTP_PASSWORD)
+    return server
 
 
 def send_email(to: str, subject: str, html_body: str):
@@ -33,8 +50,7 @@ def send_email(to: str, subject: str, html_body: str):
 
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
+    with _smtp_connect() as server:
         server.send_message(msg)
 
     logger.info(f"Email sent to {to}: {subject}")
@@ -356,8 +372,7 @@ def send_feedback_email(from_user_email: str, username: str, feedback_type: str,
 
     msg.attach(MIMEText(html, "html", "utf-8"))
 
-    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
+    with _smtp_connect() as server:
         server.send_message(msg)
 
     logger.info(f"Feedback email sent from {from_user_email}: {type_label}")

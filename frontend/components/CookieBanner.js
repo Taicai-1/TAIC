@@ -12,22 +12,6 @@ function setCookie(name, value, days) {
   document.cookie = `${name}=${value};expires=${expires};path=/;SameSite=Lax`
 }
 
-export function loadGA() {
-  const gaId = process.env.NEXT_PUBLIC_GA_ID
-  if (!gaId || window.__gaLoaded) return
-
-  const script = document.createElement('script')
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${gaId}`
-  script.async = true
-  document.head.appendChild(script)
-
-  window.dataLayer = window.dataLayer || []
-  window.gtag = function () { window.dataLayer.push(arguments) }
-  window.gtag('js', new Date())
-  window.gtag('config', gaId, { page_path: window.location.pathname })
-  window.__gaLoaded = true
-}
-
 export default function CookieBanner() {
   const { t } = useTranslation('common')
   const [visible, setVisible] = useState(false)
@@ -42,7 +26,6 @@ export default function CookieBanner() {
   const handleAccept = () => {
     setCookie('cookie_consent', 'accepted', 365)
     setVisible(false)
-    loadGA()
   }
 
   const handleRefuse = () => {

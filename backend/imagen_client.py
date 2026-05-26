@@ -29,7 +29,7 @@ def generate_image(prompt: str, aspect_ratio: str = "1:1") -> bytes:
         os.getenv("IMAGEN_LOCATION")
         or os.getenv("CLOUD_RUN_REGION")
         or os.getenv("GOOGLE_CLOUD_REGION")
-        or "us-central1"
+        or "europe-west1"
     )
 
     session = AuthorizedSession(credentials)
