@@ -97,6 +97,22 @@ export default function CompanionSettings() {
   const [savingSlack, setSavingSlack] = useState(false);
   const [testingSlack, setTestingSlack] = useState(false);
   const [sendingRecap, setSendingRecap] = useState(false);
+  const [recaps, setRecaps] = useState([]);
+  const [currentRecap, setCurrentRecap] = useState(null);
+  const [recapDocuments, setRecapDocuments] = useState([]);
+  const [recapForm, setRecapForm] = useState({
+    name: '',
+    enabled: true,
+    frequency: 'weekly',
+    hour: 9,
+    prompt: '',
+    recipients: [],
+  });
+  const [recapRecipientInputNew, setRecapRecipientInputNew] = useState('');
+  const [showRecapCreate, setShowRecapCreate] = useState(false);
+  const [loadingRecaps, setLoadingRecaps] = useState(false);
+  const [savingRecap, setSavingRecap] = useState(false);
+  const [sendingRecapId, setSendingRecapId] = useState(null);
 
   // Auto-save
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
@@ -317,6 +333,103 @@ export default function CompanionSettings() {
     } finally { setSendingRecap(false); }
   };
 
+  const loadRecaps = useCallback(async (agentId) => {
+    if (!agentId) return;
+    setLoadingRecaps(true);
+    try {
+      const res = await api.get(`/api/agents/${agentId}/recaps`);
+      setRecaps(res.data.recaps || []);
+    } catch (err) {
+      console.error('Failed to load recaps:', err);
+    } finally {
+      setLoadingRecaps(false);
+    }
+  }, []);
+
+  const loadRecapDocuments = useCallback(async (recapId) => {
+    try {
+      const res = await api.get(`/api/recaps/${recapId}/documents`);
+      setRecapDocuments(res.data.documents || []);
+    } catch (err) {
+      console.error('Failed to load recap documents:', err);
+    }
+  }, []);
+
+  const createRecap = async () => {
+    if (!currentAgent?.id || !recapForm.name.trim()) return;
+    setSavingRecap(true);
+    try {
+      const res = await api.post(`/api/agents/${currentAgent.id}/recaps`, {
+        name: recapForm.name,
+        enabled: recapForm.enabled,
+        frequency: recapForm.frequency,
+        hour: recapForm.hour,
+        prompt: recapForm.prompt || null,
+        recipients: recapForm.recipients.length > 0 ? recapForm.recipients : null,
+      });
+      setRecaps(prev => [...prev, res.data.recap]);
+      setShowRecapCreate(false);
+      setRecapForm({ name: '', enabled: true, frequency: 'weekly', hour: 9, prompt: '', recipients: [] });
+    } catch (err) {
+      console.error('Failed to create recap:', err);
+    } finally {
+      setSavingRecap(false);
+    }
+  };
+
+  const updateRecap = async (recapId, updates) => {
+    if (!currentAgent?.id) return;
+    try {
+      const res = await api.put(`/api/agents/${currentAgent.id}/recaps/${recapId}`, updates);
+      setRecaps(prev => prev.map(r => r.id === recapId ? res.data.recap : r));
+      if (currentRecap?.id === recapId) setCurrentRecap(res.data.recap);
+    } catch (err) {
+      console.error('Failed to update recap:', err);
+    }
+  };
+
+  const deleteRecap = async (recapId) => {
+    if (!currentAgent?.id) return;
+    try {
+      await api.delete(`/api/agents/${currentAgent.id}/recaps/${recapId}`);
+      setRecaps(prev => prev.filter(r => r.id !== recapId));
+      if (currentRecap?.id === recapId) {
+        setCurrentRecap(null);
+        setRecapDocuments([]);
+      }
+    } catch (err) {
+      console.error('Failed to delete recap:', err);
+    }
+  };
+
+  const toggleRecapDocument = async (recapId, documentId, included) => {
+    try {
+      await api.put(`/api/recaps/${recapId}/documents/${documentId}`, { included });
+      setRecapDocuments(prev =>
+        prev.map(d => d.document_id === documentId ? { ...d, included } : d)
+      );
+    } catch (err) {
+      console.error('Failed to toggle recap document:', err);
+    }
+  };
+
+  const sendRecapById = async (recapId) => {
+    setSendingRecapId(recapId);
+    try {
+      const res = await api.post(`/api/recaps/${recapId}/send`);
+      if (res.data.status === 'success') {
+        alert(`Recap envoyé à ${res.data.email}`);
+      } else if (res.data.status === 'no_data') {
+        alert('Aucune donnée pour cette période');
+      }
+    } catch (err) {
+      console.error('Failed to send recap:', err);
+      alert('Erreur lors de l\'envoi du recap');
+    } finally {
+      setSendingRecapId(null);
+    }
+  };
+
   useEffect(() => {
     if (!authenticated && !authLoading) {
       router.push("/login");
@@ -330,6 +443,7 @@ export default function CompanionSettings() {
       loadDriveLinks(urlAgentId);
       loadNeo4jData();
       loadSlackConfig(urlAgentId);
+      loadRecaps(urlAgentId);
     } else if (authenticated && router.isReady) {
       router.push("/agents");
     }
@@ -352,13 +466,6 @@ export default function CompanionSettings() {
       formData.append("neo4j_enabled", f.neo4j_enabled ? "true" : "false");
       if (f.neo4j_person_name) formData.append("neo4j_person_name", f.neo4j_person_name);
       formData.append("neo4j_depth", String(f.neo4j_depth || 1));
-      formData.append("weekly_recap_enabled", f.weekly_recap_enabled ? "true" : "false");
-      if (f.weekly_recap_prompt) formData.append("weekly_recap_prompt", f.weekly_recap_prompt);
-      if (f.weekly_recap_recipients && f.weekly_recap_recipients.length > 0) {
-        formData.append("weekly_recap_recipients", JSON.stringify(f.weekly_recap_recipients));
-      }
-      formData.append("recap_frequency", f.recap_frequency);
-      formData.append("recap_hour", String(f.recap_hour));
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -1195,141 +1302,290 @@ export default function CompanionSettings() {
             ))}
           </div>
 
-          {/* Weekly Recap */}
+          {/* Multi-Recap Section */}
           <div className="mt-6 p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-button border border-amber-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center">
-                  <Mail className="w-4 h-4 mr-2 text-amber-600" />
-                  {t('agents:form.weeklyRecap.label')}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">{t('agents:form.weeklyRecap.helpText')}</p>
-              </div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-gray-700 flex items-center">
+                <Mail className="w-4 h-4 mr-2 text-amber-600" />
+                Recaps
+              </p>
               <button
                 type="button"
-                className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border-2 flex-shrink-0 ml-4 ${form.weekly_recap_enabled ? 'bg-amber-500 border-amber-500' : 'bg-gray-200 border-gray-300'}`}
-                onClick={() => setForm(f => ({ ...f, weekly_recap_enabled: !f.weekly_recap_enabled }))}
+                onClick={() => setShowRecapCreate(true)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-sm transition-colors"
               >
-                <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.weekly_recap_enabled ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
+                <Plus className="w-3.5 h-3.5" /> Nouveau recap
               </button>
             </div>
-            {form.weekly_recap_enabled && (
-              <>
-                {/* Frequency + Hour selectors */}
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                      {t('agents:form.weeklyRecap.frequencyLabel')}
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
-                      value={form.recap_frequency}
-                      onChange={e => setForm(f => ({ ...f, recap_frequency: e.target.value }))}
-                    >
-                      {["daily", "weekly", "monthly"].map(freq => (
-                        <option key={freq} value={freq}>
-                          {t(`agents:form.weeklyRecap.frequencyOptions.${freq}`)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                      {t('agents:form.weeklyRecap.hourLabel')}
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
-                      value={form.recap_hour}
-                      onChange={e => setForm(f => ({ ...f, recap_hour: parseInt(e.target.value, 10) }))}
-                    >
-                      {Array.from({ length: 24 }, (_, i) => (
-                        <option key={i} value={i}>{i}{t('agents:form.weeklyRecap.hourSuffix')}</option>
-                      ))}
-                    </select>
-                  </div>
+
+            {/* Create Form */}
+            {showRecapCreate && (
+              <div className="mb-3 p-3 bg-white rounded-sm border border-amber-200">
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-amber-200 rounded-sm text-sm mb-2"
+                  placeholder="Nom du recap..."
+                  value={recapForm.name}
+                  onChange={e => setRecapForm(f => ({ ...f, name: e.target.value }))}
+                />
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <select
+                    className="px-3 py-2 border border-amber-200 rounded-sm text-sm bg-white"
+                    value={recapForm.frequency}
+                    onChange={e => setRecapForm(f => ({ ...f, frequency: e.target.value }))}
+                  >
+                    {["daily", "weekly", "monthly"].map(freq => (
+                      <option key={freq} value={freq}>
+                        {t(`agents:form.weeklyRecap.frequencyOptions.${freq}`)}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="px-3 py-2 border border-amber-200 rounded-sm text-sm bg-white"
+                    value={recapForm.hour}
+                    onChange={e => setRecapForm(f => ({ ...f, hour: parseInt(e.target.value, 10) }))}
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>{i}h</option>
+                    ))}
+                  </select>
                 </div>
-                <div className="mt-3">
-                  <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                    {t('agents:form.weeklyRecap.promptLabel')}
-                  </label>
-                  <textarea
-                    className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm resize-y"
-                    rows={4}
-                    placeholder={t('agents:form.weeklyRecap.promptPlaceholder')}
-                    value={form.weekly_recap_prompt}
-                    onChange={e => setForm(f => ({ ...f, weekly_recap_prompt: e.target.value }))}
-                  />
-                  <p className="text-xs text-gray-400 mt-1">{t('agents:form.weeklyRecap.promptHelpText')}</p>
-                </div>
-                {/* Recipients */}
-                <div className="mt-3">
-                  <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                    <Users className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                    {t('agents:form.weeklyRecap.recipientsLabel')}
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      className="flex-1 px-3 py-1.5 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
-                      placeholder={t('agents:form.weeklyRecap.recipientsPlaceholder')}
-                      value={recapRecipientInput}
-                      onChange={e => setRecapRecipientInput(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const email = recapRecipientInput.trim();
-                          if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !form.weekly_recap_recipients.includes(email)) {
-                            setForm(f => ({ ...f, weekly_recap_recipients: [...f.weekly_recap_recipients, email] }));
-                            setRecapRecipientInput("");
-                          }
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const email = recapRecipientInput.trim();
-                        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !form.weekly_recap_recipients.includes(email)) {
-                          setForm(f => ({ ...f, weekly_recap_recipients: [...f.weekly_recap_recipients, email] }));
-                          setRecapRecipientInput("");
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-sm transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">{t('agents:form.weeklyRecap.recipientsHelpText')}</p>
-                  {form.weekly_recap_recipients.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {form.weekly_recap_recipients.map((email, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full">
-                          <Mail className="w-3 h-3" />
-                          {email}
-                          <button
-                            type="button"
-                            onClick={() => setForm(f => ({ ...f, weekly_recap_recipients: f.weekly_recap_recipients.filter((_, idx) => idx !== i) }))}
-                            className="ml-0.5 hover:text-red-600 transition-colors"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {currentAgent && (
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={sendRecapNow}
-                    disabled={sendingRecap}
-                    className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-sm transition-colors"
+                    onClick={createRecap}
+                    disabled={savingRecap || !recapForm.name.trim()}
+                    className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm rounded-sm transition-colors"
                   >
-                    {sendingRecap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    {sendingRecap ? t('agents:buttons.sendingRecap') : t('agents:buttons.sendRecapNow')}
+                    {savingRecap ? 'Création...' : 'Créer'}
                   </button>
-                )}
-              </>
+                  <button
+                    type="button"
+                    onClick={() => { setShowRecapCreate(false); setRecapForm({ name: '', enabled: true, frequency: 'weekly', hour: 9, prompt: '', recipients: [] }); }}
+                    className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-sm transition-colors"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Recap List */}
+            {loadingRecaps ? (
+              <p className="text-xs text-gray-400 text-center py-4">Chargement...</p>
+            ) : recaps.length === 0 && !showRecapCreate ? (
+              <p className="text-xs text-gray-400 text-center py-4">Aucun recap configuré</p>
+            ) : (
+              <div className="space-y-2">
+                {recaps.map(recap => (
+                  <div key={recap.id} className="bg-white rounded-sm border border-amber-100 overflow-hidden">
+                    {/* Recap Header */}
+                    <div
+                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-amber-50 transition-colors"
+                      onClick={() => {
+                        if (currentRecap?.id === recap.id) {
+                          setCurrentRecap(null);
+                          setRecapDocuments([]);
+                        } else {
+                          setCurrentRecap(recap);
+                          loadRecapDocuments(recap.id);
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${recap.enabled ? 'bg-green-400' : 'bg-gray-300'}`} />
+                        <span className="text-sm font-medium text-gray-700">{recap.name}</span>
+                        <span className="text-xs text-gray-400">
+                          {recap.frequency === 'daily' ? 'Quotidien' : recap.frequency === 'weekly' ? 'Hebdo' : 'Mensuel'} - {recap.hour}h
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">{recap.document_count} docs</span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${currentRecap?.id === recap.id ? 'rotate-180' : ''}`} />
+                      </div>
+                    </div>
+
+                    {/* Recap Detail (expanded) */}
+                    {currentRecap?.id === recap.id && (
+                      <div className="border-t border-amber-100 p-3 space-y-3">
+                        {/* Toggle enabled */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-gray-600">Activé</span>
+                          <button
+                            type="button"
+                            className={`w-12 h-6 flex items-center rounded-full px-0.5 transition-colors ${recap.enabled ? 'bg-amber-500' : 'bg-gray-200'}`}
+                            onClick={() => updateRecap(recap.id, { enabled: !recap.enabled })}
+                          >
+                            <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${recap.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                          </button>
+                        </div>
+
+                        {/* Name */}
+                        <div>
+                          <label className="text-xs font-semibold text-gray-600 mb-1 block">Nom</label>
+                          <input
+                            type="text"
+                            className="w-full px-3 py-1.5 border border-amber-200 rounded-sm text-sm"
+                            defaultValue={recap.name}
+                            onBlur={e => {
+                              if (e.target.value.trim() && e.target.value !== recap.name) {
+                                updateRecap(recap.id, { name: e.target.value.trim() });
+                              }
+                            }}
+                          />
+                        </div>
+
+                        {/* Frequency + Hour */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs font-semibold text-gray-600 mb-1 block">Fréquence</label>
+                            <select
+                              className="w-full px-3 py-1.5 border border-amber-200 rounded-sm text-sm bg-white"
+                              value={recap.frequency}
+                              onChange={e => updateRecap(recap.id, { frequency: e.target.value })}
+                            >
+                              {["daily", "weekly", "monthly"].map(freq => (
+                                <option key={freq} value={freq}>
+                                  {t(`agents:form.weeklyRecap.frequencyOptions.${freq}`)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-gray-600 mb-1 block">Heure</label>
+                            <select
+                              className="w-full px-3 py-1.5 border border-amber-200 rounded-sm text-sm bg-white"
+                              value={recap.hour}
+                              onChange={e => updateRecap(recap.id, { hour: parseInt(e.target.value, 10) })}
+                            >
+                              {Array.from({ length: 24 }, (_, i) => (
+                                <option key={i} value={i}>{i}h</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Custom Prompt */}
+                        <div>
+                          <label className="text-xs font-semibold text-gray-600 mb-1 block">Prompt personnalisé</label>
+                          <textarea
+                            className="w-full px-3 py-1.5 border border-amber-200 rounded-sm text-sm resize-y"
+                            rows={3}
+                            placeholder="Personnalisez le contenu du recap..."
+                            defaultValue={recap.prompt || ''}
+                            onBlur={e => {
+                              const val = e.target.value.trim();
+                              if (val !== (recap.prompt || '')) {
+                                updateRecap(recap.id, { prompt: val || null });
+                              }
+                            }}
+                          />
+                        </div>
+
+                        {/* Recipients */}
+                        <div>
+                          <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                            <Users className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                            Destinataires supplémentaires
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="email"
+                              className="flex-1 px-3 py-1.5 border border-amber-200 rounded-sm text-sm"
+                              placeholder="email@exemple.com"
+                              value={recapRecipientInputNew}
+                              onChange={e => setRecapRecipientInputNew(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const email = recapRecipientInputNew.trim();
+                                  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !(recap.recipients || []).includes(email)) {
+                                    updateRecap(recap.id, { recipients: [...(recap.recipients || []), email] });
+                                    setRecapRecipientInputNew('');
+                                  }
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const email = recapRecipientInputNew.trim();
+                                if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !(recap.recipients || []).includes(email)) {
+                                  updateRecap(recap.id, { recipients: [...(recap.recipients || []), email] });
+                                  setRecapRecipientInputNew('');
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-sm"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {(recap.recipients || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {(recap.recipients || []).map((email, i) => (
+                                <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full">
+                                  <Mail className="w-3 h-3" />
+                                  {email}
+                                  <button
+                                    type="button"
+                                    onClick={() => updateRecap(recap.id, { recipients: recap.recipients.filter((_, idx) => idx !== i) })}
+                                    className="ml-0.5 hover:text-red-600"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Documents */}
+                        <div>
+                          <label className="text-xs font-semibold text-gray-600 mb-1 block">Documents</label>
+                          {recapDocuments.length === 0 ? (
+                            <p className="text-xs text-gray-400">Aucun document de traçabilité</p>
+                          ) : (
+                            <div className="max-h-48 overflow-y-auto space-y-1">
+                              {recapDocuments.map(doc => (
+                                <div key={doc.document_id} className="flex items-center justify-between p-2 bg-gray-50 rounded-sm">
+                                  <span className="text-xs text-gray-700 truncate flex-1 mr-2">{doc.filename}</span>
+                                  <button
+                                    type="button"
+                                    className={`w-10 h-5 flex items-center rounded-full px-0.5 transition-colors ${doc.included ? 'bg-amber-500' : 'bg-gray-200'}`}
+                                    onClick={() => toggleRecapDocument(recap.id, doc.document_id, !doc.included)}
+                                  >
+                                    <span className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${doc.included ? 'translate-x-5' : 'translate-x-0'}`} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-2 border-t border-amber-100">
+                          <button
+                            type="button"
+                            onClick={() => sendRecapById(recap.id)}
+                            disabled={sendingRecapId === recap.id}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-sm transition-colors"
+                          >
+                            {sendingRecapId === recap.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                            {sendingRecapId === recap.id ? 'Envoi...' : 'Envoyer maintenant'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { if (confirm('Supprimer ce recap ?')) deleteRecap(recap.id); }}
+                            className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-600 text-sm font-medium rounded-sm transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </Section>
