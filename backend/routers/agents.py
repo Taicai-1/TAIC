@@ -602,18 +602,33 @@ async def trigger_weekly_recap(request: Request, db: Session = Depends(get_db)):
     if not api_key or not hmac.compare_digest(api_key, expected_key):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    from weekly_recap import process_agent_recap
-    from recap_scheduler import _is_due, PARIS_TZ
+    from weekly_recap import process_agent_recap, process_recap
+    from recap_scheduler import _is_due, _is_recap_due, PARIS_TZ
     from sqlalchemy import text
 
-    # Bypass RLS — this endpoint has no user context, only API key auth
     db.execute(text("SET LOCAL app.service_bypass = 'true'"))
 
     now = datetime.now(PARIS_TZ)
-    agents = db.query(Agent).filter(Agent.weekly_recap_enabled == True).all()
+
+    # Process new Recap entities
+    from database import Recap
+    recaps = db.query(Recap).filter(Recap.enabled == True).all()
     results = []
     skipped = 0
+    for recap in recaps:
+        if not _is_recap_due(recap, now, db):
+            skipped += 1
+            continue
+        result = process_recap(recap, db)
+        results.append({"recap_id": recap.id, "recap_name": recap.name, **result})
+
+    # Legacy agents without Recap entities
+    agents = db.query(Agent).filter(Agent.weekly_recap_enabled == True).all()
     for agent in agents:
+        has_recaps = db.query(Recap).filter(Recap.agent_id == agent.id).count() > 0
+        if has_recaps:
+            skipped += 1
+            continue
         if not _is_due(agent, now, db):
             skipped += 1
             continue
@@ -629,6 +644,13 @@ async def recap_preview(agent_id: int, user_id: str = Depends(verify_token), db:
     agent = db.query(Agent).filter(Agent.id == agent_id, Agent.user_id == int(user_id)).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Redirect to first Recap entity if one exists
+    from database import Recap
+    first_recap = db.query(Recap).filter(Recap.agent_id == agent_id).order_by(Recap.created_at.asc()).first()
+    if first_recap:
+        from routers.recaps import recap_preview as _recap_preview
+        return await _recap_preview(first_recap.id, user_id, db)
 
     from weekly_recap import (
         fetch_weekly_messages,
@@ -670,6 +692,14 @@ async def recap_send(agent_id: int, user_id: str = Depends(verify_token), db: Se
     agent = db.query(Agent).filter(Agent.id == agent_id, Agent.user_id == int(user_id)).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Redirect to first Recap entity if one exists
+    from database import Recap
+    first_recap = db.query(Recap).filter(Recap.agent_id == agent_id).order_by(Recap.created_at.asc()).first()
+    if first_recap:
+        from routers.recaps import recap_send as _recap_send
+        return await _recap_send(first_recap.id, user_id, db)
+
     if not agent.weekly_recap_enabled:
         raise HTTPException(status_code=400, detail="Weekly recap is not enabled for this agent")
 
