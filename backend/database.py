@@ -485,6 +485,7 @@ class WeeklyRecapLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
+    recap_id = Column(Integer, ForeignKey("recaps.id"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     status = Column(String(20), nullable=False)  # 'success', 'error', 'no_data'
@@ -494,6 +495,40 @@ class WeeklyRecapLog(Base):
 
     agent = relationship("Agent")
     user = relationship("User")
+    recap = relationship("Recap")
+
+
+class Recap(Base):
+    __tablename__ = "recaps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    name = Column(String(100), nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)
+    frequency = Column(String(20), default="weekly", nullable=False)
+    hour = Column(Integer, default=9, nullable=False)
+    prompt = Column(Text, nullable=True)
+    recipients = Column(Text, nullable=True)  # JSON array of email addresses
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    agent = relationship("Agent")
+    recap_documents = relationship("RecapDocument", back_populates="recap", cascade="all, delete-orphan")
+
+
+class RecapDocument(Base):
+    __tablename__ = "recap_documents"
+    __table_args__ = (UniqueConstraint("recap_id", "document_id", name="uq_recap_document"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    recap_id = Column(Integer, ForeignKey("recaps.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    included = Column(Boolean, default=True, nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+
+    recap = relationship("Recap", back_populates="recap_documents")
+    document = relationship("Document")
 
 
 class RoutineReport(Base):
@@ -655,6 +690,7 @@ def ensure_columns():
         ("messages", "company_id", "INTEGER REFERENCES companies(id)"),
         ("notion_links", "company_id", "INTEGER REFERENCES companies(id)"),
         ("weekly_recap_logs", "company_id", "INTEGER REFERENCES companies(id)"),
+        ("weekly_recap_logs", "recap_id", "INTEGER REFERENCES recaps(id)"),
     ]
     try:
         with engine.connect() as conn:
@@ -699,6 +735,8 @@ def ensure_rls_policies():
         "messages",
         "notion_links",
         "weekly_recap_logs",
+        "recaps",
+        "recap_documents",
     ]
     try:
         with engine.connect() as conn:
