@@ -69,6 +69,24 @@ def fetch_traceability_documents(agent_id: int, db: Session, days_back: int = 7)
     return [{"filename": d.filename, "content": (d.content or "")[:10000]} for d in docs]
 
 
+def fetch_recap_traceability_documents(recap_id: int, db: Session, days_back: int = 7) -> list[dict]:
+    """Fetch traceability documents for a specific recap, filtered by RecapDocument inclusion."""
+    from database import RecapDocument
+    cutoff = datetime.utcnow() - timedelta(days=days_back)
+    docs = (
+        db.query(Document)
+        .join(RecapDocument, RecapDocument.document_id == Document.id)
+        .filter(
+            RecapDocument.recap_id == recap_id,
+            RecapDocument.included == True,
+            Document.document_type == "traceability",
+            Document.created_at >= cutoff,
+        )
+        .all()
+    )
+    return [{"filename": d.filename, "content": (d.content or "")[:10000]} for d in docs]
+
+
 def fetch_notion_content(agent_id: int, db: Session) -> list[dict]:
     """Fetch live content from all Notion links attached to the agent."""
     links = db.query(NotionLink).filter(NotionLink.agent_id == agent_id).all()
@@ -125,6 +143,7 @@ def build_recap_prompt(
     docs: list[dict],
     notion_pages: list[dict] | None = None,
     frequency: str = "weekly",
+    custom_prompt: str | None = None,
 ) -> list[dict]:
     """Build the structured prompt for the LLM to generate the recap."""
     labels = FREQUENCY_LABELS.get(frequency, FREQUENCY_LABELS["weekly"])
@@ -148,7 +167,7 @@ def build_recap_prompt(
 
     agent_name = agent.name or "Agent"
     agent_context = agent.contexte or ""
-    custom_prompt = getattr(agent, "weekly_recap_prompt", None)
+    custom_prompt = custom_prompt or getattr(agent, "weekly_recap_prompt", None)
 
     if custom_prompt and custom_prompt.strip():
         system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
@@ -289,4 +308,100 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
         except Exception:
             db.rollback()
 
+        return {"status": "error", "error": str(e)}
+
+
+def process_recap(recap, db: Session) -> dict:
+    """Full pipeline for a single Recap entity: fetch data -> LLM -> email -> log."""
+    from database import Recap, User, WeeklyRecapLog
+    agent = db.query(Agent).filter(Agent.id == recap.agent_id).first()
+    if not agent:
+        return {"status": "error", "error": "Agent not found"}
+
+    user = db.query(User).filter(User.id == agent.user_id).first()
+    if not user:
+        return {"status": "error", "error": "User not found"}
+
+    try:
+        days_back = FREQUENCY_DAYS.get(recap.frequency, 7)
+        messages = fetch_weekly_messages(agent.id, db, days_back=days_back)
+        docs = fetch_recap_traceability_documents(recap.id, db, days_back=days_back)
+        notion_pages = fetch_notion_content(agent.id, db)
+
+        if not messages and not docs and not notion_pages:
+            log = WeeklyRecapLog(
+                agent_id=agent.id,
+                recap_id=recap.id,
+                user_id=user.id,
+                company_id=agent.company_id,
+                status="no_data",
+                recap_content=None,
+            )
+            db.add(log)
+            db.commit()
+            return {"status": "no_data", "message": "No data for this period"}
+
+        prompt_messages = build_recap_prompt(
+            agent, messages, docs, notion_pages,
+            frequency=recap.frequency, custom_prompt=recap.prompt,
+        )
+        model_id = get_model_id_for_agent(agent)
+        recap_content = get_chat_response(prompt_messages, model_id=model_id)
+
+        html = generate_recap_html(agent.name, recap_content, recap_name=recap.name)
+
+        # Build recipient list
+        recipients = [user.email]
+        if recap.recipients:
+            try:
+                import json
+                extra = json.loads(recap.recipients)
+                if isinstance(extra, list):
+                    recipients.extend(e.strip() for e in extra if e.strip() and e.strip() != user.email)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        seen = set()
+        unique_recipients = []
+        for r in recipients:
+            if r not in seen:
+                seen.add(r)
+                unique_recipients.append(r)
+
+        send_recap_email(unique_recipients, agent.name, html, recap_name=recap.name)
+
+        log = WeeklyRecapLog(
+            agent_id=agent.id,
+            recap_id=recap.id,
+            user_id=user.id,
+            company_id=agent.company_id,
+            status="success",
+            recap_content=recap_content,
+        )
+        db.add(log)
+        db.commit()
+
+        return {
+            "status": "success",
+            "agent_name": agent.name,
+            "recap_name": recap.name,
+            "email": ", ".join(unique_recipients),
+            "message_count": len(messages),
+            "doc_count": len(docs),
+        }
+
+    except Exception as e:
+        logger.error(f"Recap failed for recap {recap.id}: {e}")
+        try:
+            log = WeeklyRecapLog(
+                agent_id=agent.id,
+                recap_id=recap.id,
+                user_id=user.id,
+                company_id=agent.company_id,
+                status="error",
+                error_message=str(e)[:500],
+            )
+            db.add(log)
+            db.commit()
+        except Exception:
+            db.rollback()
         return {"status": "error", "error": str(e)}
