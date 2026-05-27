@@ -421,6 +421,20 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
                 db.add(trace_doc)
                 db.commit()
 
+                # Associate traceability doc with all existing recaps for this agent
+                from database import Recap, RecapDocument
+                agent_recaps = db.query(Recap).filter(Recap.agent_id == agent.id).all()
+                for recap in agent_recaps:
+                    rd = RecapDocument(
+                        recap_id=recap.id,
+                        document_id=trace_doc.id,
+                        included=True,
+                        company_id=agent.company_id,
+                    )
+                    db.add(rd)
+                if agent_recaps:
+                    db.commit()
+
         logger.info(f"Email ingested successfully to {len(document_ids)} agents: {payload.title}")
 
         return {
