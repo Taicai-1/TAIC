@@ -12,7 +12,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 import pytz
 
 from sqlalchemy import text
-from database import SessionLocal, Agent, WeeklyRecapLog
+from database import SessionLocal, Agent, Recap, WeeklyRecapLog
 
 logger = logging.getLogger(__name__)
 
@@ -58,30 +58,84 @@ def _is_due(agent: Agent, now: datetime, db) -> bool:
     return True
 
 
+def _is_recap_due(recap: Recap, now: datetime, db) -> bool:
+    """Check if a Recap entity is due for sending right now."""
+    freq = recap.frequency or "weekly"
+    hour = recap.hour if recap.hour is not None else 9
+    current_hour = now.hour
+
+    if freq in ("daily", "weekly", "monthly"):
+        if current_hour != hour:
+            return False
+    else:
+        return False
+
+    if freq == "weekly" and now.weekday() != 0:
+        return False
+
+    if freq == "monthly" and now.day != 1:
+        return False
+
+    last_log = (
+        db.query(WeeklyRecapLog)
+        .filter(
+            WeeklyRecapLog.recap_id == recap.id,
+            WeeklyRecapLog.status.in_(["success", "no_data"]),
+        )
+        .order_by(WeeklyRecapLog.sent_at.desc())
+        .first()
+    )
+
+    if last_log and last_log.sent_at:
+        min_gap = {"daily": timedelta(hours=23), "weekly": timedelta(days=6), "monthly": timedelta(days=27)}
+        if now.replace(tzinfo=None) - last_log.sent_at < min_gap.get(freq, timedelta(days=6)):
+            return False
+
+    return True
+
+
 def _run_scheduled_recaps():
-    """Hourly tick: find and process all due recaps."""
+    """Hourly tick: find and process all due recaps (both legacy agent-level and new Recap entities)."""
     logger.info("Recap scheduler tick starting")
     now = datetime.now(PARIS_TZ)
     db = SessionLocal()
 
     try:
-        # Bypass RLS — scheduler has no user context
         db.execute(text("SET LOCAL app.service_bypass = 'true'"))
-        agents = db.query(Agent).filter(Agent.weekly_recap_enabled == True).all()
-        due_count = 0
 
+        # Process new Recap entities
+        recaps = db.query(Recap).filter(Recap.enabled == True).all()
+        recap_due_count = 0
+
+        for recap in recaps:
+            if _is_recap_due(recap, now, db):
+                recap_due_count += 1
+                try:
+                    from weekly_recap import process_recap
+                    result = process_recap(recap, db)
+                    logger.info(f"Recap {recap.id} ({recap.name}): {result.get('status')}")
+                except Exception as e:
+                    logger.error(f"Recap failed for recap {recap.id}: {e}")
+
+        # Legacy: still process agents with weekly_recap_enabled that have NO Recap entities
+        agents = db.query(Agent).filter(Agent.weekly_recap_enabled == True).all()
+        legacy_due_count = 0
         for agent in agents:
+            has_recaps = db.query(Recap).filter(Recap.agent_id == agent.id).count() > 0
+            if has_recaps:
+                continue  # Skip — handled by Recap entities above
             if _is_due(agent, now, db):
-                due_count += 1
+                legacy_due_count += 1
                 try:
                     from weekly_recap import process_agent_recap
-
                     result = process_agent_recap(agent, db)
-                    logger.info(f"Recap for agent {agent.id} ({agent.name}): {result.get('status')}")
+                    logger.info(f"Legacy recap for agent {agent.id} ({agent.name}): {result.get('status')}")
                 except Exception as e:
-                    logger.error(f"Recap failed for agent {agent.id}: {e}")
+                    logger.error(f"Legacy recap failed for agent {agent.id}: {e}")
 
-        logger.info(f"Recap scheduler tick done: {due_count} agents processed out of {len(agents)} enabled")
+        logger.info(
+            f"Recap scheduler tick done: {recap_due_count} recaps + {legacy_due_count} legacy agents processed"
+        )
     except Exception as e:
         logger.error(f"Recap scheduler tick failed: {e}")
     finally:
