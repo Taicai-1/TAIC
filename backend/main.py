@@ -34,6 +34,7 @@ from database import (
     ensure_pgvector,
     ensure_rls_policies,
     migrate_existing_company_memberships,
+    migrate_existing_recaps,
     set_current_company_id,
 )
 
@@ -356,6 +357,7 @@ async def startup_event():
         alembic_command.upgrade(alembic_cfg, "head")
         logger.info("Alembic migrations applied successfully")
         migrate_existing_company_memberships()
+        migrate_existing_recaps()
         logger.info("Database initialization completed successfully")
 
         # Validate GCS bucket is in EU (data sovereignty check)

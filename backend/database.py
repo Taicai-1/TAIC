@@ -850,6 +850,56 @@ def migrate_existing_company_memberships():
         logger.error(f"migrate_existing_company_memberships failed: {e}")
 
 
+def migrate_existing_recaps():
+    """Create Recap entities for agents that have weekly_recap_enabled=True but no Recap entities yet."""
+    try:
+        db = SessionLocal()
+        agents = db.query(Agent).filter(Agent.weekly_recap_enabled == True).all()
+        migrated = 0
+
+        for agent in agents:
+            existing = db.query(Recap).filter(Recap.agent_id == agent.id).count()
+            if existing > 0:
+                continue
+
+            recap = Recap(
+                agent_id=agent.id,
+                company_id=agent.company_id,
+                name="Recap principal",
+                enabled=True,
+                frequency=agent.recap_frequency or "weekly",
+                hour=agent.recap_hour if agent.recap_hour is not None else 9,
+                prompt=agent.weekly_recap_prompt,
+                recipients=agent.weekly_recap_recipients,
+            )
+            db.add(recap)
+            db.commit()
+            db.refresh(recap)
+
+            # Associate all existing traceability docs
+            trace_docs = (
+                db.query(Document)
+                .filter(Document.agent_id == agent.id, Document.document_type == "traceability")
+                .all()
+            )
+            for doc in trace_docs:
+                rd = RecapDocument(
+                    recap_id=recap.id,
+                    document_id=doc.id,
+                    included=True,
+                    company_id=agent.company_id,
+                )
+                db.add(rd)
+
+            db.commit()
+            migrated += 1
+
+        logger.info(f"migrate_existing_recaps: migrated {migrated} agents")
+        db.close()
+    except Exception as e:
+        logger.error(f"migrate_existing_recaps failed: {e}")
+
+
 def test_connection():
     """Test database connection"""
     try:
