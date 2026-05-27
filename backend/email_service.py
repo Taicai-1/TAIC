@@ -213,14 +213,15 @@ def _strip_markdown_fences(text: str) -> str:
     return cleaned.strip()
 
 
-def generate_recap_html(agent_name: str, recap_content: str) -> str:
+def generate_recap_html(agent_name: str, recap_content: str, recap_name: str | None = None) -> str:
     """Wrap LLM-generated recap content in the branded TAIC email template."""
     now = datetime.utcnow().strftime("%d/%m/%Y")
     recap_content = _strip_markdown_fences(recap_content)
 
+    display_name = f"{recap_name} - {agent_name}" if recap_name else agent_name
     content = f"""
 <p style="color:#6b7280; font-size:14px; margin:0 0 20px 0; text-align:center;">
-  {agent_name} &mdash; Semaine du {now}
+  {display_name} &mdash; Semaine du {now}
 </p>
 {recap_content}
 <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;">
@@ -228,12 +229,12 @@ def generate_recap_html(agent_name: str, recap_content: str) -> str:
   G&eacute;n&eacute;r&eacute; automatiquement par TAIC Companion
 </p>"""
 
-    return _wrap_template(content, preheader=f"Recap hebdomadaire - {agent_name}")
+    return _wrap_template(content, preheader=f"Recap - {display_name}")
 
 
-def send_recap_email(to_email: str | list[str], agent_name: str, html: str):
+def send_recap_email(to_email: str | list[str], agent_name: str, html: str, recap_name: str | None = None):
     """Send the weekly recap email to one or more recipients."""
-    subject = f"Recap Hebdomadaire - {agent_name}"
+    subject = f"Recap {recap_name} - {agent_name}" if recap_name else f"Recap Hebdomadaire - {agent_name}"
     recipients = to_email if isinstance(to_email, list) else [to_email]
     for recipient in recipients:
         send_email(recipient, subject, html)
