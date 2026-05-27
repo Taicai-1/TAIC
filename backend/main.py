@@ -491,6 +491,7 @@ from routers.user import router as user_router  # noqa: E402
 from routers.monitoring import router as monitoring_router  # noqa: E402
 from routers.routines import router as routines_router  # noqa: E402
 from routers.graph import router as graph_router  # noqa: E402
+from routers.recaps import router as recaps_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(ask_router)
@@ -506,3 +507,4 @@ app.include_router(user_router)
 app.include_router(monitoring_router)
 app.include_router(routines_router)
 app.include_router(graph_router)
+app.include_router(recaps_router)
