@@ -1,9 +1,5 @@
 /** @type {import('next').NextConfig} */
 
-// Build connect-src from NEXT_PUBLIC_API_URL instead of wildcard *.run.app
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-const connectSrcExtra = apiUrl ? apiUrl.replace(/\/+$/, '') : '';
-
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
@@ -18,6 +14,17 @@ const nextConfig = {
   i18n: {
     locales: ['fr', 'en'],
     defaultLocale: 'fr',
+  },
+
+  // Proxy API requests through the frontend domain for first-party cookies
+  async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    return [
+      {
+        source: '/_api/:path*',
+        destination: `${backendUrl}/:path*`,
+      },
+    ];
   },
 
   // Security headers for all frontend pages
@@ -61,7 +68,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self'",
               "img-src 'self' blob: data: https:",
-              `connect-src 'self'${connectSrcExtra ? ' ' + connectSrcExtra : ''} https://accounts.google.com`,
+              `connect-src 'self' https://accounts.google.com`,
               "frame-src 'self' https://accounts.google.com",
               "frame-ancestors 'none'",
             ].join('; '),

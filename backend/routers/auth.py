@@ -169,7 +169,7 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
                 value=pre_2fa_token,
                 httponly=True,
                 secure=True,
-                samesite="none",
+                samesite="lax",
                 max_age=300,
                 path="/",
             )
@@ -187,7 +187,7 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
                 value=setup_token,
                 httponly=True,
                 secure=True,
-                samesite="none",
+                samesite="lax",
                 max_age=1800,
                 path="/",
             )
@@ -199,7 +199,7 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
 
         # Security: Set HttpOnly secure cookie to prevent XSS token theft
         response.set_cookie(
-            key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
+            key="token", value=access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/"
         )
 
         logger.info(f"User logged in: {user.username}")
@@ -379,7 +379,7 @@ async def google_oauth(req: GoogleOAuthRequest, request: Request, response: Resp
         access_token = create_access_token(data={"sub": str(db_user.id)})
 
         response.set_cookie(
-            key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
+            key="token", value=access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/"
         )
 
         logger.info(f"Google OAuth login: {email}")
@@ -514,7 +514,7 @@ async def confirm_2fa_setup(
     access_token = create_access_token(data={"sub": str(db_user.id)})
 
     response.set_cookie(
-        key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
+        key="token", value=access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/"
     )
     # Security: clear restricted setup cookie after successful setup
     response.delete_cookie(key="setup_token", path="/")
@@ -555,7 +555,7 @@ async def verify_2fa(body: TwoFactorVerifyRequest, request: Request, response: R
     access_token = create_access_token(data={"sub": str(db_user.id)})
 
     response.set_cookie(
-        key="token", value=access_token, httponly=True, secure=True, samesite="none", max_age=28800, path="/"
+        key="token", value=access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/"
     )
     # Security: clear restricted pre_2fa cookie after successful verification
     response.delete_cookie(key="pre_2fa_token", path="/")

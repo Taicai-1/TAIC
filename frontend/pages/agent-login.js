@@ -6,14 +6,7 @@ import { LogIn, Mail, Lock, Bot } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
-const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (typeof window !== "undefined" && window.location.hostname.includes("run.app")) {
-    return window.location.origin.replace("frontend", "backend");
-  }
-  return "http://localhost:8080";
-};
-const API_URL = getApiUrl();
+const API_URL = '/_api';
 
 export default function AgentLogin() {
   const { t } = useTranslation(['auth', 'errors']);

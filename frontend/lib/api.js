@@ -1,14 +1,6 @@
 import axios from 'axios';
 
-export const getApiUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined' && window.location.hostname.includes('run.app')) {
-    return window.location.origin.replace('frontend', 'backend');
-  }
-  return 'http://localhost:8080';
-};
+export const getApiUrl = () => '/_api';
 
 const api = axios.create({
   baseURL: getApiUrl(),

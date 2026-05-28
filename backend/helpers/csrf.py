@@ -85,7 +85,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 value=token,
                 httponly=True,  # Not readable by JS — that's fine, we use the header
                 secure=is_prod,
-                samesite="none" if is_prod else "lax",
+                samesite="lax",
                 max_age=28800,
                 path="/",
             )
