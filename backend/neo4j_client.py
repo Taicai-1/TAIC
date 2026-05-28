@@ -57,7 +57,9 @@ def _get_org_driver(company_id: int):
         user = company.org_neo4j_user or "neo4j"
         password = company.org_neo4j_password
 
-        logger.info(f"Neo4j credentials for company {company_id}: uri={'set' if uri else 'EMPTY'}, user={user}, password={'set' if password else 'EMPTY'}")
+        logger.info(
+            f"Neo4j credentials for company {company_id}: uri={'set' if uri else 'EMPTY'}, user={user}, password={'set' if password else 'EMPTY'}"
+        )
 
         if not uri or not password:
             logger.warning(f"Neo4j decrypted credentials incomplete for company {company_id}")
@@ -69,14 +71,18 @@ def _get_org_driver(company_id: int):
         try:
             driver.verify_connectivity()
         except Exception as conn_err:
-            logger.error(f"Neo4j verify_connectivity failed for company {company_id} at {uri}: {type(conn_err).__name__}: {conn_err}")
+            logger.error(
+                f"Neo4j verify_connectivity failed for company {company_id} at {uri}: {type(conn_err).__name__}: {conn_err}"
+            )
             # Skip verification and try to use the driver anyway
             logger.info(f"Proceeding without verify_connectivity for company {company_id}")
         _org_drivers[company_id] = driver
         logger.info(f"Org Neo4j driver initialized for company {company_id}")
         return driver
     except Exception as e:
-        logger.error(f"Failed to init org Neo4j driver for company {company_id}: {type(e).__name__}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to init org Neo4j driver for company {company_id}: {type(e).__name__}: {e}", exc_info=True
+        )
         return None
 
 

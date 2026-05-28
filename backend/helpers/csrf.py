@@ -55,7 +55,6 @@ def _is_exempt(path: str) -> bool:
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
-
     async def dispatch(self, request: Request, call_next):
         csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
 

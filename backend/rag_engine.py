@@ -27,6 +27,7 @@ def _sanitize_prompt_text(text: str) -> str:
         return text
     return SCRIPT_PATTERN.sub("", text)
 
+
 # In-memory fallback cache (used when Redis is unavailable)
 _answer_cache = {}
 
@@ -318,12 +319,12 @@ def get_answer(
                         # Keyword-based graph search using the user's question
                         from neo4j_client import get_graph_context_by_keyword_cached
 
-                        neo4j_context = get_graph_context_by_keyword_cached(
-                            owner.company_id, question, depth=1
-                        )
+                        neo4j_context = get_graph_context_by_keyword_cached(owner.company_id, question, depth=1)
                         if neo4j_context:
                             contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
-                            logger.info(f"Neo4j keyword context injected for agent {agent_id}, keyword='{question[:50]}'")
+                            logger.info(
+                                f"Neo4j keyword context injected for agent {agent_id}, keyword='{question[:50]}'"
+                            )
             except Exception as e:
                 logger.warning(f"Neo4j context retrieval failed (continuing without): {e}")
 
@@ -553,9 +554,7 @@ def get_answer_stream(
                     else:
                         from neo4j_client import get_graph_context_by_keyword_cached
 
-                        neo4j_context = get_graph_context_by_keyword_cached(
-                            owner.company_id, question, depth=1
-                        )
+                        neo4j_context = get_graph_context_by_keyword_cached(owner.company_id, question, depth=1)
                         if neo4j_context:
                             contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
             except Exception as e:

@@ -119,7 +119,13 @@ def _extract_single(text: str, model_name: str = "mistral-small-latest") -> Extr
 
         logger.info(f"Mistral extraction raw response ({len(raw)} chars): {raw[:300]}")
         result = _parse_extraction(raw)
-        total = len(result.personnes) + len(result.projets) + len(result.clients) + len(result.competences) + len(result.departements)
+        total = (
+            len(result.personnes)
+            + len(result.projets)
+            + len(result.clients)
+            + len(result.competences)
+            + len(result.departements)
+        )
         logger.info(f"Extraction parsed: {total} entities, {len(result.relations)} relations")
         return result
 
@@ -156,7 +162,9 @@ def _parse_extraction(raw_json: str) -> ExtractionResult:
                     "source_nom": r.get("source_nom", r.get("nom_source", r.get("source", ""))),
                     "relation": r.get("relation", r.get("type", r.get("rel_type", ""))),
                     "target_type": r.get("target_type", r.get("type_cible", r.get("cible_type", ""))),
-                    "target_nom": r.get("target_nom", r.get("nom_cible", r.get("cible_nom", r.get("cible", r.get("target", ""))))),
+                    "target_nom": r.get(
+                        "target_nom", r.get("nom_cible", r.get("cible_nom", r.get("cible", r.get("target", ""))))
+                    ),
                     "properties": r.get("properties", r.get("proprietes", {})),
                 }
                 if normalized["source_nom"] and normalized["target_nom"] and normalized["relation"]:
@@ -225,8 +233,7 @@ def _merge_results(base: ExtractionResult, new: ExtractionResult) -> ExtractionR
 
     # Dedup relations by (source_type, source_nom, relation, target_type, target_nom)
     existing_keys = {
-        (r.source_type, r.source_nom.lower(), r.relation, r.target_type, r.target_nom.lower())
-        for r in base.relations
+        (r.source_type, r.source_nom.lower(), r.relation, r.target_type, r.target_nom.lower()) for r in base.relations
     }
     for r in new.relations:
         key = (r.source_type, r.source_nom.lower(), r.relation, r.target_type, r.target_nom.lower())

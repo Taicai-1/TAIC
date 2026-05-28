@@ -148,6 +148,7 @@ async def graph_ingest_file(
                 text = load_text_from_pdf(tmp_path) or ""
             finally:
                 import os
+
                 os.unlink(tmp_path)
         elif ext == "docx":
             from docx import Document as DocxDocument

@@ -165,8 +165,13 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
             )
             # Security: store pre_2fa token in HttpOnly cookie instead of response body
             response.set_cookie(
-                key="pre_2fa_token", value=pre_2fa_token, httponly=True, secure=True,
-                samesite="none", max_age=300, path="/"
+                key="pre_2fa_token",
+                value=pre_2fa_token,
+                httponly=True,
+                secure=True,
+                samesite="none",
+                max_age=300,
+                path="/",
             )
             logger.info(f"User {user.username} requires 2FA verification")
             return {"requires_2fa": True}
@@ -178,8 +183,13 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
             )
             # Security: store setup token in HttpOnly cookie instead of response body
             response.set_cookie(
-                key="setup_token", value=setup_token, httponly=True, secure=True,
-                samesite="none", max_age=1800, path="/"
+                key="setup_token",
+                value=setup_token,
+                httponly=True,
+                secure=True,
+                samesite="none",
+                max_age=1800,
+                path="/",
             )
             logger.info(f"User {user.username} needs 2FA setup")
             return {"requires_2fa_setup": True}

@@ -84,13 +84,9 @@ def ensure_indexes(company_id: int) -> None:
     try:
         with driver.session() as session:
             for label in _NODE_LABELS:
-                session.run(
-                    f"CREATE INDEX IF NOT EXISTS FOR (n:{label}) ON (n.nom, n.company_id)"
-                )
+                session.run(f"CREATE INDEX IF NOT EXISTS FOR (n:{label}) ON (n.nom, n.company_id)")
             # Also index Person.name for backward compat with get_person_context
-            session.run(
-                "CREATE INDEX IF NOT EXISTS FOR (n:Person) ON (n.name, n.company_id)"
-            )
+            session.run("CREATE INDEX IF NOT EXISTS FOR (n:Person) ON (n.name, n.company_id)")
         logger.info(f"Graph indexes ensured for company {company_id}")
     except Exception as e:
         logger.warning(f"Failed to create graph indexes for company {company_id}: {e}")
@@ -111,6 +107,7 @@ def ingest_to_neo4j(
         # Try to diagnose why
         try:
             from database import SessionLocal, Company
+
             db = SessionLocal()
             company = db.query(Company).filter(Company.id == company_id).first()
             db.close()
@@ -124,7 +121,9 @@ def ingest_to_neo4j(
                 raise RuntimeError(f"Neo4j URI decryption failed for company {company_id} (ENCRYPTION_KEY issue?)")
             if not pwd:
                 raise RuntimeError(f"Neo4j password decryption failed for company {company_id}")
-            raise RuntimeError(f"Neo4j driver failed to connect to {uri[:30]}... for company {company_id} (verify_connectivity failed)")
+            raise RuntimeError(
+                f"Neo4j driver failed to connect to {uri[:30]}... for company {company_id} (verify_connectivity failed)"
+            )
         except RuntimeError:
             raise
         except Exception as diag_e:
@@ -171,7 +170,9 @@ def ingest_to_neo4j(
                     MATCH (n:Person {nom: $nom, company_id: $cid})
                     MERGE (s)-[:MENTIONNE]->(n)
                     """,
-                    source=source_name, cid=company_id, nom=p.nom,
+                    source=source_name,
+                    cid=company_id,
+                    nom=p.nom,
                 )
 
             # Projets
@@ -193,7 +194,9 @@ def ingest_to_neo4j(
                     MATCH (n:Projet {nom: $nom, company_id: $cid})
                     MERGE (s)-[:MENTIONNE]->(n)
                     """,
-                    source=source_name, cid=company_id, nom=p.nom,
+                    source=source_name,
+                    cid=company_id,
+                    nom=p.nom,
                 )
 
             # Clients
@@ -213,7 +216,9 @@ def ingest_to_neo4j(
                     MATCH (n:Client {nom: $nom, company_id: $cid})
                     MERGE (s)-[:MENTIONNE]->(n)
                     """,
-                    source=source_name, cid=company_id, nom=c.nom,
+                    source=source_name,
+                    cid=company_id,
+                    nom=c.nom,
                 )
 
             # Competences
@@ -232,7 +237,9 @@ def ingest_to_neo4j(
                     MATCH (n:Competence {nom: $nom, company_id: $cid})
                     MERGE (s)-[:MENTIONNE]->(n)
                     """,
-                    source=source_name, cid=company_id, nom=c.nom,
+                    source=source_name,
+                    cid=company_id,
+                    nom=c.nom,
                 )
 
             # Departements
@@ -251,16 +258,16 @@ def ingest_to_neo4j(
                     MATCH (n:Departement {nom: $nom, company_id: $cid})
                     MERGE (s)-[:MENTIONNE]->(n)
                     """,
-                    source=source_name, cid=company_id, nom=d.nom,
+                    source=source_name,
+                    cid=company_id,
+                    nom=d.nom,
                 )
 
             # 3. Create inter-entity relations (validated against whitelist)
             for rel in extraction.relations:
                 triple = (rel.source_type, rel.relation, rel.target_type)
                 if triple not in _VALID_RELATIONS:
-                    logger.warning(
-                        f"Skipping invalid relation: {rel.source_type}-[{rel.relation}]->{rel.target_type}"
-                    )
+                    logger.warning(f"Skipping invalid relation: {rel.source_type}-[{rel.relation}]->{rel.target_type}")
                     continue
 
                 # Build property SET clause from whitelisted properties only

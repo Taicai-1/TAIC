@@ -45,8 +45,7 @@ def get_database_url():
     else:
         # Development: require DATABASE_URL — no hardcoded credentials
         raise RuntimeError(
-            "DATABASE_URL not set. "
-            "Set DATABASE_URL=postgresql://user:password@host:5432/dbname in your .env file."
+            "DATABASE_URL not set. Set DATABASE_URL=postgresql://user:password@host:5432/dbname in your .env file."
         )
 
 
@@ -878,9 +877,7 @@ def migrate_existing_recaps():
 
             # Associate all existing traceability docs
             trace_docs = (
-                db.query(Document)
-                .filter(Document.agent_id == agent.id, Document.document_type == "traceability")
-                .all()
+                db.query(Document).filter(Document.agent_id == agent.id, Document.document_type == "traceability").all()
             )
             for doc in trace_docs:
                 rd = RecapDocument(

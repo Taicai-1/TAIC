@@ -612,6 +612,7 @@ async def trigger_weekly_recap(request: Request, db: Session = Depends(get_db)):
 
     # Process new Recap entities
     from database import Recap
+
     recaps = db.query(Recap).filter(Recap.enabled == True).all()
     results = []
     skipped = 0
@@ -647,9 +648,11 @@ async def recap_preview(agent_id: int, user_id: str = Depends(verify_token), db:
 
     # Redirect to first Recap entity if one exists
     from database import Recap
+
     first_recap = db.query(Recap).filter(Recap.agent_id == agent_id).order_by(Recap.created_at.asc()).first()
     if first_recap:
         from routers.recaps import recap_preview as _recap_preview
+
         return await _recap_preview(first_recap.id, user_id, db)
 
     from weekly_recap import (
@@ -695,9 +698,11 @@ async def recap_send(agent_id: int, user_id: str = Depends(verify_token), db: Se
 
     # Redirect to first Recap entity if one exists
     from database import Recap
+
     first_recap = db.query(Recap).filter(Recap.agent_id == agent_id).order_by(Recap.created_at.asc()).first()
     if first_recap:
         from routers.recaps import recap_send as _recap_send
+
         return await _recap_send(first_recap.id, user_id, db)
 
     if not agent.weekly_recap_enabled:

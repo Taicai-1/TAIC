@@ -423,6 +423,7 @@ async def ingest_email(payload: EmailIngestRequest, request: Request, db: Sessio
 
                 # Associate traceability doc with all existing recaps for this agent
                 from database import Recap, RecapDocument
+
                 agent_recaps = db.query(Recap).filter(Recap.agent_id == agent.id).all()
                 for recap in agent_recaps:
                     rd = RecapDocument(
@@ -623,6 +624,7 @@ async def upload_email_attachment(request: Request, file: UploadFile = File(...)
 
                     # Associate traceability doc with all existing recaps for this agent
                     from database import Recap, RecapDocument
+
                     agent_recaps = db.query(Recap).filter(Recap.agent_id == agent.id).all()
                     for recap in agent_recaps:
                         rd = RecapDocument(

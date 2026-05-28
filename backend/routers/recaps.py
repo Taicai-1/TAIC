@@ -156,9 +156,7 @@ async def delete_recap(
 
 
 @router.get("/api/recaps/{recap_id}/documents")
-async def list_recap_documents(
-    recap_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
-):
+async def list_recap_documents(recap_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     recap = _get_recap_for_user(recap_id, int(user_id), db)
     docs = (
         db.query(Document)

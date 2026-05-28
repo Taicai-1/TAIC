@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 # --- Enums ---
 
+
 class CompetenceCategorie(str, Enum):
     tech = "tech"
     metier = "metier"
@@ -41,6 +42,7 @@ class SourceType(str, Enum):
 
 
 # --- Extracted entity models ---
+
 
 class ExtractedPerson(BaseModel):
     nom: str
@@ -93,6 +95,7 @@ class ExtractionResult(BaseModel):
 
 
 # --- API request/response models ---
+
 
 class GraphIngestRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=100000)

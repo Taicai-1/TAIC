@@ -778,6 +778,7 @@ async def update_company_integrations(
     if neo4j_changed:
         try:
             from neo4j_client import _org_drivers
+
             _org_drivers.pop(membership.company_id, None)
             logger.info(f"Neo4j driver cache purged for company {membership.company_id}")
         except Exception:

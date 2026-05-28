@@ -112,6 +112,7 @@ def _run_scheduled_recaps():
                 recap_due_count += 1
                 try:
                     from weekly_recap import process_recap
+
                     result = process_recap(recap, db)
                     logger.info(f"Recap {recap.id} ({recap.name}): {result.get('status')}")
                 except Exception as e:
@@ -128,14 +129,13 @@ def _run_scheduled_recaps():
                 legacy_due_count += 1
                 try:
                     from weekly_recap import process_agent_recap
+
                     result = process_agent_recap(agent, db)
                     logger.info(f"Legacy recap for agent {agent.id} ({agent.name}): {result.get('status')}")
                 except Exception as e:
                     logger.error(f"Legacy recap failed for agent {agent.id}: {e}")
 
-        logger.info(
-            f"Recap scheduler tick done: {recap_due_count} recaps + {legacy_due_count} legacy agents processed"
-        )
+        logger.info(f"Recap scheduler tick done: {recap_due_count} recaps + {legacy_due_count} legacy agents processed")
     except Exception as e:
         logger.error(f"Recap scheduler tick failed: {e}")
     finally:

@@ -72,6 +72,7 @@ def fetch_traceability_documents(agent_id: int, db: Session, days_back: int = 7)
 def fetch_recap_traceability_documents(recap_id: int, db: Session, days_back: int = 7) -> list[dict]:
     """Fetch traceability documents for a specific recap, filtered by RecapDocument inclusion."""
     from database import RecapDocument
+
     cutoff = datetime.utcnow() - timedelta(days=days_back)
     docs = (
         db.query(Document)
@@ -314,6 +315,7 @@ def process_agent_recap(agent: Agent, db: Session) -> dict:
 def process_recap(recap, db: Session) -> dict:
     """Full pipeline for a single Recap entity: fetch data -> LLM -> email -> log."""
     from database import Recap, User, WeeklyRecapLog
+
     agent = db.query(Agent).filter(Agent.id == recap.agent_id).first()
     if not agent:
         return {"status": "error", "error": "Agent not found"}
@@ -342,8 +344,12 @@ def process_recap(recap, db: Session) -> dict:
             return {"status": "no_data", "message": "No data for this period"}
 
         prompt_messages = build_recap_prompt(
-            agent, messages, docs, notion_pages,
-            frequency=recap.frequency, custom_prompt=recap.prompt,
+            agent,
+            messages,
+            docs,
+            notion_pages,
+            frequency=recap.frequency,
+            custom_prompt=recap.prompt,
         )
         model_id = get_model_id_for_agent(agent)
         recap_content = get_chat_response(prompt_messages, model_id=model_id)
@@ -355,6 +361,7 @@ def process_recap(recap, db: Session) -> dict:
         if recap.recipients:
             try:
                 import json
+
                 extra = json.loads(recap.recipients)
                 if isinstance(extra, list):
                     recipients.extend(e.strip() for e in extra if e.strip() and e.strip() != user.email)
