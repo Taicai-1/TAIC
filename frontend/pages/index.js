@@ -1264,63 +1264,15 @@ export default function CompanionSettings() {
           </div>
         </Section>
 
-        {/* Traceability Documents */}
+        {/* Recaps */}
         <Section
-          icon={FileText}
-          title={t('agents:traceabilityDocs.title', { count: traceabilityDocs.length })}
-          subtitle={t('agents:settings.traceabilityDesc')}
+          icon={Mail}
+          title={`Recaps (${recaps.length})`}
+          subtitle="Gérez vos recaps et leurs documents de traçabilité"
           color="bg-amber-500"
           defaultOpen={false}
         >
-          {/* Drop zone */}
-          <div
-            className={`relative border-2 border-dashed rounded-button p-8 mb-4 transition-all duration-300 text-center ${
-              isDraggingTraceability ? 'border-amber-500 bg-amber-50 scale-[1.01]' : 'border-gray-300 bg-gradient-to-br from-gray-50 to-amber-50/50 hover:border-amber-400'
-            }`}
-            onDragOver={e => { e.preventDefault(); e.stopPropagation(); setIsDraggingTraceability(true); }}
-            onDragEnter={e => { e.preventDefault(); e.stopPropagation(); setIsDraggingTraceability(true); }}
-            onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setIsDraggingTraceability(false); }}
-            onDrop={e => handleFileDrop(e, 'traceability')}
-          >
-            <div className={`p-4 rounded-full inline-flex mb-3 transition-all ${isDraggingTraceability ? 'bg-amber-200 scale-110' : 'bg-amber-100'}`}>
-              <Upload className={`w-8 h-8 ${isDraggingTraceability ? 'text-amber-700' : 'text-amber-500'}`} />
-            </div>
-            <p className="font-semibold text-gray-700 mb-1">
-              {isDraggingTraceability ? t('agents:documents.dropHere') : t('agents:traceabilityDocs.dragDrop')}
-            </p>
-            <p className="text-xs text-gray-500 mb-3">{t('agents:traceabilityDocs.formats')}</p>
-            <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-sm hover:from-amber-600 hover:to-orange-600 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
-              <input type="file" className="hidden" accept=".pdf,.txt,.docx,.xlsx,.xls,.csv,.json" disabled={uploadingTraceabilityDoc}
-                onChange={e => { if (e.target.files?.[0]) { uploadTraceabilityDoc(e.target.files[0]); e.target.value = ''; } }} />
-              {uploadingTraceabilityDoc ? <><Loader2 className="w-4 h-4 animate-spin" /><span>{t('agents:buttons.uploading')}</span></> : <><Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span></>}
-            </label>
-          </div>
-
-          {/* Documents list */}
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {traceabilityDocs.length === 0 ? (
-              <div className="text-center py-6 text-gray-400">
-                <FileText className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">{t('agents:traceabilityDocs.noDocuments')}</p>
-              </div>
-            ) : traceabilityDocs.map(doc => (
-              <div key={doc.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-amber-300 transition-all group">
-                <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  <FileText className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{doc.filename}</p>
-                    <p className="text-xs text-gray-500">{new Date(doc.created_at).toLocaleDateString('fr-FR')}</p>
-                  </div>
-                </div>
-                <button onClick={() => deleteTraceabilityDoc(doc.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-all opacity-0 group-hover:opacity-100" title={t('agents:buttons.delete')}>
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {/* Multi-Recap Section */}
-          <div className="mt-6 p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-button border border-amber-200">
+          <div>
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-gray-700 flex items-center">
                 <Mail className="w-4 h-4 mr-2 text-amber-600" />
