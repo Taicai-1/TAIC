@@ -100,6 +100,7 @@ export default function CompanionSettings() {
   const [recaps, setRecaps] = useState([]);
   const [currentRecap, setCurrentRecap] = useState(null);
   const [recapDocuments, setRecapDocuments] = useState([]);
+  const [uploadingRecapDoc, setUploadingRecapDoc] = useState(false);
   const [recapForm, setRecapForm] = useState({
     name: '',
     enabled: true,
@@ -402,14 +403,30 @@ export default function CompanionSettings() {
     }
   };
 
-  const toggleRecapDocument = async (recapId, documentId, included) => {
+  const uploadRecapDoc = async (recapId, file) => {
+    setUploadingRecapDoc(true);
     try {
-      await api.put(`/api/recaps/${recapId}/documents/${documentId}`, { included });
-      setRecapDocuments(prev =>
-        prev.map(d => d.document_id === documentId ? { ...d, included } : d)
-      );
+      const formData = new FormData();
+      formData.append('file', file);
+      await api.post(`/api/recaps/${recapId}/documents/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      await loadRecapDocuments(recapId);
+      setRecaps(prev => prev.map(r => r.id === recapId ? { ...r, document_count: (r.document_count || 0) + 1 } : r));
     } catch (err) {
-      console.error('Failed to toggle recap document:', err);
+      console.error('Failed to upload recap document:', err);
+    } finally {
+      setUploadingRecapDoc(false);
+    }
+  };
+
+  const removeRecapDoc = async (recapId, docId) => {
+    try {
+      await api.delete(`/api/recaps/${recapId}/documents/${docId}`);
+      setRecapDocuments(prev => prev.filter(d => d.document_id !== docId));
+      setRecaps(prev => prev.map(r => r.id === recapId ? { ...r, document_count: Math.max(0, (r.document_count || 1) - 1) } : r));
+    } catch (err) {
+      console.error('Failed to remove recap document:', err);
     }
   };
 
@@ -1541,9 +1558,27 @@ export default function CompanionSettings() {
 
                         {/* Documents */}
                         <div>
-                          <label className="text-xs font-semibold text-gray-600 mb-1 block">Documents</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs font-semibold text-gray-600">Documents</label>
+                            <label className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 cursor-pointer">
+                              {uploadingRecapDoc ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                              <span>{uploadingRecapDoc ? 'Upload...' : 'Ajouter'}</span>
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept=".pdf,.txt,.docx,.xlsx,.xls,.csv,.json"
+                                disabled={uploadingRecapDoc}
+                                onChange={(e) => {
+                                  if (e.target.files[0]) {
+                                    uploadRecapDoc(recap.id, e.target.files[0]);
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
                           {recapDocuments.length === 0 ? (
-                            <p className="text-xs text-gray-400">Aucun document de traçabilité</p>
+                            <p className="text-xs text-gray-400">Aucun document</p>
                           ) : (
                             <div className="max-h-48 overflow-y-auto space-y-1">
                               {recapDocuments.map(doc => (
@@ -1551,10 +1586,11 @@ export default function CompanionSettings() {
                                   <span className="text-xs text-gray-700 truncate flex-1 mr-2">{doc.filename}</span>
                                   <button
                                     type="button"
-                                    className={`w-10 h-5 flex items-center rounded-full px-0.5 transition-colors ${doc.included ? 'bg-amber-500' : 'bg-gray-200'}`}
-                                    onClick={() => toggleRecapDocument(recap.id, doc.document_id, !doc.included)}
+                                    className="text-gray-400 hover:text-red-500 transition-colors"
+                                    onClick={() => removeRecapDoc(recap.id, doc.document_id)}
+                                    title="Retirer du recap"
                                   >
-                                    <span className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${doc.included ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               ))}

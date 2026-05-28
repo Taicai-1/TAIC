@@ -1,16 +1,20 @@
 """Recap CRUD and action endpoints."""
 
+import io
 import json
 import logging
+import os
+import time
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from auth import verify_token
 from database import get_db, Agent, Document, Recap, RecapDocument, WeeklyRecapLog, User
 from helpers.tenant import _get_caller_company_id
+from validation import sanitize_filename
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,10 +36,6 @@ class RecapUpdate(BaseModel):
     hour: int | None = None
     prompt: str | None = None
     recipients: list[str] | None = None
-
-
-class RecapDocumentUpdate(BaseModel):
-    included: bool
 
 
 def _get_agent_for_user(agent_id: int, user_id: int, db: Session) -> Agent:
@@ -73,7 +73,7 @@ def _recap_to_dict(recap: Recap) -> dict:
         "recipients": recipients,
         "created_at": recap.created_at.isoformat() if recap.created_at else None,
         "updated_at": recap.updated_at.isoformat() if recap.updated_at else None,
-        "document_count": len([rd for rd in recap.recap_documents if rd.included]),
+        "document_count": len(recap.recap_documents),
     }
 
 
@@ -107,23 +107,6 @@ async def create_recap(
         recipients=json.dumps(body.recipients) if body.recipients else None,
     )
     db.add(recap)
-    db.commit()
-    db.refresh(recap)
-
-    # Associate all existing traceability documents with this recap
-    trace_docs = (
-        db.query(Document)
-        .filter(Document.agent_id == agent.id, Document.document_type == "traceability")
-        .all()
-    )
-    for doc in trace_docs:
-        rd = RecapDocument(
-            recap_id=recap.id,
-            document_id=doc.id,
-            included=True,
-            company_id=caller_company_id,
-        )
-        db.add(rd)
     db.commit()
     db.refresh(recap)
 
@@ -177,61 +160,146 @@ async def list_recap_documents(
     recap_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     recap = _get_recap_for_user(recap_id, int(user_id), db)
-    agent_docs = (
+    docs = (
         db.query(Document)
-        .filter(Document.agent_id == recap.agent_id, Document.document_type == "traceability")
+        .join(RecapDocument, RecapDocument.document_id == Document.id)
+        .filter(RecapDocument.recap_id == recap.id)
         .order_by(Document.created_at.desc())
         .all()
     )
 
-    rd_map = {}
-    for rd in recap.recap_documents:
-        rd_map[rd.document_id] = rd
-
-    result = []
-    for doc in agent_docs:
-        rd = rd_map.get(doc.id)
-        result.append({
-            "document_id": doc.id,
-            "filename": doc.filename,
-            "created_at": doc.created_at.isoformat() if doc.created_at else None,
-            "included": rd.included if rd else True,
-            "recap_document_id": rd.id if rd else None,
-        })
-
-    return {"documents": result}
+    return {
+        "documents": [
+            {
+                "document_id": doc.id,
+                "filename": doc.filename,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            }
+            for doc in docs
+        ]
+    }
 
 
-@router.put("/api/recaps/{recap_id}/documents/{document_id}")
-async def update_recap_document(
+@router.delete("/api/recaps/{recap_id}/documents/{document_id}")
+async def remove_recap_document(
     recap_id: int,
     document_id: int,
-    body: RecapDocumentUpdate,
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
     recap = _get_recap_for_user(recap_id, int(user_id), db)
-    caller_company_id = _get_caller_company_id(user_id, db)
-
     rd = (
         db.query(RecapDocument)
         .filter(RecapDocument.recap_id == recap.id, RecapDocument.document_id == document_id)
         .first()
     )
-
-    if rd:
-        rd.included = body.included
-    else:
-        rd = RecapDocument(
-            recap_id=recap.id,
-            document_id=document_id,
-            included=body.included,
-            company_id=caller_company_id,
-        )
-        db.add(rd)
-
+    if not rd:
+        raise HTTPException(status_code=404, detail="Document not linked to this recap")
+    db.delete(rd)
     db.commit()
-    return {"included": body.included}
+    return {"message": "Document removed from recap"}
+
+
+@router.post("/api/recaps/{recap_id}/documents/upload")
+async def upload_recap_document(
+    recap_id: int,
+    file: UploadFile = File(...),
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Upload a traceability document and link it to a specific recap."""
+    recap = _get_recap_for_user(recap_id, int(user_id), db)
+    agent = db.query(Agent).filter(Agent.id == recap.agent_id).first()
+    caller_company_id = _get_caller_company_id(user_id, db)
+
+    allowed_ext = {".pdf", ".txt", ".docx", ".xlsx", ".xls", ".csv", ".json"}
+    file_ext = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""
+    if file_ext not in allowed_ext:
+        raise HTTPException(status_code=400, detail=f"Unsupported format. Use: {', '.join(allowed_ext)}")
+
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 20MB)")
+
+    # Extract text content
+    text_content = ""
+    try:
+        if file_ext == ".pdf":
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            try:
+                from file_loader import load_text_from_pdf
+
+                text_content = load_text_from_pdf(tmp_path) or ""
+            finally:
+                os.unlink(tmp_path)
+        elif file_ext == ".docx":
+            import docx
+
+            doc_obj = docx.Document(io.BytesIO(content))
+            text_content = "\n".join(p.text for p in doc_obj.paragraphs)
+        elif file_ext in (".xlsx", ".xls"):
+            import pandas as pd
+
+            df = pd.read_excel(io.BytesIO(content))
+            text_content = df.to_string(index=False)
+        elif file_ext == ".csv":
+            import pandas as pd
+
+            text_content = pd.read_csv(io.BytesIO(content)).to_string(index=False)
+        else:
+            text_content = content.decode("utf-8", errors="replace")
+    except Exception as e:
+        logger.warning(f"Could not extract text from traceability doc: {e}")
+        text_content = ""
+
+    # Upload to GCS
+    gcs_url = None
+    try:
+        from google.cloud import storage
+
+        GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-documents")
+        gcs_client = storage.Client()
+        bucket = gcs_client.bucket(GCS_BUCKET_NAME)
+        gcs_filename = f"traceability/{int(time.time())}_{sanitize_filename(file.filename)}"
+        blob = bucket.blob(gcs_filename)
+        blob.upload_from_string(content)
+        gcs_url = blob.public_url
+    except Exception as e:
+        logger.warning(f"GCS upload failed for traceability doc: {e}")
+
+    doc = Document(
+        filename=file.filename,
+        content=text_content,
+        user_id=int(user_id),
+        agent_id=agent.id,
+        company_id=caller_company_id,
+        gcs_url=gcs_url,
+        document_type="traceability",
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+
+    rd = RecapDocument(
+        recap_id=recap.id,
+        document_id=doc.id,
+        included=True,
+        company_id=caller_company_id,
+    )
+    db.add(rd)
+    db.commit()
+
+    return {
+        "document": {
+            "document_id": doc.id,
+            "filename": doc.filename,
+            "created_at": doc.created_at.isoformat() if doc.created_at else None,
+        }
+    }
 
 
 @router.post("/api/recaps/{recap_id}/preview")
