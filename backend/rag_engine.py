@@ -615,7 +615,7 @@ def get_answer_stream(
 
             # Build sources metadata for the frontend
             sources = [
-                {"text": r["text"][:300], "document_name": r["document_name"],
+                {"text": r["text"], "document_name": r["document_name"],
                  "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
                 for r in context_results
             ]
