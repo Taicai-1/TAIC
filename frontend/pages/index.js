@@ -550,7 +550,7 @@ export default function CompanionSettings() {
   };
 
   const pollUploadStatus = async (taskId, agentId, filename) => {
-    const maxAttempts = 60;
+    const maxAttempts = 150; // ~3.75 min for large documents
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, 1500));
       try {
@@ -1204,7 +1204,12 @@ export default function CompanionSettings() {
                 <div className="flex items-center justify-between max-w-md mx-auto">
                   <span className="text-xs text-gray-500">
                     {uploadProgress.stage === 'uploading' && t('agents:upload.stageUploading')}
-                    {uploadProgress.stage === 'extracting' && t('agents:upload.stageExtracting')}
+                    {uploadProgress.stage === 'extracting' && (
+                      uploadProgress.current_chunk && uploadProgress.total_chunks
+                        ? t('agents:upload.stageExtractingPages', { current: uploadProgress.current_chunk, total: uploadProgress.total_chunks })
+                        : t('agents:upload.stageExtracting')
+                    )}
+                    {uploadProgress.stage === 'extracted' && t('agents:upload.stageExtracted')}
                     {uploadProgress.stage === 'chunking' && t('agents:upload.stageChunking', { count: uploadProgress.total_chunks || '...' })}
                     {uploadProgress.stage === 'embedding' && t('agents:upload.stageEmbedding', { current: uploadProgress.current_chunk || 0, total: uploadProgress.total_chunks || '...' })}
                     {uploadProgress.stage === 'done' && t('agents:upload.stageDone')}

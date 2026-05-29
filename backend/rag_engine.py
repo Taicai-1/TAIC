@@ -1028,6 +1028,11 @@ def process_document_for_user(
             progress_callback("extracting", 15)
 
         # Extraction du texte
+        # Build a sub-callback for page-level PDF progress (15-28%)
+        def _pdf_progress(stage, pct, current_page=None, total_pages=None):
+            if progress_callback:
+                progress_callback(stage, pct, total_pages, current_page)
+
         if filename.endswith(".pdf"):
             tmp_file = None
             try:
@@ -1035,7 +1040,7 @@ def process_document_for_user(
                     tmp_file = tmp.name
                     tmp.write(content)
                 logger.info(f"Processing PDF file: {tmp_file}")
-                text_content = load_text_from_pdf(tmp_file)
+                text_content = load_text_from_pdf(tmp_file, progress_callback=_pdf_progress)
             finally:
                 if tmp_file and os.path.exists(tmp_file):
                     os.unlink(tmp_file)
@@ -1048,6 +1053,8 @@ def process_document_for_user(
         if text_content is None:
             text_content = ""
         logger.info(f"Extracted text length: {len(text_content)} characters")
+        if progress_callback:
+            progress_callback("extracted", 28)
 
         return ingest_text_content(
             text_content, filename, user_id, agent_id, db, gcs_url=gcs_url, company_id=company_id,

@@ -42,17 +42,22 @@ def _count_tokens(text: str) -> int:
     return len(_enc.encode(text))
 
 
-def load_text_from_pdf(path: str) -> str:
-    """Load text from PDF file"""
+def load_text_from_pdf(path: str, progress_callback=None) -> str:
+    """Load text from PDF file, with optional page-level progress reporting."""
     text = ""
     try:
         with pdfplumber.open(path) as pdf:
-            for page in pdf.pages:
+            total_pages = len(pdf.pages)
+            for page_num, page in enumerate(pdf.pages):
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
+                if progress_callback and total_pages > 0:
+                    # Extraction spans 15-28% in the overall pipeline
+                    pct = 15 + int(((page_num + 1) / total_pages) * 13)
+                    progress_callback("extracting", pct, page_num + 1, total_pages)
     except Exception as e:
-        logger.error(f"Error loading PDF: {e}")
+        logger.error(f"Error loading PDF: {e}", exc_info=True)
         return text.replace("\x00", "")
     if not text.strip():
         logger.warning(f"No text extracted from PDF {path}")

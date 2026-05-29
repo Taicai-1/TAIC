@@ -634,7 +634,7 @@ def _process_document_background(
                 ),
             )
     except Exception as e:
-        logger.error(f"Background document processing failed for {filename}: {e}")
+        logger.error(f"Background document processing failed for {filename}: {e}", exc_info=True)
         r = get_redis()
         if r:
             r.setex(
@@ -647,6 +647,8 @@ def _process_document_background(
                         "filename": filename,
                         "document_id": None,
                         "error": str(e),
+                        "progress": 0,
+                        "stage": "failed",
                     }
                 ),
             )

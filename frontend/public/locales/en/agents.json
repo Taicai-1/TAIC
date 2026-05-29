@@ -199,6 +199,8 @@
   "upload": {
     "stageUploading": "Uploading to cloud...",
     "stageExtracting": "Extracting text...",
+    "stageExtractingPages": "Extracting page {{current}}/{{total}}...",
+    "stageExtracted": "Text extracted, analyzing...",
     "stageChunking": "Splitting into {{count}} chunks...",
     "stageEmbedding": "Indexing chunks ({{current}}/{{total}})...",
     "stageDone": "Done!",
