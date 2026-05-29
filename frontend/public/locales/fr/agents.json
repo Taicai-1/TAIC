@@ -213,6 +213,15 @@
     "contextImproved": "Contexte amélioré appliqué ! N'oubliez pas de sauvegarder.",
     "documentProcessing": "Document en cours de traitement..."
   },
+  "upload": {
+    "stageUploading": "Upload vers le cloud...",
+    "stageExtracting": "Extraction du texte...",
+    "stageChunking": "Découpage en {{count}} morceaux...",
+    "stageEmbedding": "Indexation des morceaux ({{current}}/{{total}})...",
+    "stageDone": "Terminé !",
+    "stageStarting": "Démarrage...",
+    "stageProcessing": "Traitement en cours..."
+  },
   "url": {
     "placeholder": "https://example.com/page",
     "add": "Ajouter URL",

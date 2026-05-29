@@ -67,6 +67,7 @@ export default function CompanionSettings() {
   // Documents
   const [agentDocuments, setAgentDocuments] = useState([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null); // { progress: 0-100, stage: string, filename: string }
   const [isDragging, setIsDragging] = useState(false);
   const [urlInput, setUrlInput] = useState("");
   const [addingUrl, setAddingUrl] = useState(false);
@@ -548,30 +549,39 @@ export default function CompanionSettings() {
     toast.success(t('agents:toast.contextImproved'));
   };
 
-  const pollUploadStatus = async (taskId, agentId) => {
+  const pollUploadStatus = async (taskId, agentId, filename) => {
     const maxAttempts = 60;
     for (let i = 0; i < maxAttempts; i++) {
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1500));
       try {
         const res = await api.get(`/upload-status/${taskId}`);
-        const { status, error } = res.data;
+        const { status, error, progress, stage, total_chunks, current_chunk } = res.data;
+        if (status === 'processing') {
+          setUploadProgress({ progress: progress || 0, stage: stage || 'processing', filename, total_chunks, current_chunk });
+        }
         if (status === 'completed') {
+          setUploadProgress({ progress: 100, stage: 'done', filename });
           toast.success(t('agents:toast.documentAdded'));
           const docs = await api.get(`/user/documents?agent_id=${agentId}`);
           setAgentDocuments(docs.data.documents || []);
+          // Clear progress after a short delay so user sees 100%
+          setTimeout(() => setUploadProgress(null), 1500);
           return;
         }
         if (status === 'failed') {
+          setUploadProgress(null);
           toast.error(error || t('agents:toast.documentAddError'));
           return;
         }
       } catch { /* keep polling */ }
     }
+    setUploadProgress(null);
     toast.error(t('agents:toast.documentAddError'));
   };
 
   const uploadDocument = async (file) => {
     setUploadingDoc(true);
+    setUploadProgress({ progress: 0, stage: 'uploading', filename: file.name });
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -581,15 +591,18 @@ export default function CompanionSettings() {
       });
       const data = response.data;
       if (data.status === 'processing' && data.task_id) {
-        toast(t('agents:toast.documentProcessing'));
-        await pollUploadStatus(data.task_id, currentAgent.id);
+        setUploadProgress({ progress: 5, stage: 'uploading', filename: file.name });
+        await pollUploadStatus(data.task_id, currentAgent.id, file.name);
       } else {
+        setUploadProgress({ progress: 100, stage: 'done', filename: file.name });
         toast.success(t('agents:toast.documentAdded'));
         await new Promise(r => setTimeout(r, 500));
         const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
         setAgentDocuments(res.data.documents || []);
+        setTimeout(() => setUploadProgress(null), 1500);
       }
     } catch (error) {
+      setUploadProgress(null);
       toast.error(error.response?.data?.detail || t('agents:toast.documentAddError'));
     } finally { setUploadingDoc(false); }
   };
@@ -1175,18 +1188,49 @@ export default function CompanionSettings() {
             onDragLeave={e => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
             onDrop={e => handleFileDrop(e, 'rag')}
           >
-            <div className={`p-4 rounded-full inline-flex mb-3 transition-all ${isDragging ? 'bg-purple-200 scale-110' : 'bg-purple-100'}`}>
-              <Upload className={`w-8 h-8 ${isDragging ? 'text-purple-700' : 'text-purple-500'}`} />
-            </div>
-            <p className="font-semibold text-gray-700 mb-1">
-              {isDragging ? t('agents:documents.dropHere') : t('agents:documents.dragDrop')}
-            </p>
-            <p className="text-xs text-gray-500 mb-3">{t('agents:documents.formats')}</p>
-            <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
-              <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.json" disabled={uploadingDoc}
-                onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
-              {uploadingDoc ? <><Loader2 className="w-4 h-4 animate-spin" /><span>{t('agents:buttons.uploading')}</span></> : <><Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span></>}
-            </label>
+            {uploadProgress ? (
+              /* Progress bar during upload */
+              <div className="py-2">
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
+                  <span className="font-semibold text-gray-700 text-sm">{uploadProgress.filename}</span>
+                </div>
+                <div className="w-full max-w-md mx-auto bg-gray-200 rounded-full h-3 mb-2 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500 ease-out"
+                    style={{ width: `${Math.max(uploadProgress.progress, 2)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between max-w-md mx-auto">
+                  <span className="text-xs text-gray-500">
+                    {uploadProgress.stage === 'uploading' && t('agents:upload.stageUploading')}
+                    {uploadProgress.stage === 'extracting' && t('agents:upload.stageExtracting')}
+                    {uploadProgress.stage === 'chunking' && t('agents:upload.stageChunking', { count: uploadProgress.total_chunks || '...' })}
+                    {uploadProgress.stage === 'embedding' && t('agents:upload.stageEmbedding', { current: uploadProgress.current_chunk || 0, total: uploadProgress.total_chunks || '...' })}
+                    {uploadProgress.stage === 'done' && t('agents:upload.stageDone')}
+                    {uploadProgress.stage === 'starting' && t('agents:upload.stageStarting')}
+                    {uploadProgress.stage === 'processing' && t('agents:upload.stageProcessing')}
+                  </span>
+                  <span className="text-xs font-semibold text-purple-600">{uploadProgress.progress}%</span>
+                </div>
+              </div>
+            ) : (
+              /* Normal drop zone */
+              <>
+                <div className={`p-4 rounded-full inline-flex mb-3 transition-all ${isDragging ? 'bg-purple-200 scale-110' : 'bg-purple-100'}`}>
+                  <Upload className={`w-8 h-8 ${isDragging ? 'text-purple-700' : 'text-purple-500'}`} />
+                </div>
+                <p className="font-semibold text-gray-700 mb-1">
+                  {isDragging ? t('agents:documents.dropHere') : t('agents:documents.dragDrop')}
+                </p>
+                <p className="text-xs text-gray-500 mb-3">{t('agents:documents.formats')}</p>
+                <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
+                  <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.json" disabled={uploadingDoc}
+                    onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
+                  <Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span>
+                </label>
+              </>
+            )}
           </div>
 
           {/* URL input */}

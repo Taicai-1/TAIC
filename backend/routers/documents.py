@@ -581,11 +581,38 @@ def _process_document_background(
                         "filename": filename,
                         "document_id": None,
                         "error": None,
+                        "progress": 0,
+                        "stage": "starting",
                     }
                 ),
             )
 
-        doc_id = process_document_for_user(filename, content, user_id, db, agent_id, company_id=company_id)
+        def _report_progress(stage, pct, total_chunks=None, current_chunk=None):
+            """Write granular progress to Redis so the frontend can display a progress bar."""
+            _r = get_redis()
+            if _r:
+                _r.setex(
+                    f"doc_task:{task_id}",
+                    3600,
+                    json.dumps(
+                        {
+                            "task_id": task_id,
+                            "status": "processing",
+                            "filename": filename,
+                            "document_id": None,
+                            "error": None,
+                            "progress": pct,
+                            "stage": stage,
+                            "total_chunks": total_chunks,
+                            "current_chunk": current_chunk,
+                        }
+                    ),
+                )
+
+        doc_id = process_document_for_user(
+            filename, content, user_id, db, agent_id, company_id=company_id,
+            progress_callback=_report_progress,
+        )
 
         logger.info(f"Background processing completed: {filename} -> doc_id={doc_id}")
         event_tracker.track_document_upload(user_id, filename, len(content))
@@ -601,6 +628,8 @@ def _process_document_background(
                         "filename": filename,
                         "document_id": doc_id,
                         "error": None,
+                        "progress": 100,
+                        "stage": "done",
                     }
                 ),
             )

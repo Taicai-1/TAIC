@@ -196,6 +196,15 @@
     "contextImproved": "Improved context applied! Don't forget to save.",
     "documentProcessing": "Document processing..."
   },
+  "upload": {
+    "stageUploading": "Uploading to cloud...",
+    "stageExtracting": "Extracting text...",
+    "stageChunking": "Splitting into {{count}} chunks...",
+    "stageEmbedding": "Indexing chunks ({{current}}/{{total}})...",
+    "stageDone": "Done!",
+    "stageStarting": "Starting...",
+    "stageProcessing": "Processing..."
+  },
   "url": {
     "placeholder": "https://example.com/page",
     "add": "Add URL",

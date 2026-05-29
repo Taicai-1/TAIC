@@ -42,7 +42,9 @@
     "panelTitle": "Extraits sources",
     "close": "Fermer",
     "relevance": "Pertinence",
-    "extract": "Extrait"
+    "extract": "Extrait",
+    "expand": "Voir l'extrait complet",
+    "collapse": "Réduire"
   },
   "emptyState": {
     "title": "Sélectionnez une conversation",

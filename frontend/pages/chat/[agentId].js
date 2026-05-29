@@ -86,15 +86,43 @@ const MarkdownText = ({ children }) => {
   );
 };
 
-// Sources panel: displays RAG source chunks for the selected message
-const SourcesPanel = ({ sources, open, onClose, t }) => {
-  if (!open || !sources || sources.length === 0) return null;
+// Single source card with expand/collapse
+const SourceCard = ({ src, t }) => {
+  const [expanded, setExpanded] = useState(false);
 
   const scoreBadge = (score) => {
     if (score >= 80) return "bg-green-100 text-green-700 border-green-200";
     if (score >= 50) return "bg-yellow-100 text-yellow-700 border-yellow-200";
     return "bg-red-100 text-red-700 border-red-200";
   };
+
+  return (
+    <div className="rounded-button border border-gray-200 bg-gray-50 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <FileText className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+          <span className="text-xs font-semibold text-gray-700 truncate">{src.document_name}</span>
+        </div>
+        <span className={`px-2 py-0.5 text-xs font-bold rounded-full border shrink-0 ${scoreBadge(src.score)}`}>
+          {src.score}%
+        </span>
+      </div>
+      <p className={`text-xs text-gray-600 leading-relaxed whitespace-pre-line ${expanded ? '' : 'line-clamp-6'}`}>{src.text}</p>
+      {src.text && src.text.length > 200 && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
+        >
+          {expanded ? t('chat:sources.collapse') : t('chat:sources.expand')}
+        </button>
+      )}
+    </div>
+  );
+};
+
+// Sources panel: displays RAG source chunks for the selected message
+const SourcesPanel = ({ sources, open, onClose, t }) => {
+  if (!open || !sources || sources.length === 0) return null;
 
   return (
     <div className="w-96 min-w-[24rem] max-w-sm h-full flex flex-col border-l border-gray-200 bg-white shadow-subtle overflow-hidden shrink-0 animate-slide-in">
@@ -110,18 +138,7 @@ const SourcesPanel = ({ sources, open, onClose, t }) => {
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {sources.map((src, idx) => (
-          <div key={idx} className="rounded-button border border-gray-200 bg-gray-50 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <FileText className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                <span className="text-xs font-semibold text-gray-700 truncate">{src.document_name}</span>
-              </div>
-              <span className={`px-2 py-0.5 text-xs font-bold rounded-full border shrink-0 ${scoreBadge(src.score)}`}>
-                {src.score}%
-              </span>
-            </div>
-            <p className="text-xs text-gray-600 leading-relaxed line-clamp-6 whitespace-pre-line">{src.text}</p>
-          </div>
+          <SourceCard key={idx} src={src} t={t} />
         ))}
       </div>
     </div>

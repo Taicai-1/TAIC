@@ -392,7 +392,7 @@ def get_answer(
 
         # Build sources metadata for the frontend
         sources = [
-            {"text": r["text"][:300], "document_name": r["document_name"],
+            {"text": r["text"], "document_name": r["document_name"],
              "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
             for r in context_results
         ]
@@ -919,6 +919,7 @@ def ingest_text_content(
     company_id: int = None,
     drive_link_id: int = None,
     drive_file_id: str = None,
+    progress_callback=None,
 ) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
@@ -960,8 +961,15 @@ def ingest_text_content(
             max_chars = max_tokens * 4
             return [chunk[i : i + max_chars] for i in range(0, len(chunk), max_chars)]
 
+        if progress_callback:
+            progress_callback("chunking", 30, len(chunks))
+
         for i, chunk in enumerate(chunks):
             logger.info(f"Processing chunk {i + 1}/{len(chunks)} with Mistral embedding")
+            if progress_callback:
+                # Embedding phase spans 30-95%
+                pct = 30 + int((i / max(len(chunks), 1)) * 65)
+                progress_callback("embedding", pct, len(chunks), i + 1)
             try:
                 sub_chunks = split_for_embedding(chunk, 8192)
                 embeddings = []
@@ -993,13 +1001,16 @@ def ingest_text_content(
 
 
 def process_document_for_user(
-    filename: str, content: bytes, user_id: int, db: Session, agent_id: int = None, company_id: int = None
+    filename: str, content: bytes, user_id: int, db: Session, agent_id: int = None, company_id: int = None,
+    progress_callback=None,
 ) -> int:
     import tempfile
     import os
 
     try:
         logger.info(f"Starting to process document: {filename} for user {user_id}, agent {agent_id}")
+        if progress_callback:
+            progress_callback("uploading", 5)
 
         # Upload file to GCS
         from google.cloud import storage
@@ -1013,6 +1024,8 @@ def process_document_for_user(
         blob.upload_from_string(content)
         gcs_url = blob.public_url
         logger.info(f"Document uploaded to GCS: {gcs_url}")
+        if progress_callback:
+            progress_callback("extracting", 15)
 
         # Extraction du texte
         if filename.endswith(".pdf"):
@@ -1037,7 +1050,8 @@ def process_document_for_user(
         logger.info(f"Extracted text length: {len(text_content)} characters")
 
         return ingest_text_content(
-            text_content, filename, user_id, agent_id, db, gcs_url=gcs_url, company_id=company_id
+            text_content, filename, user_id, agent_id, db, gcs_url=gcs_url, company_id=company_id,
+            progress_callback=progress_callback,
         )
     except Exception as e:
         logger.error(f"Error processing document: {e}")
