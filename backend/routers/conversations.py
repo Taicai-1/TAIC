@@ -1,5 +1,6 @@
 """Conversation endpoints: CRUD conversations, messages, feedback, title."""
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -88,6 +89,7 @@ async def add_message(
         conversation_id=conversation_id,
         role=msg.role,
         content=msg.content,
+        sources_json=msg.sources_json,
         company_id=_get_caller_company_id(user_id, db),
     )
     db.add(message)
@@ -102,7 +104,16 @@ async def get_messages(conversation_id: int, db: Session = Depends(get_db), user
     messages = (
         db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.timestamp.asc()).all()
     )
-    return [{"id": m.id, "role": m.role, "content": m.content, "timestamp": m.timestamp} for m in messages]
+    return [
+        {
+            "id": m.id,
+            "role": m.role,
+            "content": m.content,
+            "timestamp": m.timestamp,
+            "sources": json.loads(m.sources_json) if m.sources_json else None,
+        }
+        for m in messages
+    ]
 
 
 @router.patch("/messages/{message_id}/feedback")

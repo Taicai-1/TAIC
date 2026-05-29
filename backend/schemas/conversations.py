@@ -24,6 +24,7 @@ class MessageCreate(BaseModel):
     conversation_id: int
     role: str
     content: str
+    sources_json: Optional[str] = None
 
 
 class MessageFeedbackRequest(BaseModel):

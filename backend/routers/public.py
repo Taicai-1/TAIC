@@ -74,7 +74,7 @@ async def public_agent_chat(agent_id: int, req: PublicChatRequest, request: Requ
     public_model_id = agent.finetuned_model_id or resolve_model_id(agent)
 
     try:
-        answer = get_answer(
+        result = get_answer(
             req.message,
             None,
             db,
@@ -83,6 +83,7 @@ async def public_agent_chat(agent_id: int, req: PublicChatRequest, request: Requ
             model_id=public_model_id,
             company_id=agent.company_id,
         )
+        answer = result["answer"] if isinstance(result, dict) else result
     except Exception as e:
         logger.exception(f"Error generating public chat answer for agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail="Error generating answer")

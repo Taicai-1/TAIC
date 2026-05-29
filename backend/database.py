@@ -448,6 +448,7 @@ class Message(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     feedback = Column(String(10), nullable=True)  # 'like', 'dislike', ou None
     buffered = Column(Integer, default=0)  # 0 = non bufferisé, 1 = à bufferiser
+    sources_json = Column(Text, nullable=True)  # JSON array of RAG source chunks
 
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -690,6 +691,7 @@ def ensure_columns():
         ("notion_links", "company_id", "INTEGER REFERENCES companies(id)"),
         ("weekly_recap_logs", "company_id", "INTEGER REFERENCES companies(id)"),
         ("weekly_recap_logs", "recap_id", "INTEGER REFERENCES recaps(id)"),
+        ("messages", "sources_json", "TEXT"),
     ]
     try:
         with engine.connect() as conn:

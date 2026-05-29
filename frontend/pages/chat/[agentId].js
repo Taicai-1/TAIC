@@ -23,7 +23,9 @@ import {
   ThumbsUp,
   Copy,
   ExternalLink,
-  Search
+  Search,
+  BookOpen,
+  X
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -84,6 +86,48 @@ const MarkdownText = ({ children }) => {
   );
 };
 
+// Sources panel: displays RAG source chunks for the selected message
+const SourcesPanel = ({ sources, open, onClose, t }) => {
+  if (!open || !sources || sources.length === 0) return null;
+
+  const scoreBadge = (score) => {
+    if (score >= 80) return "bg-green-100 text-green-700 border-green-200";
+    if (score >= 50) return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    return "bg-red-100 text-red-700 border-red-200";
+  };
+
+  return (
+    <div className="w-96 min-w-[24rem] max-w-sm h-full flex flex-col border-l border-gray-200 bg-white shadow-subtle overflow-hidden shrink-0 animate-slide-in">
+      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-primary-600" />
+          <h3 className="font-heading font-bold text-sm text-gray-900">{t('chat:sources.panelTitle')}</h3>
+          <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-primary-100 text-primary-700">{sources.length}</span>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-sm hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {sources.map((src, idx) => (
+          <div key={idx} className="rounded-button border border-gray-200 bg-gray-50 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <FileText className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                <span className="text-xs font-semibold text-gray-700 truncate">{src.document_name}</span>
+              </div>
+              <span className={`px-2 py-0.5 text-xs font-bold rounded-full border shrink-0 ${scoreBadge(src.score)}`}>
+                {src.score}%
+              </span>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed line-clamp-6 whitespace-pre-line">{src.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export default function AgentChatPage() {
   const router = useRouter();
   const { t } = useTranslation(['chat', 'common', 'errors']);
@@ -136,6 +180,9 @@ export default function AgentChatPage() {
   // Pièces jointes
   const [attachments, setAttachments] = useState([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  // Sources panel
+  const [selectedSources, setSelectedSources] = useState(null);
+  const [sourcesPanelOpen, setSourcesPanelOpen] = useState(false);
   // Recherche de conversations
   const [convSearch, setConvSearch] = useState('');
   const filteredConvs = conversations.filter(c => (c.title || '').toLowerCase().includes(convSearch.toLowerCase()));
@@ -196,9 +243,15 @@ export default function AgentChatPage() {
   const selectConversation = async (convId) => {
     setSelectedConv(convId);
     setMessages([]);
+    setSourcesPanelOpen(false);
+    setSelectedSources(null);
     try {
       const res = await api.get(`/conversations/${convId}/messages`);
-      setMessages(res.data);
+      // Attach sources from backend to each message object
+      setMessages(res.data.map(m => ({
+        ...m,
+        sources: m.sources || undefined,
+      })));
     } catch (e) {
       setMessages([]);
     }
@@ -279,13 +332,19 @@ const handleDeleteConversation = async (convId) => {
         history: history,
       });
 
-      const assistantMsg = { role: 'agent', content: resAsk.data.answer };
+      const slashSources = resAsk.data.sources || [];
+      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources };
       setMessages(prev => [...prev, assistantMsg]);
+      if (slashSources.length > 0) {
+        setSelectedSources(slashSources);
+        setSourcesPanelOpen(true);
+      }
 
       await api.post(`/conversations/${selectedConv}/messages`, {
         conversation_id: selectedConv,
         role: 'agent',
         content: resAsk.data.answer,
+        sources_json: slashSources.length > 0 ? JSON.stringify(slashSources) : undefined,
       });
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Error');
@@ -387,6 +446,7 @@ const handleDeleteConversation = async (convId) => {
       // Try streaming first, fallback to /ask on error
       let streamSuccess = false;
       let iaAnswer = "";
+      let iaSources = [];
 
       try {
         const controller = new AbortController();
@@ -420,9 +480,15 @@ const handleDeleteConversation = async (convId) => {
             iaAnswer += tokenBufferRef.current;
             tokenBufferRef.current = '';
             iaAnswer = data.full_text || iaAnswer;
+            iaSources = data.sources || [];
             setMessages(prev => prev.map((m, i) =>
-              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources } : m
             ));
+            // Auto-open sources panel if sources exist
+            if (iaSources.length > 0) {
+              setSelectedSources(iaSources);
+              setSourcesPanelOpen(true);
+            }
             streamSuccess = true;
           },
           onError: () => {
@@ -444,9 +510,15 @@ const handleDeleteConversation = async (convId) => {
             history: history
           });
           iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
+          iaSources = resAsk.data.sources || [];
           setMessages(prev => prev.map((m, i) =>
-            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources } : m
           ));
+          // Auto-open sources panel if sources exist
+          if (iaSources.length > 0) {
+            setSelectedSources(iaSources);
+            setSourcesPanelOpen(true);
+          }
 
           // Handle action_results from /ask
           const actionResults = resAsk.data.action_results || [];
@@ -495,7 +567,8 @@ const handleDeleteConversation = async (convId) => {
         const agentMsgRes = await api.post(`/conversations/${selectedConv}/messages`, {
           conversation_id: selectedConv,
           role: "agent",
-          content: iaAnswer
+          content: iaAnswer,
+          sources_json: iaSources.length > 0 ? JSON.stringify(iaSources) : undefined
         });
         // Update with server-assigned id
         setMessages(prev => prev.map((m, i) =>
@@ -834,23 +907,36 @@ const handleDeleteConversation = async (convId) => {
                       ) : (
                         <div className="leading-relaxed whitespace-pre-line">{msg.content}</div>
                       )}
-                      {/* Bouton de feedback uniquement sur le dernier message agent sans feedback */}
-                      {isLastAgentMsg && (
-                        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
-                          <button
-                            className="group flex items-center justify-center space-x-1 px-3 py-1.5 bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 rounded-sm transition-all border border-gray-300 hover:border-green-400"
-                            title={t('chat:messages.usefulButton')}
-                            onClick={async () => {
-                              // Optimistic update: retire le bouton localement
-                              setMessages(prevMsgs => prevMsgs.map((m, i) => i === idx ? { ...m, feedback: 'like' } : m));
-                              try {
-                                await api.patch(`/messages/${msg.id}/feedback`, { feedback: 'like' });
-                              } catch {}
-                            }}
-                          >
-                            <ThumbsUp className="w-4 h-4" />
-                            <span className="text-sm font-medium">{t('chat:messages.usefulButton')}</span>
-                          </button>
+                      {/* Sources button + Feedback button */}
+                      {msg.role === "agent" && (msg.sources?.length > 0 || isLastAgentMsg) && (
+                        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200 flex-wrap">
+                          {msg.sources?.length > 0 && (
+                            <button
+                              className="group flex items-center justify-center space-x-1 px-3 py-1.5 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-sm transition-all border border-primary-200 hover:border-primary-300"
+                              onClick={() => {
+                                setSelectedSources(msg.sources);
+                                setSourcesPanelOpen(true);
+                              }}
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span className="text-sm font-medium">{t('chat:messages.sourcesUsed', { count: msg.sources.length })}</span>
+                            </button>
+                          )}
+                          {isLastAgentMsg && (
+                            <button
+                              className="group flex items-center justify-center space-x-1 px-3 py-1.5 bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 rounded-sm transition-all border border-gray-300 hover:border-green-400"
+                              title={t('chat:messages.usefulButton')}
+                              onClick={async () => {
+                                setMessages(prevMsgs => prevMsgs.map((m, i) => i === idx ? { ...m, feedback: 'like' } : m));
+                                try {
+                                  await api.patch(`/messages/${msg.id}/feedback`, { feedback: 'like' });
+                                } catch {}
+                              }}
+                            >
+                              <ThumbsUp className="w-4 h-4" />
+                              <span className="text-sm font-medium">{t('chat:messages.usefulButton')}</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </>
@@ -1082,6 +1168,14 @@ const handleDeleteConversation = async (convId) => {
           </div>
         </div>
       </div>
+
+      {/* Sources panel (3rd column) */}
+      <SourcesPanel
+        sources={selectedSources}
+        open={sourcesPanelOpen}
+        onClose={() => setSourcesPanelOpen(false)}
+        t={t}
+      />
     </div>
   );
 }

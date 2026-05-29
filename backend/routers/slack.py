@@ -331,7 +331,7 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
             else:
                 slack_model_id = os.getenv("MISTRAL_MODEL", "mistral:mistral-small-latest")
         # Appel direct à la fonction get_answer avec l'historique Slack
-        answer = get_answer(
+        result = get_answer(
             user_message,
             None,
             db,
@@ -340,6 +340,7 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
             model_id=slack_model_id,
             company_id=agent.company_id,
         )
+        answer = result["answer"] if isinstance(result, dict) else result
         # 3. Envoie la réponse sur Slack avec le bon token
         resp = requests.post(
             "https://slack.com/api/chat.postMessage",

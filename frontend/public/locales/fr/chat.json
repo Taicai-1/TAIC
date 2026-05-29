@@ -33,7 +33,16 @@
     "attachmentError": "[Erreur extraction pièce jointe]",
     "attachmentContentLabel": "Contenu pièce jointe:",
     "aiError": "[Erreur IA]",
-    "documentTruncated": "[... document tronqué]"
+    "documentTruncated": "[... document tronqué]",
+    "sourcesUsed": "{{count}} source(s) utilisée(s)",
+    "sourcesUsed_one": "{{count}} source utilisée",
+    "sourcesUsed_other": "{{count}} sources utilisées"
+  },
+  "sources": {
+    "panelTitle": "Extraits sources",
+    "close": "Fermer",
+    "relevance": "Pertinence",
+    "extract": "Extrait"
   },
   "emptyState": {
     "title": "Sélectionnez une conversation",

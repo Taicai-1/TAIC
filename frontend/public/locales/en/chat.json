@@ -33,7 +33,16 @@
     "attachmentError": "[Attachment extraction error]",
     "attachmentContentLabel": "Attachment content:",
     "aiError": "[AI Error]",
-    "documentTruncated": "[... document truncated]"
+    "documentTruncated": "[... document truncated]",
+    "sourcesUsed": "{{count}} source(s) used",
+    "sourcesUsed_one": "{{count}} source used",
+    "sourcesUsed_other": "{{count}} sources used"
+  },
+  "sources": {
+    "panelTitle": "Source extracts",
+    "close": "Close",
+    "relevance": "Relevance",
+    "extract": "Extract"
   },
   "emptyState": {
     "title": "Select a conversation",

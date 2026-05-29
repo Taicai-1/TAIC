@@ -111,7 +111,8 @@ def get_answer_with_files(
             return cached
 
         # Get the regular answer first
-        answer = get_answer(question, user_id, db, selected_doc_ids, agent_type)
+        answer_result = get_answer(question, user_id, db, selected_doc_ids, agent_type)
+        answer = answer_result["answer"] if isinstance(answer_result, dict) else answer_result
 
         # Initialize file generator
         file_gen = FileGenerator()
@@ -231,7 +232,7 @@ def get_answer(
     history: list = None,
     model_id: str = None,
     company_id: int = None,
-) -> str:
+) -> Dict[str, Any]:
     """Get answer using RAG for specific user with OpenAI - always using embeddings, memory, and custom model if provided.
 
     Tier 1: company_id is the tenant boundary used by RAG search. If not supplied,
@@ -297,7 +298,7 @@ def get_answer(
             style_prefix = f"{agent.contexte.strip()}. " if (agent.contexte or "").strip() else ""
             image_bytes = generate_image(style_prefix + question)
             image_url = upload_generated_image(image_bytes, agent.id)
-            return f"![Image générée]({image_url})"
+            return {"answer": f"![Image générée]({image_url})", "sources": []}
 
         # Neo4j Knowledge Graph context injection
         if agent and getattr(agent, "neo4j_enabled", False):
@@ -339,7 +340,7 @@ def get_answer(
         # Si pas de documents, fallback sur le contexte + mémoire
         if not user_docs:
             if selected_doc_ids:
-                return "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection."
+                return {"answer": "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection.", "sources": []}
             else:
                 logger.info("No documents found, using context + question + memory only")
                 # Prépare la liste messages pour OpenAI avec l'historique complet
@@ -368,7 +369,7 @@ def get_answer(
                 logger.info("[PROMPT OPENAI] %s", json.dumps(messages, ensure_ascii=False, indent=2))
                 # If this request is for an actionnable agent, enforce Gemini-only (no OpenAI fallback)
                 response = get_chat_response(messages, model_id=model_id)
-                return response
+                return {"answer": response, "sources": []}
 
         # Always get question embedding with retry
         logger.info(f"Getting embedding for question: {question}")
@@ -388,6 +389,13 @@ def get_answer(
             agent_id=agent_id,
             company_id=company_id,
         )
+
+        # Build sources metadata for the frontend
+        sources = [
+            {"text": r["text"][:300], "document_name": r["document_name"],
+             "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
+            for r in context_results
+        ]
 
         # Préparer le contexte RAG
         context_by_document = {}
@@ -459,7 +467,7 @@ def get_answer(
             gemini_only_flag = False
         response = get_chat_response(messages, model_id=model_id, gemini_only=gemini_only_flag)
         logger.info("Successfully got response from OpenAI")
-        return response
+        return {"answer": response, "sources": sources}
     except Exception as e:
         logger.error(f"Error getting answer: {e}")
         raise Exception(f"Erreur lors du traitement de votre question avec l'API OpenAI : {str(e)}")
@@ -534,7 +542,7 @@ def get_answer_stream(
             image_url = upload_generated_image(image_bytes, agent.id)
             full = f"![Image générée]({image_url})"
             yield sse_event("token", {"t": full})
-            yield sse_event("done", {"full_text": full})
+            yield sse_event("done", {"full_text": full, "sources": []})
             return
 
         # Neo4j context
@@ -569,11 +577,12 @@ def get_answer_stream(
                 available_docs_list += f"- {doc_name}\n"
 
         # --- Build messages ---
+        sources = []  # Will be populated by RAG path if documents exist
         if not user_docs:
             if selected_doc_ids:
                 msg = "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection."
                 yield sse_event("token", {"t": msg})
-                yield sse_event("done", {"full_text": msg})
+                yield sse_event("done", {"full_text": msg, "sources": []})
                 return
 
             messages = []
@@ -603,6 +612,13 @@ def get_answer_stream(
                 agent_id=agent_id,
                 company_id=company_id,
             )
+
+            # Build sources metadata for the frontend
+            sources = [
+                {"text": r["text"][:300], "document_name": r["document_name"],
+                 "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
+                for r in context_results
+            ]
 
             context_by_document = {}
             for result in context_results:
@@ -658,9 +674,14 @@ def get_answer_stream(
         cached = _get_rag_cache(cache_key)
         if cached is not None:
             logger.info("Stream: returning cached answer")
-            cached_text = cached if isinstance(cached, str) else cached.get("answer", str(cached))
+            if isinstance(cached, str):
+                cached_text = cached
+                cached_sources = []
+            else:
+                cached_text = cached.get("answer", str(cached))
+                cached_sources = cached.get("sources", [])
             yield sse_event("token", {"t": cached_text})
-            yield sse_event("done", {"full_text": cached_text})
+            yield sse_event("done", {"full_text": cached_text, "sources": cached_sources})
             return
 
         # --- Stream from LLM ---
@@ -675,10 +696,10 @@ def get_answer_stream(
             full_text += chunk
             yield sse_event("token", {"t": chunk})
 
-        yield sse_event("done", {"full_text": full_text})
+        yield sse_event("done", {"full_text": full_text, "sources": sources})
 
-        # Cache the result
-        _set_rag_cache(cache_key, full_text)
+        # Cache the result (store answer + sources together)
+        _set_rag_cache(cache_key, {"answer": full_text, "sources": sources})
 
     except Exception as e:
         logger.error(f"Error in get_answer_stream: {e}")
