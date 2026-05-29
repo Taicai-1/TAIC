@@ -93,50 +93,100 @@ def _clean_text(text: str) -> str:
     return text.strip()
 
 
-def _recursive_split(text: str, max_tokens: int, separators: List[str]) -> List[str]:
-    """Recursively split text using a hierarchy of separators.
+def _sentence_split(text: str, max_tokens: int) -> List[str]:
+    """Split text into chunks of complete sentences.
 
-    Tries the first separator; if any resulting piece is still too large,
-    falls back to the next separator, and so on.
-    Last resort: hard split by tokens.
+    Uses NLTK sent_tokenize for accurate sentence detection, then groups
+    sentences together up to max_tokens. Ensures chunks always start and
+    end at sentence boundaries for readability.
+
+    Hierarchy: paragraphs → sentences → hard token split (last resort).
     """
     if _count_tokens(text) <= max_tokens:
         return [text]
 
-    if not separators:
-        # Hard split by tokens as last resort
-        tokens = _enc.encode(text)
-        chunks = []
-        for i in range(0, len(tokens), max_tokens):
-            chunks.append(_enc.decode(tokens[i : i + max_tokens]))
-        return chunks
+    # Split into paragraphs first to preserve structure
+    paragraphs = text.split("\n\n")
 
-    sep = separators[0]
-    remaining_seps = separators[1:]
+    # Collect all sentences with paragraph break markers
+    all_sentences: List[str] = []
+    for i, para in enumerate(paragraphs):
+        para = para.strip()
+        if not para:
+            continue
+        try:
+            sentences = sent_tokenize(para)
+        except Exception:
+            # Fallback: split on ". " then " " for very broken text
+            sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', para) if s.strip()]
+            if not sentences:
+                sentences = [para]
+        for sent in sentences:
+            sent = sent.strip()
+            if sent:
+                all_sentences.append(sent)
+        # Add paragraph break marker between paragraphs (not after last)
+        if i < len(paragraphs) - 1:
+            all_sentences.append("\n\n")
 
-    parts = text.split(sep)
+    # Group sentences into chunks respecting max_tokens
     chunks: List[str] = []
-    current = ""
+    current_parts: List[str] = []
+    current_tokens = 0
 
-    for part in parts:
-        candidate = current + sep + part if current else part
-        if _count_tokens(candidate) <= max_tokens:
-            current = candidate
-        else:
-            if current:
-                chunks.append(current)
-            # If this single part is still too big, split it with next separator
-            if _count_tokens(part) > max_tokens:
-                sub_chunks = _recursive_split(part, max_tokens, remaining_seps)
-                chunks.extend(sub_chunks)
-                current = ""
-            else:
-                current = part
+    for sent in all_sentences:
+        if sent == "\n\n":
+            # Paragraph break: add to current group if it fits
+            if current_parts:
+                current_parts.append(sent)
+            continue
 
-    if current:
-        chunks.append(current)
+        sent_tokens = _count_tokens(sent)
+
+        # Single sentence exceeds max_tokens → hard split by tokens
+        if sent_tokens > max_tokens:
+            if current_parts:
+                chunk_text_val = _join_parts(current_parts)
+                if chunk_text_val.strip():
+                    chunks.append(chunk_text_val.strip())
+                current_parts = []
+                current_tokens = 0
+            tokens = _enc.encode(sent)
+            for j in range(0, len(tokens), max_tokens):
+                chunks.append(_enc.decode(tokens[j : j + max_tokens]))
+            continue
+
+        # Would adding this sentence exceed the limit?
+        if current_tokens + sent_tokens > max_tokens and current_parts:
+            chunk_text_val = _join_parts(current_parts)
+            if chunk_text_val.strip():
+                chunks.append(chunk_text_val.strip())
+            current_parts = []
+            current_tokens = 0
+
+        current_parts.append(sent)
+        current_tokens += sent_tokens
+
+    # Flush remaining
+    if current_parts:
+        chunk_text_val = _join_parts(current_parts)
+        if chunk_text_val.strip():
+            chunks.append(chunk_text_val.strip())
 
     return chunks
+
+
+def _join_parts(parts: List[str]) -> str:
+    """Join sentence parts, using spaces between sentences and preserving paragraph breaks."""
+    result = []
+    for part in parts:
+        if part == "\n\n":
+            result.append("\n\n")
+        else:
+            if result and result[-1] != "\n\n":
+                result.append(" ")
+            result.append(part)
+    return "".join(result)
 
 
 def _sentence_overlap(chunk: str, max_overlap_tokens: int) -> str:
@@ -181,10 +231,8 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50, **kwargs) ->
     if not text:
         return []
 
-    # Step 2: Recursive split with separator hierarchy
-    # \n\n = paragraphs, \n = lines, ". " = sentences, " " = words
-    separators = ["\n\n", "\n", ". ", " "]
-    raw_chunks = _recursive_split(text, chunk_size, separators)
+    # Step 2: Sentence-aware split (paragraphs → sentences → hard token split)
+    raw_chunks = _sentence_split(text, chunk_size)
 
     # Step 3: Add sentence-boundary overlap (complete sentences, not cut characters)
     final_chunks: List[str] = []
