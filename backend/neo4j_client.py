@@ -178,11 +178,11 @@ def get_person_context(company_id: int, person_name: str, depth: int = 1) -> str
             result_d1 = session.run(
                 """
                 MATCH (p:Person {name: $name, company_id: $cid})-[r]-(connected)
-                RETURN p.name AS source_name,
+                RETURN COALESCE(p.nom, p.name, '?') AS source_name,
                        p.role AS source_role,
                        type(r) AS rel_type,
                        properties(r) AS rel_props,
-                       connected.name AS target_name,
+                       COALESCE(connected.nom, connected.name, '?') AS target_name,
                        labels(connected)[0] AS target_label
             """,
                 name=person_name,
@@ -233,11 +233,11 @@ def get_person_context(company_id: int, person_name: str, depth: int = 1) -> str
                     """
                     MATCH (p:Person {name: $name, company_id: $cid})-[r1]-(mid)-[r2]-(far)
                     WHERE far <> p AND NOT (p)-[]-(far)
-                    RETURN mid.name AS source_name,
+                    RETURN COALESCE(mid.nom, mid.name, '?') AS source_name,
                            mid.role AS source_role,
                            type(r2) AS rel_type,
                            properties(r2) AS rel_props,
-                           far.name AS target_name,
+                           COALESCE(far.nom, far.name, '?') AS target_name,
                            labels(far)[0] AS target_label
                     LIMIT 30
                 """,
@@ -307,11 +307,11 @@ def get_person_context_with_data(company_id: int, person_name: str, depth: int =
             result_d1 = session.run(
                 """
                 MATCH (p:Person {name: $name, company_id: $cid})-[r]-(connected)
-                RETURN p.name AS source_name,
+                RETURN COALESCE(p.nom, p.name, '?') AS source_name,
                        p.role AS source_role,
                        type(r) AS rel_type,
                        properties(r) AS rel_props,
-                       connected.name AS target_name,
+                       COALESCE(connected.nom, connected.name, '?') AS target_name,
                        labels(connected)[0] AS target_label
             """,
                 name=person_name,
@@ -326,11 +326,11 @@ def get_person_context_with_data(company_id: int, person_name: str, depth: int =
                     """
                     MATCH (p:Person {name: $name, company_id: $cid})-[r1]-(mid)-[r2]-(far)
                     WHERE far <> p AND NOT (p)-[]-(far)
-                    RETURN mid.name AS source_name,
+                    RETURN COALESCE(mid.nom, mid.name, '?') AS source_name,
                            mid.role AS source_role,
                            type(r2) AS rel_type,
                            properties(r2) AS rel_props,
-                           far.name AS target_name,
+                           COALESCE(far.nom, far.name, '?') AS target_name,
                            labels(far)[0] AS target_label
                     LIMIT 30
                 """,
