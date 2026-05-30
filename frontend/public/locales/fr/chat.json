@@ -36,7 +36,19 @@
     "documentTruncated": "[... document tronqué]",
     "sourcesUsed": "{{count}} source(s) utilisée(s)",
     "sourcesUsed_one": "{{count}} source utilisée",
-    "sourcesUsed_other": "{{count}} sources utilisées"
+    "sourcesUsed_other": "{{count}} sources utilisées",
+    "graphUsed": "Graphe utilisé"
+  },
+  "graph": {
+    "panelTitle": "Graphe de connaissances",
+    "targetPerson": "Personne cible",
+    "directRelations": "Relations directes",
+    "secondDegreeRelations": "Relations 2nd degré",
+    "noData": "Aucune donnée graphe",
+    "skills": "Compétences",
+    "role": "Rôle",
+    "nodes": "entités",
+    "relations": "relations"
   },
   "sources": {
     "panelTitle": "Extraits sources",

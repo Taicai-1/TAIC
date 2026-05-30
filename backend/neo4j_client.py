@@ -86,6 +86,36 @@ def _get_org_driver(company_id: int):
         return None
 
 
+def _build_structured_data(records: list, person_desc: dict = None) -> dict:
+    """Convert Neo4j records into structured JSON for the frontend."""
+    nodes = {}  # key: name, value: {name, type, role, ...}
+    relationships = []
+
+    for rec in records:
+        src = rec.get("source_name", "?")
+        tgt = rec.get("target_name", "?")
+        # Add source node
+        if src not in nodes:
+            nodes[src] = {"name": src, "type": "Person", "role": rec.get("source_role", "") or ""}
+        # Add target node
+        if tgt not in nodes:
+            nodes[tgt] = {"name": tgt, "type": rec.get("target_label", "") or "", "role": ""}
+        # Add relationship
+        props = {k: v for k, v in (rec.get("rel_props") or {}).items() if k != "company_id"}
+        relationships.append({
+            "source": src,
+            "target": tgt,
+            "type": rec.get("rel_type", ""),
+            "properties": props,
+        })
+
+    return {
+        "nodes": list(nodes.values()),
+        "relationships": relationships,
+        "person": person_desc,
+    }
+
+
 def _format_results(records: list) -> str:
     """Convert Neo4j records into readable French text for RAG context."""
     if not records:
@@ -255,6 +285,200 @@ def get_person_context_cached(company_id: int, person_name: str, depth: int = 1)
     except Exception as e:
         logger.warning(f"Redis unavailable for Neo4j cache, direct query: {e}")
         return get_person_context(company_id, person_name, depth)
+
+
+def get_person_context_with_data(company_id: int, person_name: str, depth: int = 1) -> tuple:
+    """Return (text_context, structured_data) for a person.
+
+    Calls the base function for text, then re-queries for structured data.
+    Uses the cached text wrapper for the LLM context string.
+    """
+    text = get_person_context_cached(company_id, person_name, depth)
+    if not text:
+        return ("", None)
+
+    # Build structured data by re-querying (lightweight, records are small)
+    driver = _get_driver(company_id=company_id)
+    if driver is None:
+        return (text, None)
+
+    try:
+        with driver.session() as session:
+            result_d1 = session.run(
+                """
+                MATCH (p:Person {name: $name, company_id: $cid})-[r]-(connected)
+                RETURN p.name AS source_name,
+                       p.role AS source_role,
+                       type(r) AS rel_type,
+                       properties(r) AS rel_props,
+                       connected.name AS target_name,
+                       labels(connected)[0] AS target_label
+            """,
+                name=person_name,
+                cid=company_id,
+            )
+            records_d1 = [dict(record) for record in result_d1]
+
+            all_records = list(records_d1)
+
+            if depth >= 2:
+                result_d2 = session.run(
+                    """
+                    MATCH (p:Person {name: $name, company_id: $cid})-[r1]-(mid)-[r2]-(far)
+                    WHERE far <> p AND NOT (p)-[]-(far)
+                    RETURN mid.name AS source_name,
+                           mid.role AS source_role,
+                           type(r2) AS rel_type,
+                           properties(r2) AS rel_props,
+                           far.name AS target_name,
+                           labels(far)[0] AS target_label
+                    LIMIT 30
+                """,
+                    name=person_name,
+                    cid=company_id,
+                )
+                all_records.extend([dict(record) for record in result_d2])
+
+            # Person description
+            desc_result = session.run(
+                """
+                MATCH (p:Person {name: $name, company_id: $cid})
+                RETURN p.description AS description, p.role AS role, p.skills AS skills
+            """,
+                name=person_name,
+                cid=company_id,
+            )
+            desc_record = desc_result.single()
+            person_desc = None
+            if desc_record:
+                skills = desc_record.get("skills", [])
+                if skills and not isinstance(skills, list):
+                    skills = [skills]
+                person_desc = {
+                    "name": person_name,
+                    "role": desc_record.get("role", "") or "",
+                    "description": desc_record.get("description", "") or "",
+                    "skills": skills or [],
+                }
+
+            structured = _build_structured_data(all_records, person_desc)
+            return (text, structured)
+
+    except Exception as e:
+        logger.error(f"Neo4j structured data error for person '{person_name}': {e}")
+        return (text, None)
+
+
+def get_graph_keyword_with_data(
+    company_id: int,
+    keyword: str,
+    depth: int = 1,
+    node_types: list = None,
+) -> tuple:
+    """Return (text_context, structured_data) for keyword search.
+
+    Uses cached text for the LLM context, builds structured data from the base function.
+    """
+    text = get_graph_context_by_keyword_cached(company_id, keyword, depth, node_types)
+    if not text:
+        return ("", None)
+
+    # Get full tuple from base function for structured data
+    _, node_count, rel_count = get_graph_context_by_keyword(company_id, keyword, depth, node_types)
+
+    # Re-run the query to get records for structured data
+    driver = _get_driver(company_id=company_id)
+    if driver is None:
+        return (text, None)
+
+    allowed_labels = _SEARCHABLE_LABELS
+    if node_types:
+        allowed_labels = [l for l in _SEARCHABLE_LABELS if l in node_types]
+        if not allowed_labels:
+            allowed_labels = _SEARCHABLE_LABELS
+
+    try:
+        with driver.session() as session:
+            all_records = []
+            matched_nodes = set()
+
+            for label in allowed_labels:
+                result = session.run(
+                    f"""
+                    MATCH (n:{label} {{company_id: $cid}})
+                    WHERE toLower(n.nom) CONTAINS toLower($kw)
+                       OR toLower(COALESCE(n.name, '')) CONTAINS toLower($kw)
+                       OR toLower(COALESCE(n.description, '')) CONTAINS toLower($kw)
+                       OR toLower(COALESCE(n.role, '')) CONTAINS toLower($kw)
+                    RETURN n, labels(n)[0] AS label, elementId(n) AS nid
+                    LIMIT 20
+                    """,
+                    cid=company_id,
+                    kw=keyword,
+                )
+                for record in result:
+                    nid = record["nid"]
+                    if nid not in matched_nodes:
+                        matched_nodes.add(nid)
+
+                rel_result = session.run(
+                    f"""
+                    MATCH (n:{label} {{company_id: $cid}})-[r]-(connected)
+                    WHERE toLower(n.nom) CONTAINS toLower($kw)
+                       OR toLower(COALESCE(n.name, '')) CONTAINS toLower($kw)
+                       OR toLower(COALESCE(n.description, '')) CONTAINS toLower($kw)
+                       OR toLower(COALESCE(n.role, '')) CONTAINS toLower($kw)
+                    RETURN COALESCE(n.nom, n.name, '?') AS source_name,
+                           n.role AS source_role,
+                           type(r) AS rel_type,
+                           properties(r) AS rel_props,
+                           COALESCE(connected.nom, connected.name, '?') AS target_name,
+                           labels(connected)[0] AS target_label
+                    LIMIT 50
+                    """,
+                    cid=company_id,
+                    kw=keyword,
+                )
+                all_records.extend([dict(r) for r in rel_result])
+
+            if depth >= 2 and matched_nodes:
+                for label in allowed_labels:
+                    d2_result = session.run(
+                        f"""
+                        MATCH (n:{label} {{company_id: $cid}})-[r1]-(mid)-[r2]-(far)
+                        WHERE (toLower(n.nom) CONTAINS toLower($kw)
+                               OR toLower(COALESCE(n.name, '')) CONTAINS toLower($kw)
+                               OR toLower(COALESCE(n.description, '')) CONTAINS toLower($kw)
+                               OR toLower(COALESCE(n.role, '')) CONTAINS toLower($kw))
+                              AND far <> n AND NOT (n)-[]-(far)
+                        RETURN COALESCE(mid.nom, mid.name, '?') AS source_name,
+                               mid.role AS source_role,
+                               type(r2) AS rel_type,
+                               properties(r2) AS rel_props,
+                               COALESCE(far.nom, far.name, '?') AS target_name,
+                               labels(far)[0] AS target_label
+                        LIMIT 30
+                        """,
+                        cid=company_id,
+                        kw=keyword,
+                    )
+                    all_records.extend([dict(r) for r in d2_result])
+
+            # Dedup
+            seen = set()
+            unique_records = []
+            for rec in all_records:
+                key = (rec.get("source_name"), rec.get("rel_type"), rec.get("target_name"))
+                if key not in seen:
+                    seen.add(key)
+                    unique_records.append(rec)
+
+            structured = _build_structured_data(unique_records)
+            return (text, structured)
+
+    except Exception as e:
+        logger.error(f"Neo4j structured keyword data error for '{keyword}': {e}")
+        return (text, None)
 
 
 def get_persons_for_company(company_id: int) -> list:

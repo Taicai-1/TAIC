@@ -449,6 +449,7 @@ class Message(Base):
     feedback = Column(String(10), nullable=True)  # 'like', 'dislike', ou None
     buffered = Column(Integer, default=0)  # 0 = non bufferisé, 1 = à bufferiser
     sources_json = Column(Text, nullable=True)  # JSON array of RAG source chunks
+    graph_data_json = Column(Text, nullable=True)  # JSON structured Neo4j graph data
 
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -692,6 +693,7 @@ def ensure_columns():
         ("weekly_recap_logs", "company_id", "INTEGER REFERENCES companies(id)"),
         ("weekly_recap_logs", "recap_id", "INTEGER REFERENCES recaps(id)"),
         ("messages", "sources_json", "TEXT"),
+        ("messages", "graph_data_json", "TEXT"),
     ]
     try:
         with engine.connect() as conn:

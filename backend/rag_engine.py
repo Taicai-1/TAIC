@@ -298,29 +298,28 @@ def get_answer(
             style_prefix = f"{agent.contexte.strip()}. " if (agent.contexte or "").strip() else ""
             image_bytes = generate_image(style_prefix + question)
             image_url = upload_generated_image(image_bytes, agent.id)
-            return {"answer": f"![Image générée]({image_url})", "sources": []}
+            return {"answer": f"![Image générée]({image_url})", "sources": [], "graph_data": None}
 
         # Neo4j Knowledge Graph context injection
+        graph_data = None
         if agent and getattr(agent, "neo4j_enabled", False):
             try:
                 owner = db.query(User).filter(User.id == agent.user_id).first()
                 if owner and owner.company_id:
                     neo4j_person = getattr(agent, "neo4j_person_name", None)
                     if neo4j_person:
-                        # Legacy person-centric path
-                        from neo4j_client import get_person_context_cached
+                        from neo4j_client import get_person_context_with_data
 
-                        neo4j_context = get_person_context_cached(
+                        neo4j_context, graph_data = get_person_context_with_data(
                             owner.company_id, neo4j_person, agent.neo4j_depth or 1
                         )
                         if neo4j_context:
                             contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
                             logger.info(f"Neo4j context injected for agent {agent_id}, person '{neo4j_person}'")
                     else:
-                        # Keyword-based graph search using the user's question
-                        from neo4j_client import get_graph_context_by_keyword_cached
+                        from neo4j_client import get_graph_keyword_with_data
 
-                        neo4j_context = get_graph_context_by_keyword_cached(owner.company_id, question, depth=1)
+                        neo4j_context, graph_data = get_graph_keyword_with_data(owner.company_id, question, depth=1)
                         if neo4j_context:
                             contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
                             logger.info(
@@ -340,7 +339,7 @@ def get_answer(
         # Si pas de documents, fallback sur le contexte + mémoire
         if not user_docs:
             if selected_doc_ids:
-                return {"answer": "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection.", "sources": []}
+                return {"answer": "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection.", "sources": [], "graph_data": graph_data}
             else:
                 logger.info("No documents found, using context + question + memory only")
                 # Prépare la liste messages pour OpenAI avec l'historique complet
@@ -369,7 +368,7 @@ def get_answer(
                 logger.info("[PROMPT OPENAI] %s", json.dumps(messages, ensure_ascii=False, indent=2))
                 # If this request is for an actionnable agent, enforce Gemini-only (no OpenAI fallback)
                 response = get_chat_response(messages, model_id=model_id)
-                return {"answer": response, "sources": []}
+                return {"answer": response, "sources": [], "graph_data": graph_data}
 
         # Always get question embedding with retry
         logger.info(f"Getting embedding for question: {question}")
@@ -467,7 +466,7 @@ def get_answer(
             gemini_only_flag = False
         response = get_chat_response(messages, model_id=model_id, gemini_only=gemini_only_flag)
         logger.info("Successfully got response from OpenAI")
-        return {"answer": response, "sources": sources}
+        return {"answer": response, "sources": sources, "graph_data": graph_data}
     except Exception as e:
         logger.error(f"Error getting answer: {e}")
         raise Exception(f"Erreur lors du traitement de votre question avec l'API OpenAI : {str(e)}")
@@ -542,27 +541,28 @@ def get_answer_stream(
             image_url = upload_generated_image(image_bytes, agent.id)
             full = f"![Image générée]({image_url})"
             yield sse_event("token", {"t": full})
-            yield sse_event("done", {"full_text": full, "sources": []})
+            yield sse_event("done", {"full_text": full, "sources": [], "graph_data": None})
             return
 
         # Neo4j context
+        graph_data = None
         if agent and getattr(agent, "neo4j_enabled", False):
             try:
                 owner = db.query(User).filter(User.id == agent.user_id).first()
                 if owner and owner.company_id:
                     neo4j_person = getattr(agent, "neo4j_person_name", None)
                     if neo4j_person:
-                        from neo4j_client import get_person_context_cached
+                        from neo4j_client import get_person_context_with_data
 
-                        neo4j_context = get_person_context_cached(
+                        neo4j_context, graph_data = get_person_context_with_data(
                             owner.company_id, neo4j_person, agent.neo4j_depth or 1
                         )
                         if neo4j_context:
                             contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
                     else:
-                        from neo4j_client import get_graph_context_by_keyword_cached
+                        from neo4j_client import get_graph_keyword_with_data
 
-                        neo4j_context = get_graph_context_by_keyword_cached(owner.company_id, question, depth=1)
+                        neo4j_context, graph_data = get_graph_keyword_with_data(owner.company_id, question, depth=1)
                         if neo4j_context:
                             contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
             except Exception as e:
@@ -582,7 +582,7 @@ def get_answer_stream(
             if selected_doc_ids:
                 msg = "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection."
                 yield sse_event("token", {"t": msg})
-                yield sse_event("done", {"full_text": msg, "sources": []})
+                yield sse_event("done", {"full_text": msg, "sources": [], "graph_data": graph_data})
                 return
 
             messages = []
@@ -680,8 +680,9 @@ def get_answer_stream(
             else:
                 cached_text = cached.get("answer", str(cached))
                 cached_sources = cached.get("sources", [])
+            cached_graph = cached.get("graph_data", None) if isinstance(cached, dict) else None
             yield sse_event("token", {"t": cached_text})
-            yield sse_event("done", {"full_text": cached_text, "sources": cached_sources})
+            yield sse_event("done", {"full_text": cached_text, "sources": cached_sources, "graph_data": cached_graph})
             return
 
         # --- Stream from LLM ---
@@ -696,10 +697,10 @@ def get_answer_stream(
             full_text += chunk
             yield sse_event("token", {"t": chunk})
 
-        yield sse_event("done", {"full_text": full_text, "sources": sources})
+        yield sse_event("done", {"full_text": full_text, "sources": sources, "graph_data": graph_data})
 
-        # Cache the result (store answer + sources together)
-        _set_rag_cache(cache_key, {"answer": full_text, "sources": sources})
+        # Cache the result (store answer + sources + graph_data together)
+        _set_rag_cache(cache_key, {"answer": full_text, "sources": sources, "graph_data": graph_data})
 
     except Exception as e:
         logger.error(f"Error in get_answer_stream: {e}")

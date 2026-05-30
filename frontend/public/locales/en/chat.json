@@ -36,7 +36,19 @@
     "documentTruncated": "[... document truncated]",
     "sourcesUsed": "{{count}} source(s) used",
     "sourcesUsed_one": "{{count}} source used",
-    "sourcesUsed_other": "{{count}} sources used"
+    "sourcesUsed_other": "{{count}} sources used",
+    "graphUsed": "Graph used"
+  },
+  "graph": {
+    "panelTitle": "Knowledge graph",
+    "targetPerson": "Target person",
+    "directRelations": "Direct relations",
+    "secondDegreeRelations": "2nd degree relations",
+    "noData": "No graph data",
+    "skills": "Skills",
+    "role": "Role",
+    "nodes": "entities",
+    "relations": "relations"
   },
   "sources": {
     "panelTitle": "Source extracts",

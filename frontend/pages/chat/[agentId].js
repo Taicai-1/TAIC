@@ -25,7 +25,13 @@ import {
   ExternalLink,
   Search,
   BookOpen,
-  X
+  X,
+  GitBranch,
+  User,
+  FolderKanban,
+  Building2,
+  Sparkles,
+  Users
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -145,6 +151,133 @@ const SourcesPanel = ({ sources, open, onClose, t }) => {
   );
 };
 
+// Icon + color mapping for graph node types
+const graphNodeConfig = {
+  Person: { icon: User, color: "blue" },
+  Projet: { icon: FolderKanban, color: "purple" },
+  Client: { icon: Building2, color: "amber" },
+  Competence: { icon: Sparkles, color: "emerald" },
+  Departement: { icon: Users, color: "indigo" },
+  Source: { icon: FileText, color: "gray" },
+};
+
+const colorClasses = {
+  blue: { bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-700", badge: "bg-blue-100 text-blue-700" },
+  purple: { bg: "bg-purple-50", border: "border-purple-200", text: "text-purple-700", badge: "bg-purple-100 text-purple-700" },
+  amber: { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", badge: "bg-amber-100 text-amber-700" },
+  emerald: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", badge: "bg-emerald-100 text-emerald-700" },
+  indigo: { bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-700", badge: "bg-indigo-100 text-indigo-700" },
+  gray: { bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-700", badge: "bg-gray-100 text-gray-700" },
+};
+
+// GraphCard: displays a single node with its outgoing relationships
+const GraphCard = ({ node, relationships, t }) => {
+  const config = graphNodeConfig[node.type] || graphNodeConfig.Person;
+  const colors = colorClasses[config.color] || colorClasses.gray;
+  const Icon = config.icon;
+  const outgoing = relationships.filter(r => r.source === node.name);
+
+  return (
+    <div className={`rounded-button border ${colors.border} ${colors.bg} p-3 space-y-2`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Icon className={`w-3.5 h-3.5 ${colors.text} shrink-0`} />
+          <span className={`text-xs font-semibold ${colors.text} truncate`}>{node.name}</span>
+        </div>
+        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${colors.badge} shrink-0`}>
+          {node.type}
+        </span>
+      </div>
+      {node.role && (
+        <p className="text-[11px] text-gray-500">{t('chat:graph.role')}: {node.role}</p>
+      )}
+      {outgoing.length > 0 && (
+        <div className="space-y-1 pt-1 border-t border-gray-200">
+          {outgoing.map((rel, i) => {
+            const relLabel = rel.type.toLowerCase().replace(/_/g, ' ');
+            const propsStr = rel.properties && Object.keys(rel.properties).length > 0
+              ? ` (${Object.entries(rel.properties).map(([k,v]) => `${k}: ${v}`).join(', ')})`
+              : '';
+            return (
+              <p key={i} className="text-[11px] text-gray-600">
+                <span className="text-gray-400 mr-1">&rarr;</span>
+                {relLabel} <span className="font-medium text-gray-700">{rel.target}</span>
+                {propsStr && <span className="text-gray-400">{propsStr}</span>}
+              </p>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// GraphPanel: side panel displaying structured graph data
+const GraphPanel = ({ data, open, onClose, t }) => {
+  if (!open || !data) return null;
+  const nodes = data.nodes || [];
+  const relationships = data.relationships || [];
+  const person = data.person;
+
+  return (
+    <div className="w-96 min-w-[24rem] max-w-sm h-full flex flex-col border-l border-gray-200 bg-white shadow-subtle overflow-hidden shrink-0 animate-slide-in">
+      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <GitBranch className="w-4 h-4 text-violet-600" />
+          <h3 className="font-heading font-bold text-sm text-gray-900">{t('chat:graph.panelTitle')}</h3>
+          <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-violet-100 text-violet-700">
+            {nodes.length} {t('chat:graph.nodes')}
+          </span>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-sm hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* Target person section */}
+        {person && (
+          <div className="rounded-button border border-blue-200 bg-blue-50 p-3 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-blue-700" />
+              <span className="text-xs font-bold text-blue-700">{t('chat:graph.targetPerson')}</span>
+            </div>
+            <p className="text-sm font-semibold text-gray-900">{person.name}</p>
+            {person.role && <p className="text-xs text-gray-600">{t('chat:graph.role')}: {person.role}</p>}
+            {person.description && <p className="text-xs text-gray-500">{person.description}</p>}
+            {person.skills && person.skills.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                <span className="text-[10px] text-gray-500 mr-1">{t('chat:graph.skills')}:</span>
+                {person.skills.map((s, i) => (
+                  <span key={i} className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded-full">{s}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Node cards */}
+        {nodes.length > 0 ? (
+          nodes.map((node, idx) => (
+            <GraphCard key={idx} node={node} relationships={relationships} t={t} />
+          ))
+        ) : (
+          <p className="text-sm text-gray-400 text-center py-4">{t('chat:graph.noData')}</p>
+        )}
+
+        {/* Relationship count summary */}
+        {relationships.length > 0 && (
+          <div className="text-center pt-2">
+            <span className="text-[11px] text-gray-400">
+              {relationships.length} {t('chat:graph.relations')}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function AgentChatPage() {
   const router = useRouter();
   const { t } = useTranslation(['chat', 'common', 'errors']);
@@ -200,6 +333,9 @@ export default function AgentChatPage() {
   // Sources panel
   const [selectedSources, setSelectedSources] = useState(null);
   const [sourcesPanelOpen, setSourcesPanelOpen] = useState(false);
+  // Graph panel
+  const [selectedGraphData, setSelectedGraphData] = useState(null);
+  const [graphPanelOpen, setGraphPanelOpen] = useState(false);
   // Recherche de conversations
   const [convSearch, setConvSearch] = useState('');
   const filteredConvs = conversations.filter(c => (c.title || '').toLowerCase().includes(convSearch.toLowerCase()));
@@ -262,12 +398,15 @@ export default function AgentChatPage() {
     setMessages([]);
     setSourcesPanelOpen(false);
     setSelectedSources(null);
+    setGraphPanelOpen(false);
+    setSelectedGraphData(null);
     try {
       const res = await api.get(`/conversations/${convId}/messages`);
-      // Attach sources from backend to each message object
+      // Attach sources and graph_data from backend to each message object
       setMessages(res.data.map(m => ({
         ...m,
         sources: m.sources || undefined,
+        graph_data: m.graph_data || undefined,
       })));
     } catch (e) {
       setMessages([]);
@@ -350,7 +489,8 @@ const handleDeleteConversation = async (convId) => {
       });
 
       const slashSources = resAsk.data.sources || [];
-      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources };
+      const slashGraphData = resAsk.data.graph_data || null;
+      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources, graph_data: slashGraphData };
       setMessages(prev => [...prev, assistantMsg]);
       if (slashSources.length > 0) {
         setSelectedSources(slashSources);
@@ -362,6 +502,7 @@ const handleDeleteConversation = async (convId) => {
         role: 'agent',
         content: resAsk.data.answer,
         sources_json: slashSources.length > 0 ? JSON.stringify(slashSources) : undefined,
+        graph_data_json: slashGraphData ? JSON.stringify(slashGraphData) : undefined,
       });
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Error');
@@ -464,6 +605,7 @@ const handleDeleteConversation = async (convId) => {
       let streamSuccess = false;
       let iaAnswer = "";
       let iaSources = [];
+      let iaGraphData = null;
 
       try {
         const controller = new AbortController();
@@ -498,8 +640,9 @@ const handleDeleteConversation = async (convId) => {
             tokenBufferRef.current = '';
             iaAnswer = data.full_text || iaAnswer;
             iaSources = data.sources || [];
+            iaGraphData = data.graph_data || null;
             setMessages(prev => prev.map((m, i) =>
-              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources } : m
+              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData } : m
             ));
             // Auto-open sources panel if sources exist
             if (iaSources.length > 0) {
@@ -528,8 +671,9 @@ const handleDeleteConversation = async (convId) => {
           });
           iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
           iaSources = resAsk.data.sources || [];
+          iaGraphData = resAsk.data.graph_data || null;
           setMessages(prev => prev.map((m, i) =>
-            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources } : m
+            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData } : m
           ));
           // Auto-open sources panel if sources exist
           if (iaSources.length > 0) {
@@ -585,7 +729,8 @@ const handleDeleteConversation = async (convId) => {
           conversation_id: selectedConv,
           role: "agent",
           content: iaAnswer,
-          sources_json: iaSources.length > 0 ? JSON.stringify(iaSources) : undefined
+          sources_json: iaSources.length > 0 ? JSON.stringify(iaSources) : undefined,
+          graph_data_json: iaGraphData ? JSON.stringify(iaGraphData) : undefined
         });
         // Update with server-assigned id
         setMessages(prev => prev.map((m, i) =>
@@ -924,8 +1069,8 @@ const handleDeleteConversation = async (convId) => {
                       ) : (
                         <div className="leading-relaxed whitespace-pre-line">{msg.content}</div>
                       )}
-                      {/* Sources button + Feedback button */}
-                      {msg.role === "agent" && (msg.sources?.length > 0 || isLastAgentMsg) && (
+                      {/* Sources button + Graph button + Feedback button */}
+                      {msg.role === "agent" && (msg.sources?.length > 0 || msg.graph_data || isLastAgentMsg) && (
                         <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200 flex-wrap">
                           {msg.sources?.length > 0 && (
                             <button
@@ -933,10 +1078,24 @@ const handleDeleteConversation = async (convId) => {
                               onClick={() => {
                                 setSelectedSources(msg.sources);
                                 setSourcesPanelOpen(true);
+                                setGraphPanelOpen(false);
                               }}
                             >
                               <BookOpen className="w-3.5 h-3.5" />
                               <span className="text-sm font-medium">{t('chat:messages.sourcesUsed', { count: msg.sources.length })}</span>
+                            </button>
+                          )}
+                          {msg.graph_data && (
+                            <button
+                              className="group flex items-center justify-center space-x-1 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-sm transition-all border border-violet-200 hover:border-violet-300"
+                              onClick={() => {
+                                setSelectedGraphData(msg.graph_data);
+                                setGraphPanelOpen(true);
+                                setSourcesPanelOpen(false);
+                              }}
+                            >
+                              <GitBranch className="w-3.5 h-3.5" />
+                              <span className="text-sm font-medium">{t('chat:messages.graphUsed')}</span>
                             </button>
                           )}
                           {isLastAgentMsg && (
@@ -1186,11 +1345,17 @@ const handleDeleteConversation = async (convId) => {
         </div>
       </div>
 
-      {/* Sources panel (3rd column) */}
+      {/* Sources panel (3rd column) — mutually exclusive with Graph panel */}
       <SourcesPanel
         sources={selectedSources}
-        open={sourcesPanelOpen}
+        open={sourcesPanelOpen && !graphPanelOpen}
         onClose={() => setSourcesPanelOpen(false)}
+        t={t}
+      />
+      <GraphPanel
+        data={selectedGraphData}
+        open={graphPanelOpen}
+        onClose={() => setGraphPanelOpen(false)}
         t={t}
       />
     </div>
