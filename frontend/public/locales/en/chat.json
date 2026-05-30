@@ -15,7 +15,9 @@
   "header": {
     "backButton": "Back",
     "agentTypeDefault": "AI Assistant",
-    "sourcesButton": "Sources"
+    "sourcesButton": "Sources",
+    "documentsToggle": "Documents",
+    "graphToggle": "Graph"
   },
   "messages": {
     "actionResult": "Action result",

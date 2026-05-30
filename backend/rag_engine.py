@@ -232,6 +232,8 @@ def get_answer(
     history: list = None,
     model_id: str = None,
     company_id: int = None,
+    use_rag: bool = True,
+    use_graph: bool = True,
 ) -> Dict[str, Any]:
     """Get answer using RAG for specific user with OpenAI - always using embeddings, memory, and custom model if provided.
 
@@ -273,6 +275,12 @@ def get_answer(
                 )
                 logger.info(f"Using all {len(user_docs)} user documents")
 
+        # If RAG is disabled, skip document-based retrieval entirely
+        if not use_rag:
+            user_docs = []
+            selected_doc_ids = None
+            logger.info("RAG disabled by user toggle, skipping document retrieval")
+
         # Detect if user mentions a specific document
         mentioned_doc_id = None
         if user_docs and not selected_doc_ids:
@@ -302,7 +310,7 @@ def get_answer(
 
         # Neo4j Knowledge Graph context injection
         graph_data = None
-        if agent and getattr(agent, "neo4j_enabled", False):
+        if use_graph and agent and getattr(agent, "neo4j_enabled", False):
             try:
                 owner = db.query(User).filter(User.id == agent.user_id).first()
                 if owner and owner.company_id:
@@ -481,6 +489,8 @@ def get_answer_stream(
     history: list = None,
     model_id: str = None,
     company_id: int = None,
+    use_rag: bool = True,
+    use_graph: bool = True,
 ):
     """Streaming version of get_answer(). Yields SSE-formatted events.
 
@@ -516,6 +526,12 @@ def get_answer_stream(
                     .all()
                 )
 
+        # If RAG is disabled, skip document-based retrieval entirely
+        if not use_rag:
+            user_docs = []
+            selected_doc_ids = None
+            logger.info("RAG disabled by user toggle, skipping document retrieval")
+
         # Detect document mention
         mentioned_doc_id = None
         if user_docs and not selected_doc_ids:
@@ -546,7 +562,7 @@ def get_answer_stream(
 
         # Neo4j context
         graph_data = None
-        if agent and getattr(agent, "neo4j_enabled", False):
+        if use_graph and agent and getattr(agent, "neo4j_enabled", False):
             try:
                 owner = db.query(User).filter(User.id == agent.user_id).first()
                 if owner and owner.company_id:

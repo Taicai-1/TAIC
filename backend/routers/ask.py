@@ -58,6 +58,7 @@ async def ask_question(
 
         answer = None
         sources = []
+        graph_data = None
         agent = None
         model_id = None
         # Si agent_id fourni, comportement agent classique
@@ -80,9 +81,12 @@ async def ask_question(
                 history=history,
                 model_id=model_id,
                 company_id=agent.company_id,
+                use_rag=request.use_rag,
+                use_graph=request.use_graph,
             )
             answer = result["answer"] if isinstance(result, dict) else result
             sources = result.get("sources", []) if isinstance(result, dict) else []
+            graph_data = result.get("graph_data") if isinstance(result, dict) else None
         # Si team_id fourni, on va chercher le chef d'équipe et les sous-agents
         elif request.team_id:
             from database import Team, Agent
@@ -166,9 +170,12 @@ async def ask_question(
                 history=history,
                 model_id=model_id,
                 company_id=best_agent.company_id,
+                use_rag=request.use_rag,
+                use_graph=request.use_graph,
             )
             agent_answer = agent_result["answer"] if isinstance(agent_result, dict) else agent_result
             sources = agent_result.get("sources", []) if isinstance(agent_result, dict) else []
+            graph_data = agent_result.get("graph_data") if isinstance(agent_result, dict) else None
 
             # Réponse formatée
             if best_agent.id == leader.id:
@@ -183,7 +190,7 @@ async def ask_question(
         response_time = time.time() - start_time
         logger.info(f"Question answered for user {user_id} in {response_time:.2f}s")
         event_tracker.track_question_asked(int(user_id), request.question, response_time)
-        return {"answer": answer, "sources": sources}
+        return {"answer": answer, "sources": sources, "graph_data": graph_data}
     except Exception as e:
         logger.error(f"Error answering question for user {user_id}: {e}")
         return {"answer": "Désolé, une erreur s'est produite lors du traitement de votre question. Veuillez réessayer."}
@@ -233,6 +240,8 @@ async def ask_question_stream(
                     history=history,
                     model_id=model_id,
                     company_id=agent.company_id,
+                    use_rag=request.use_rag,
+                    use_graph=request.use_graph,
                 )
             elif request.team_id:
                 import numpy as np
@@ -320,6 +329,8 @@ async def ask_question_stream(
                     history=history,
                     model_id=model_id,
                     company_id=best_agent.company_id,
+                    use_rag=request.use_rag,
+                    use_graph=request.use_graph,
                 )
             else:
                 yield sse_event("error", {"message": "Aucun agent ou équipe valide fourni.", "code": "bad_request"})

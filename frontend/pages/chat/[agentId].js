@@ -336,6 +336,9 @@ export default function AgentChatPage() {
   // Graph panel
   const [selectedGraphData, setSelectedGraphData] = useState(null);
   const [graphPanelOpen, setGraphPanelOpen] = useState(false);
+  // Context source toggles
+  const [useRag, setUseRag] = useState(true);
+  const [useGraph, setUseGraph] = useState(true);
   // Recherche de conversations
   const [convSearch, setConvSearch] = useState('');
   const filteredConvs = conversations.filter(c => (c.title || '').toLowerCase().includes(convSearch.toLowerCase()));
@@ -486,6 +489,8 @@ const handleDeleteConversation = async (convId) => {
         question: cmd.prompt,
         agent_id: agentId,
         history: history,
+        use_rag: useRag,
+        use_graph: useGraph,
       });
 
       const slashSources = resAsk.data.sources || [];
@@ -614,7 +619,9 @@ const handleDeleteConversation = async (convId) => {
         await streamAsk('/ask-stream', {
           question: finalPrompt,
           agent_id: agentId,
-          history: history
+          history: history,
+          use_rag: useRag,
+          use_graph: useGraph
         }, {
           onToken: (text) => {
             tokenBufferRef.current += text;
@@ -667,7 +674,9 @@ const handleDeleteConversation = async (convId) => {
           const resAsk = await api.post('/ask', {
             question: finalPrompt,
             agent_id: agentId,
-            history: history
+            history: history,
+            use_rag: useRag,
+            use_graph: useGraph
           });
           iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
           iaSources = resAsk.data.sources || [];
@@ -985,6 +994,31 @@ const handleDeleteConversation = async (convId) => {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Context source toggles */}
+            <button
+              onClick={() => setUseRag(!useRag)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                useRag
+                  ? 'bg-primary-100 text-primary-700 border-primary-300'
+                  : 'bg-gray-100 text-gray-400 border-gray-200 line-through'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {t('chat:header.documentsToggle')}
+            </button>
+            {agent?.neo4j_enabled && (
+              <button
+                onClick={() => setUseGraph(!useGraph)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                  useGraph
+                    ? 'bg-violet-100 text-violet-700 border-violet-300'
+                    : 'bg-gray-100 text-gray-400 border-gray-200 line-through'
+                }`}
+              >
+                <GitBranch className="w-3.5 h-3.5" />
+                {t('chat:header.graphToggle')}
+              </button>
+            )}
             {/* Bouton retour vers page sources */}
             <Link href={`/sources/${agentId}`}>
               <button className="group flex items-center space-x-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-button font-medium shadow-card hover:shadow-elevated transition-all">

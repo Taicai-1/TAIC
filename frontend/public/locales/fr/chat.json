@@ -15,7 +15,9 @@
   "header": {
     "backButton": "Retour",
     "agentTypeDefault": "Assistant IA",
-    "sourcesButton": "Sources"
+    "sourcesButton": "Sources",
+    "documentsToggle": "Documents",
+    "graphToggle": "Graphe"
   },
   "messages": {
     "actionResult": "Résultat d'action",

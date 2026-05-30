@@ -358,6 +358,8 @@ class QuestionRequestValidated(BaseModel):
     team_id: Optional[int] = Field(None, gt=0)
     conversation_id: Optional[int] = Field(None, gt=0)
     history: Optional[list] = None
+    use_rag: bool = Field(default=True)
+    use_graph: bool = Field(default=True)
 
     @validator("question")
     def sanitize_question(cls, v):
