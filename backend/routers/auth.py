@@ -418,6 +418,17 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
         if not db_user:
             raise HTTPException(status_code=401, detail="User not found")
 
+        # Resolve membership role (owner/admin/member) for the user's company
+        role = None
+        if db_user.company_id:
+            from database import CompanyMembership
+            membership = db.query(CompanyMembership).filter(
+                CompanyMembership.user_id == db_user.id,
+                CompanyMembership.company_id == db_user.company_id,
+            ).first()
+            if membership:
+                role = membership.role
+
         return {
             "authenticated": True,
             "user": {
@@ -426,6 +437,7 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
                 "email": db_user.email,
                 "totp_enabled": db_user.totp_enabled,
                 "company_id": db_user.company_id,
+                "role": role,
             },
         }
     except HTTPException:
