@@ -313,6 +313,9 @@ class Agent(Base):
     neo4j_person_name = Column(String(200), nullable=True)
     neo4j_depth = Column(Integer, default=1, nullable=False)
 
+    # Template reference
+    template_id = Column(Integer, ForeignKey("agent_templates.id", ondelete="SET NULL"), nullable=True)
+
     # Weekly Recap
     weekly_recap_enabled = Column(Boolean, default=False, nullable=False)
     weekly_recap_prompt = Column(Text, nullable=True)
@@ -323,6 +326,39 @@ class Agent(Base):
     # Relations
     owner = relationship("User", back_populates="agents")
     documents = relationship("Document", back_populates="agent", cascade="all, delete-orphan")
+
+
+class AgentTemplate(Base):
+    __tablename__ = "agent_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(50), nullable=True)
+    icon = Column(String(50), nullable=True)
+    default_contexte = Column(Text, nullable=True)
+    default_biographie = Column(Text, nullable=True)
+    default_type = Column(String(32), nullable=False, default="conversationnel")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
+
+    company = relationship("Company")
+    creator = relationship("User")
+    template_documents = relationship("AgentTemplateDocument", back_populates="template", cascade="all, delete-orphan")
+
+
+class AgentTemplateDocument(Base):
+    __tablename__ = "agent_template_documents"
+    __table_args__ = (UniqueConstraint("template_id", "document_id", name="uq_template_document"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("agent_templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    template = relationship("AgentTemplate", back_populates="template_documents")
+    document = relationship("Document")
 
 
 class AgentShare(Base):

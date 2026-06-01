@@ -12,6 +12,8 @@ from database import (
     Company,
     CompanyMembership,
     AgentShare,
+    AgentTemplate,
+    AgentTemplateDocument,
 )
 from auth import hash_password
 
@@ -92,3 +94,21 @@ class CompanyMembershipFactory(factory.Factory):
         model = CompanyMembership
 
     role = "member"
+
+
+class AgentTemplateFactory(factory.Factory):
+    class Meta:
+        model = AgentTemplate
+
+    name = factory.Sequence(lambda n: f"template-{n}")
+    description = "Test template description"
+    category = "Tech"
+    icon = "Monitor"
+    default_contexte = "Tu es un expert technique."
+    default_biographie = "Assistant technique"
+    default_type = "conversationnel"
+
+
+class AgentTemplateDocumentFactory(factory.Factory):
+    class Meta:
+        model = AgentTemplateDocument

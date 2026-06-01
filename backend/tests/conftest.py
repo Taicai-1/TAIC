@@ -182,6 +182,70 @@ def test_conversation(db_session, test_user, test_agent):
     return conv
 
 
+@pytest.fixture
+def test_company(db_session):
+    """Create a test company."""
+    from tests.factories import CompanyFactory
+    company = CompanyFactory.build()
+    db_session.add(company)
+    db_session.flush()
+    return company
+
+
+@pytest.fixture
+def test_admin_user(db_session, test_company):
+    """Create an admin user in the test company."""
+    from tests.factories import UserFactory, CompanyMembershipFactory
+    user = UserFactory.build(company_id=test_company.id)
+    db_session.add(user)
+    db_session.flush()
+    membership = CompanyMembershipFactory.build(
+        user_id=user.id, company_id=test_company.id, role="admin"
+    )
+    db_session.add(membership)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def test_admin_token(test_admin_user):
+    """Return a valid JWT token for the admin user."""
+    return create_access_token(data={"sub": str(test_admin_user.id)})
+
+
+@pytest.fixture
+def admin_cookies(test_admin_token):
+    """Return cookies dict for authenticated admin requests."""
+    return {"token": test_admin_token}
+
+
+@pytest.fixture
+def test_member_user(db_session, test_company):
+    """Create a member user in the test company."""
+    from tests.factories import UserFactory, CompanyMembershipFactory
+    user = UserFactory.build(company_id=test_company.id)
+    db_session.add(user)
+    db_session.flush()
+    membership = CompanyMembershipFactory.build(
+        user_id=user.id, company_id=test_company.id, role="member"
+    )
+    db_session.add(membership)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def test_member_token(test_member_user):
+    """Return a valid JWT token for the member user."""
+    return create_access_token(data={"sub": str(test_member_user.id)})
+
+
+@pytest.fixture
+def member_cookies(test_member_token):
+    """Return cookies dict for authenticated member requests."""
+    return {"token": test_member_token}
+
+
 # ---------------------------------------------------------------------------
 # Mock fixtures for external services
 # ---------------------------------------------------------------------------
