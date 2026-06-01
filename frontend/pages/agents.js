@@ -21,7 +21,7 @@ import Layout from '../components/Layout';
 import AgentCard from '../components/AgentCard';
 
 export default function AgentsPage() {
-  const { t } = useTranslation(['agents', 'common', 'errors']);
+  const { t } = useTranslation(['agents', 'common', 'errors', 'templates']);
   const { user, loading: authLoading, authenticated, logout: authLogout } = useAuth();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,11 +41,15 @@ export default function AgentsPage() {
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [sendingFeedback, setSendingFeedback] = useState(false);
   const router = useRouter();
+  const [templates, setTemplates] = useState([]);
+  const [creationStep, setCreationStep] = useState(1);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
 
   useEffect(() => {
     if (!authenticated) return;
     loadAgents();
     loadNeo4jData();
+    loadTemplates();
   }, [authenticated]);
 
   // Lock body scroll when modal is open
@@ -60,6 +64,17 @@ export default function AgentsPage() {
       document.body.style.overflow = previous || '';
     };
   }, [showForm]);
+
+  useEffect(() => {
+    const templateId = router.query.template_id;
+    if (templateId && templates.length > 0) {
+      const tmpl = templates.find(t => t.id === parseInt(templateId));
+      if (tmpl) {
+        handleSelectTemplate(tmpl);
+      }
+      router.replace('/agents', undefined, { shallow: true });
+    }
+  }, [router.query.template_id, templates]);
 
   const hasNoOrg = user && !user.company_id;
 
@@ -88,6 +103,34 @@ export default function AgentsPage() {
       setNeo4jPersons(personsRes.data.persons || []);
     } catch (error) {
       // Neo4j data is optional, silent fail
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const resp = await api.get('/api/templates');
+      setTemplates(resp.data.templates || []);
+    } catch {
+      // Templates are optional, silent fail
+    }
+  };
+
+  const handleSelectTemplate = async (template) => {
+    try {
+      const resp = await api.get(`/api/templates/${template.id}`);
+      const tmpl = resp.data.template;
+      setForm(f => ({
+        ...f,
+        name: "",
+        contexte: tmpl.default_contexte || "",
+        biographie: tmpl.default_biographie || "",
+        type: tmpl.default_type || "conversationnel",
+      }));
+      setSelectedTemplate(tmpl);
+      setCreationStep(2);
+      setShowForm(true);
+    } catch {
+      toast.error(t('errors:generic'));
     }
   };
 
@@ -206,6 +249,8 @@ export default function AgentsPage() {
             onClick={() => {
               setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9 });
               setPhotoPreview(null);
+              setSelectedTemplate(null);
+              setCreationStep(templates.length > 0 ? 1 : 2);
               setShowForm(true);
             }}
             className="group flex items-center justify-center px-8 py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-button transition-all font-semibold shadow-card hover:shadow-elevated"
@@ -223,7 +268,62 @@ export default function AgentsPage() {
                   {t('agents:modal.titleCreate')}
                 </h2>
               </div>
-              <div className="space-y-4">
+              {creationStep === 1 ? (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => {
+                      setSelectedTemplate(null);
+                      setCreationStep(2);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 border-2 border-gray-200 rounded-button hover:border-primary-500 hover:bg-primary-50 transition-all text-left"
+                  >
+                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <Plus className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900 text-sm">{t('templates:agentCreation.fromScratch')}</div>
+                      <div className="text-xs text-gray-500">{t('templates:agentCreation.fromScratchDescription')}</div>
+                    </div>
+                  </button>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-gray-200"></div>
+                    <span className="text-xs text-gray-400">{t('templates:agentCreation.orFromTemplate')}</span>
+                    <div className="flex-1 h-px bg-gray-200"></div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {templates.map((tmpl) => (
+                      <button
+                        key={tmpl.id}
+                        onClick={() => handleSelectTemplate(tmpl)}
+                        className="flex flex-col items-start p-3 border-2 border-gray-200 rounded-button hover:border-primary-500 hover:bg-primary-50 transition-all text-left"
+                      >
+                        <div className="w-8 h-8 bg-primary-50 rounded-lg flex items-center justify-center mb-2">
+                          <Bot className="w-4 h-4 text-primary-600" />
+                        </div>
+                        <div className="font-semibold text-sm text-gray-900">{tmpl.name}</div>
+                        <div className="text-xs text-gray-400">{t('templates:card.documents', { count: tmpl.document_count })}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => { setShowForm(false); }}
+                    className="w-full px-6 py-3 text-gray-700 bg-white border border-gray-200 rounded-button hover:bg-gray-50 transition-all font-medium mt-4"
+                  >
+                    {t('agents:buttons.cancel')}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {selectedTemplate && (
+                    <div className="mb-4 px-3 py-2 bg-primary-50 border border-primary-200 rounded-button text-sm text-primary-700 flex items-center gap-2">
+                      <Bot className="w-4 h-4" />
+                      {t('templates:agentCreation.basedOn')} <strong>{selectedTemplate.name}</strong>
+                    </div>
+                  )}
+                  <div className="space-y-4">
               <input
                 type="text"
                 className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
@@ -512,11 +612,20 @@ export default function AgentsPage() {
                     }
                     formData.append("recap_frequency", form.recap_frequency);
                     formData.append("recap_hour", String(form.recap_hour));
-                    await api.post('/agents', formData, {
-                      headers: {
-                        "Content-Type": "multipart/form-data"
-                      }
-                    });
+                    if (selectedTemplate) {
+                      await api.post(`/api/templates/${selectedTemplate.id}/create-agent`, {
+                        name: form.name,
+                        contexte: form.contexte || undefined,
+                        biographie: form.biographie || undefined,
+                        type: form.type || undefined,
+                      });
+                    } else {
+                      await api.post('/agents', formData, {
+                        headers: {
+                          "Content-Type": "multipart/form-data"
+                        }
+                      });
+                    }
                     toast.success(t('agents:toast.createSuccess'));
                     setShowForm(false);
                     setPhotoPreview(null);
@@ -544,6 +653,8 @@ export default function AgentsPage() {
                 )}
               </button>
             </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -575,6 +686,8 @@ export default function AgentsPage() {
                   onClick={() => {
                     setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9 });
                     setPhotoPreview(null);
+                    setSelectedTemplate(null);
+                    setCreationStep(templates.length > 0 ? 1 : 2);
                     setShowForm(true);
                   }}
                   className="group inline-flex items-center justify-center px-8 py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-button transition-all font-semibold shadow-card hover:shadow-elevated"
@@ -684,7 +797,7 @@ export async function getServerSideProps({ locale }) {
   // Cannot check cookies server-side because backend and frontend are on different domains
   return {
     props: {
-      ...(await serverSideTranslations(locale, ['agents', 'common', 'errors'])),
+      ...(await serverSideTranslations(locale, ['agents', 'common', 'errors', 'templates'])),
     },
   };
 }
