@@ -1,0 +1,567 @@
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/router";
+import toast, { Toaster } from "react-hot-toast";
+import { useTranslation } from "next-i18next";
+import { serverSideTranslations } from "next-i18next/serverSideTranslations";
+import {
+  Plus,
+  LayoutTemplate,
+  X,
+  Trash2,
+  Pencil,
+  FileText,
+  Zap,
+  Search,
+} from "lucide-react";
+import Layout from "../components/Layout";
+import { useAuth } from "../hooks/useAuth";
+import api from "../lib/api";
+
+export default function TemplatesPage() {
+  const { t } = useTranslation(["templates", "common", "errors", "agents"]);
+  const { user, loading: authLoading, authenticated } = useAuth();
+  const router = useRouter();
+
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [orgDocuments, setOrgDocuments] = useState([]);
+  const [docSearch, setDocSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    category: "",
+    icon: "",
+    default_contexte: "",
+    default_biographie: "",
+    default_type: "conversationnel",
+    document_ids: [],
+  });
+
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
+
+  const loadTemplates = useCallback(async () => {
+    try {
+      const resp = await api.get("/api/templates");
+      setTemplates(resp.data.templates || []);
+    } catch (error) {
+      if (error.response?.status === 401) router.push("/login");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
+  const loadOrgDocuments = useCallback(async () => {
+    try {
+      const resp = await api.get("/user/documents");
+      setOrgDocuments(resp.data.documents || []);
+    } catch {
+      // silent
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    loadTemplates();
+    loadOrgDocuments();
+  }, [authenticated, loadTemplates, loadOrgDocuments]);
+
+  const categories = [...new Set(templates.map((t) => t.category).filter(Boolean))];
+
+  const filteredTemplates = selectedCategory
+    ? templates.filter((t) => t.category === selectedCategory)
+    : templates;
+
+  const filteredDocs = orgDocuments.filter((d) =>
+    d.filename.toLowerCase().includes(docSearch.toLowerCase())
+  );
+
+  const resetForm = () => {
+    setForm({
+      name: "",
+      description: "",
+      category: "",
+      icon: "",
+      default_contexte: "",
+      default_biographie: "",
+      default_type: "conversationnel",
+      document_ids: [],
+    });
+    setEditingTemplate(null);
+    setDocSearch("");
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const openEdit = async (template) => {
+    try {
+      const resp = await api.get(`/api/templates/${template.id}`);
+      const tmpl = resp.data.template;
+      setForm({
+        name: tmpl.name || "",
+        description: tmpl.description || "",
+        category: tmpl.category || "",
+        icon: tmpl.icon || "",
+        default_contexte: tmpl.default_contexte || "",
+        default_biographie: tmpl.default_biographie || "",
+        default_type: tmpl.default_type || "conversationnel",
+        document_ids: (tmpl.documents || []).map((d) => d.id),
+      });
+      setEditingTemplate(tmpl);
+      setShowForm(true);
+    } catch {
+      toast.error(t("templates:toast.updateError"));
+    }
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      toast.error(t("templates:form.name.placeholder"));
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        name: form.name,
+        description: form.description || null,
+        category: form.category || null,
+        icon: form.icon || null,
+        default_contexte: form.default_contexte || null,
+        default_biographie: form.default_biographie || null,
+        default_type: form.default_type,
+        document_ids: form.document_ids,
+      };
+
+      if (editingTemplate) {
+        await api.put(`/api/templates/${editingTemplate.id}`, payload);
+        toast.success(t("templates:toast.updateSuccess"));
+      } else {
+        await api.post("/api/templates", payload);
+        toast.success(t("templates:toast.createSuccess"));
+      }
+      setShowForm(false);
+      resetForm();
+      loadTemplates();
+    } catch {
+      toast.error(
+        editingTemplate
+          ? t("templates:toast.updateError")
+          : t("templates:toast.createError")
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (templateId) => {
+    if (!confirm(t("templates:confirm.deleteMessage"))) return;
+    try {
+      await api.delete(`/api/templates/${templateId}`);
+      toast.success(t("templates:toast.deleteSuccess"));
+      loadTemplates();
+    } catch {
+      toast.error(t("templates:toast.deleteError"));
+    }
+  };
+
+  const handleUseTemplate = (templateId) => {
+    router.push(`/agents?template_id=${templateId}`);
+  };
+
+  const toggleDocSelection = (docId) => {
+    setForm((f) => ({
+      ...f,
+      document_ids: f.document_ids.includes(docId)
+        ? f.document_ids.filter((id) => id !== docId)
+        : [...f.document_ids, docId],
+    }));
+  };
+
+  if (authLoading || loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <Toaster position="top-right" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-heading font-extrabold text-slate-900">
+              {t("templates:page.title")}
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {t("templates:page.subtitle")}
+            </p>
+          </div>
+          {isAdmin && (
+            <button
+              onClick={openCreate}
+              className="flex items-center px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-button font-semibold shadow-card hover:shadow-elevated transition-all"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              {t("templates:buttons.createNew")}
+            </button>
+          )}
+        </div>
+
+        {/* Category filters */}
+        {categories.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                !selectedCategory
+                  ? "bg-primary-600 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {t("templates:filter.all")}
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  selectedCategory === cat
+                    ? "bg-primary-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Template grid */}
+        {filteredTemplates.length === 0 ? (
+          <div className="text-center py-16">
+            <LayoutTemplate className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-600">
+              {t("templates:page.empty")}
+            </h3>
+            <p className="text-sm text-gray-400 mt-1">
+              {t("templates:page.emptyDescription")}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTemplates.map((template) => (
+              <div
+                key={template.id}
+                className="bg-white border border-gray-200 rounded-card shadow-card hover:shadow-elevated transition-all p-6 flex flex-col"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-primary-50 rounded-lg flex items-center justify-center">
+                    <LayoutTemplate className="w-5 h-5 text-primary-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 truncate">
+                      {template.name}
+                    </h3>
+                    {template.category && (
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                        {template.category}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {template.description && (
+                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">
+                    {template.description}
+                  </p>
+                )}
+
+                <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className="text-xs text-gray-400">
+                    {t("templates:card.documents", {
+                      count: template.document_count,
+                    })}
+                  </span>
+                  <div className="flex gap-2">
+                    {isAdmin && (
+                      <>
+                        <button
+                          onClick={() => openEdit(template)}
+                          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
+                          title={t("templates:buttons.edit")}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(template.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          title={t("templates:buttons.delete")}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => handleUseTemplate(template.id)}
+                      className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium rounded-button transition-colors"
+                    >
+                      {t("templates:buttons.createAgent")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create/Edit Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-card shadow-floating p-8 w-full max-w-lg mx-auto max-h-[85vh] overflow-auto border border-gray-200 animate-fade-in">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-heading font-bold text-gray-900">
+                {editingTemplate
+                  ? t("templates:modal.titleEdit")
+                  : t("templates:modal.titleCreate")}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowForm(false);
+                  resetForm();
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              {/* Name */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  {t("templates:form.name.label")}
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
+                  placeholder={t("templates:form.name.placeholder")}
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  {t("templates:form.description.label")}
+                </label>
+                <textarea
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-none"
+                  placeholder={t("templates:form.description.placeholder")}
+                  rows="2"
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+
+              {/* Category + Icon */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">
+                    {t("templates:form.category.label")}
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
+                    placeholder={t("templates:form.category.placeholder")}
+                    value={form.category}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, category: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">
+                    {t("templates:form.icon.label")}
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
+                    placeholder={t("templates:form.icon.placeholder")}
+                    value={form.icon}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, icon: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Contexte */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  {t("templates:form.contexte.label")}
+                </label>
+                <textarea
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-none"
+                  placeholder={t("templates:form.contexte.placeholder")}
+                  rows="4"
+                  value={form.default_contexte}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, default_contexte: e.target.value }))
+                  }
+                />
+              </div>
+
+              {/* Biographie */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  {t("templates:form.biographie.label")}
+                </label>
+                <textarea
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white resize-none"
+                  placeholder={t("templates:form.biographie.placeholder")}
+                  rows="2"
+                  value={form.default_biographie}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      default_biographie: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              {/* Type */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block flex items-center">
+                  <Zap className="w-4 h-4 mr-2 text-purple-600" />
+                  {t("templates:form.type.label")}
+                </label>
+                <select
+                  className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white font-medium"
+                  value={form.default_type}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, default_type: e.target.value }))
+                  }
+                >
+                  <option value="conversationnel">
+                    {t("agents:types.conversationnel.name")} -{" "}
+                    {t("agents:types.conversationnel.description")}
+                  </option>
+                  <option value="recherche_live">
+                    {t("agents:types.recherche_live.name")} -{" "}
+                    {t("agents:types.recherche_live.description")}
+                  </option>
+                  <option value="visuel">
+                    {t("agents:types.visuel.name")} -{" "}
+                    {t("agents:types.visuel.description")}
+                  </option>
+                </select>
+              </div>
+
+              {/* Document picker */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block flex items-center">
+                  <FileText className="w-4 h-4 mr-2 text-primary-600" />
+                  {t("templates:form.documents.label")}
+                </label>
+                {form.document_ids.length > 0 && (
+                  <p className="text-xs text-primary-600 mb-2">
+                    {t("templates:form.documents.selected", {
+                      count: form.document_ids.length,
+                    })}
+                  </p>
+                )}
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white text-sm"
+                    placeholder={t("templates:form.documents.search")}
+                    value={docSearch}
+                    onChange={(e) => setDocSearch(e.target.value)}
+                  />
+                </div>
+                <div className="max-h-40 overflow-auto border border-gray-200 rounded-input">
+                  {filteredDocs.length === 0 ? (
+                    <p className="text-xs text-gray-400 p-3 text-center">
+                      {t("templates:form.documents.noDocuments")}
+                    </p>
+                  ) : (
+                    filteredDocs.map((doc) => (
+                      <label
+                        key={doc.id}
+                        className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.document_ids.includes(doc.id)}
+                          onChange={() => toggleDocSelection(doc.id)}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700 truncate">
+                          {doc.filename}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex space-x-4 mt-8">
+              <button
+                onClick={() => {
+                  setShowForm(false);
+                  resetForm();
+                }}
+                className="flex-1 px-6 py-3 text-gray-700 bg-white border border-gray-200 rounded-button hover:bg-gray-50 hover:border-gray-300 transition-all font-medium"
+              >
+                {t("templates:buttons.cancel")}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-button transition-all font-semibold shadow-card hover:shadow-elevated disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    {t("common:states.saving")}
+                  </div>
+                ) : (
+                  t("templates:buttons.save")
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  );
+}
+
+export async function getServerSideProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, [
+        "templates",
+        "common",
+        "errors",
+        "agents",
+      ])),
+    },
+  };
+}
