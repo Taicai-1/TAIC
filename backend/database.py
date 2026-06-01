@@ -730,6 +730,8 @@ def ensure_columns():
         ("weekly_recap_logs", "recap_id", "INTEGER REFERENCES recaps(id)"),
         ("messages", "sources_json", "TEXT"),
         ("messages", "graph_data_json", "TEXT"),
+        # Companion templates
+        ("agents", "template_id", "INTEGER REFERENCES agent_templates(id) ON DELETE SET NULL"),
     ]
     try:
         with engine.connect() as conn:
