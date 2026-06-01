@@ -1,0 +1,58 @@
+{
+  "page": {
+    "title": "Templates",
+    "subtitle": "Modèles de companions réutilisables",
+    "empty": "Aucun template pour le moment",
+    "emptyDescription": "Créez des modèles de companions que votre équipe pourra utiliser."
+  },
+  "buttons": {
+    "createNew": "Nouveau template",
+    "createAgent": "Créer un companion",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "addDocuments": "Ajouter des documents",
+    "removeDocument": "Retirer"
+  },
+  "form": {
+    "name": { "label": "Nom du template", "placeholder": "Ex: CTO, Support Client..." },
+    "description": { "label": "Description", "placeholder": "Décrivez l'utilité de ce template..." },
+    "category": { "label": "Catégorie", "placeholder": "Ex: Tech, RH, Sales..." },
+    "icon": { "label": "Icône", "placeholder": "Nom d'icône Lucide (ex: Monitor, Headset...)", "helpLink": "Voir les icônes disponibles" },
+    "contexte": { "label": "Contexte (prompt système)", "placeholder": "Instructions pour l'IA..." },
+    "biographie": { "label": "Biographie", "placeholder": "Description visible par les utilisateurs..." },
+    "type": { "label": "Type de companion" },
+    "documents": { "label": "Documents liés", "search": "Rechercher un document...", "noDocuments": "Aucun document disponible", "selected": "{{count}} document(s) sélectionné(s)" }
+  },
+  "modal": {
+    "titleCreate": "Nouveau template",
+    "titleEdit": "Modifier le template"
+  },
+  "toast": {
+    "createSuccess": "Template créé avec succès",
+    "updateSuccess": "Template mis à jour",
+    "deleteSuccess": "Template supprimé",
+    "createError": "Erreur lors de la création du template",
+    "updateError": "Erreur lors de la mise à jour",
+    "deleteError": "Erreur lors de la suppression"
+  },
+  "card": {
+    "documents": "{{count}} doc(s)"
+  },
+  "filter": {
+    "all": "Tous"
+  },
+  "confirm": {
+    "deleteTitle": "Supprimer ce template ?",
+    "deleteMessage": "Les companions créés depuis ce template ne seront pas affectés."
+  },
+  "agentCreation": {
+    "stepTitle": "Créer un companion",
+    "fromScratch": "Partir de zéro",
+    "fromScratchDescription": "Configurez tout manuellement",
+    "orFromTemplate": "ou depuis un template",
+    "basedOn": "Basé sur le template",
+    "noTemplates": "Aucun template disponible"
+  }
+}

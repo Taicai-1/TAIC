@@ -1,0 +1,58 @@
+{
+  "page": {
+    "title": "Templates",
+    "subtitle": "Reusable companion blueprints",
+    "empty": "No templates yet",
+    "emptyDescription": "Create companion blueprints your team can use."
+  },
+  "buttons": {
+    "createNew": "New template",
+    "createAgent": "Create companion",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "addDocuments": "Add documents",
+    "removeDocument": "Remove"
+  },
+  "form": {
+    "name": { "label": "Template name", "placeholder": "E.g. CTO, Customer Support..." },
+    "description": { "label": "Description", "placeholder": "Describe what this template is for..." },
+    "category": { "label": "Category", "placeholder": "E.g. Tech, HR, Sales..." },
+    "icon": { "label": "Icon", "placeholder": "Lucide icon name (e.g. Monitor, Headset...)", "helpLink": "Browse available icons" },
+    "contexte": { "label": "Context (system prompt)", "placeholder": "AI instructions..." },
+    "biographie": { "label": "Biography", "placeholder": "User-facing description..." },
+    "type": { "label": "Companion type" },
+    "documents": { "label": "Linked documents", "search": "Search documents...", "noDocuments": "No documents available", "selected": "{{count}} document(s) selected" }
+  },
+  "modal": {
+    "titleCreate": "New template",
+    "titleEdit": "Edit template"
+  },
+  "toast": {
+    "createSuccess": "Template created successfully",
+    "updateSuccess": "Template updated",
+    "deleteSuccess": "Template deleted",
+    "createError": "Error creating template",
+    "updateError": "Error updating template",
+    "deleteError": "Error deleting template"
+  },
+  "card": {
+    "documents": "{{count}} doc(s)"
+  },
+  "filter": {
+    "all": "All"
+  },
+  "confirm": {
+    "deleteTitle": "Delete this template?",
+    "deleteMessage": "Companions created from this template will not be affected."
+  },
+  "agentCreation": {
+    "stepTitle": "Create a companion",
+    "fromScratch": "Start from scratch",
+    "fromScratchDescription": "Configure everything manually",
+    "orFromTemplate": "or from a template",
+    "basedOn": "Based on template",
+    "noTemplates": "No templates available"
+  }
+}

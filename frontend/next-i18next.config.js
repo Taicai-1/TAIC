@@ -11,7 +11,7 @@ module.exports = {
     : '/locales',
   reloadOnPrerender: process.env.NODE_ENV === 'development',
   fallbackLng: { default: ['fr'] },
-  ns: ['common', 'auth', 'agents', 'chat', 'teams', 'profile', 'dashboard', 'errors', 'organization', 'sources'],
+  ns: ['common', 'auth', 'agents', 'chat', 'teams', 'profile', 'dashboard', 'errors', 'organization', 'sources', 'templates'],
   defaultNS: 'common',
   react: { useSuspense: false },
 }
