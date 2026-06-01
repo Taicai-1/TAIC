@@ -23,7 +23,7 @@
     "contexte": { "label": "Contexte (prompt système)", "placeholder": "Instructions pour l'IA..." },
     "biographie": { "label": "Biographie", "placeholder": "Description visible par les utilisateurs..." },
     "type": { "label": "Type de companion" },
-    "documents": { "label": "Documents liés", "search": "Rechercher un document...", "noDocuments": "Aucun document disponible", "selected": "{{count}} document(s) sélectionné(s)" }
+    "documents": { "label": "Documents liés", "search": "Rechercher un document...", "noDocuments": "Aucun document disponible", "selected": "{{count}} document(s) sélectionné(s)", "upload": "Charger un fichier" }
   },
   "modal": {
     "titleCreate": "Nouveau template",
@@ -35,7 +35,9 @@
     "deleteSuccess": "Template supprimé",
     "createError": "Erreur lors de la création du template",
     "updateError": "Erreur lors de la mise à jour",
-    "deleteError": "Erreur lors de la suppression"
+    "deleteError": "Erreur lors de la suppression",
+    "uploadSuccess": "Document(s) chargé(s) avec succès",
+    "uploadError": "Erreur lors du chargement du document"
   },
   "card": {
     "documents": "{{count}} doc(s)"

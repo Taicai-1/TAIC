@@ -12,6 +12,7 @@ import {
   FileText,
   Zap,
   Search,
+  Upload,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import { useAuth } from "../hooks/useAuth";
@@ -30,6 +31,7 @@ export default function TemplatesPage() {
   const [orgDocuments, setOrgDocuments] = useState([]);
   const [docSearch, setDocSearch] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -181,6 +183,35 @@ export default function TemplatesPage() {
         ? f.document_ids.filter((id) => id !== docId)
         : [...f.document_ids, docId],
     }));
+  };
+
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const resp = await api.post("/upload", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        const newDocId = resp.data.document_id;
+        if (newDocId) {
+          setForm((f) => ({
+            ...f,
+            document_ids: [...f.document_ids, newDocId],
+          }));
+        }
+      }
+      toast.success(t("templates:toast.uploadSuccess"));
+      await loadOrgDocuments();
+    } catch {
+      toast.error(t("templates:toast.uploadError"));
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   };
 
   if (authLoading || loading) {
@@ -472,10 +503,28 @@ export default function TemplatesPage() {
 
               {/* Document picker */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block flex items-center">
-                  <FileText className="w-4 h-4 mr-2 text-primary-600" />
-                  {t("templates:form.documents.label")}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700 flex items-center">
+                    <FileText className="w-4 h-4 mr-2 text-primary-600" />
+                    {t("templates:form.documents.label")}
+                  </label>
+                  <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-button transition-colors cursor-pointer ${uploading ? "bg-gray-100 text-gray-400" : "bg-primary-50 text-primary-600 hover:bg-primary-100"}`}>
+                    {uploading ? (
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-600"></div>
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    {t("templates:form.documents.upload")}
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.docx,.pptx,.xlsx,.txt,.csv,.json"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
                 {form.document_ids.length > 0 && (
                   <p className="text-xs text-primary-600 mb-2">
                     {t("templates:form.documents.selected", {

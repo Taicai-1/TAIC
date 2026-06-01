@@ -23,7 +23,7 @@
     "contexte": { "label": "Context (system prompt)", "placeholder": "AI instructions..." },
     "biographie": { "label": "Biography", "placeholder": "User-facing description..." },
     "type": { "label": "Companion type" },
-    "documents": { "label": "Linked documents", "search": "Search documents...", "noDocuments": "No documents available", "selected": "{{count}} document(s) selected" }
+    "documents": { "label": "Linked documents", "search": "Search documents...", "noDocuments": "No documents available", "selected": "{{count}} document(s) selected", "upload": "Upload file" }
   },
   "modal": {
     "titleCreate": "New template",
@@ -35,7 +35,9 @@
     "deleteSuccess": "Template deleted",
     "createError": "Error creating template",
     "updateError": "Error updating template",
-    "deleteError": "Error deleting template"
+    "deleteError": "Error deleting template",
+    "uploadSuccess": "Document(s) uploaded successfully",
+    "uploadError": "Error uploading document"
   },
   "card": {
     "documents": "{{count}} doc(s)"
