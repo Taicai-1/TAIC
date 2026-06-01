@@ -13,6 +13,8 @@ import {
   Zap,
   Search,
   Upload,
+  Database,
+  MessageCircle,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import { useAuth } from "../hooks/useAuth";
@@ -32,6 +34,7 @@ export default function TemplatesPage() {
   const [docSearch, setDocSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [emailTagInput, setEmailTagInput] = useState("");
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -41,6 +44,15 @@ export default function TemplatesPage() {
     default_biographie: "",
     default_type: "conversationnel",
     document_ids: [],
+    default_email_tags: [],
+    default_neo4j_enabled: false,
+    default_neo4j_person_name: "",
+    default_neo4j_depth: 1,
+    default_weekly_recap_enabled: false,
+    default_weekly_recap_prompt: "",
+    default_weekly_recap_recipients: [],
+    default_recap_frequency: "weekly",
+    default_recap_hour: 9,
   });
 
   const isAdmin = user?.role === "admin" || user?.role === "owner";
@@ -91,9 +103,19 @@ export default function TemplatesPage() {
       default_biographie: "",
       default_type: "conversationnel",
       document_ids: [],
+      default_email_tags: [],
+      default_neo4j_enabled: false,
+      default_neo4j_person_name: "",
+      default_neo4j_depth: 1,
+      default_weekly_recap_enabled: false,
+      default_weekly_recap_prompt: "",
+      default_weekly_recap_recipients: [],
+      default_recap_frequency: "weekly",
+      default_recap_hour: 9,
     });
     setEditingTemplate(null);
     setDocSearch("");
+    setEmailTagInput("");
   };
 
   const openCreate = () => {
@@ -114,6 +136,15 @@ export default function TemplatesPage() {
         default_biographie: tmpl.default_biographie || "",
         default_type: tmpl.default_type || "conversationnel",
         document_ids: (tmpl.documents || []).map((d) => d.id),
+        default_email_tags: tmpl.default_email_tags || [],
+        default_neo4j_enabled: tmpl.default_neo4j_enabled || false,
+        default_neo4j_person_name: tmpl.default_neo4j_person_name || "",
+        default_neo4j_depth: tmpl.default_neo4j_depth || 1,
+        default_weekly_recap_enabled: tmpl.default_weekly_recap_enabled || false,
+        default_weekly_recap_prompt: tmpl.default_weekly_recap_prompt || "",
+        default_weekly_recap_recipients: tmpl.default_weekly_recap_recipients || [],
+        default_recap_frequency: tmpl.default_recap_frequency || "weekly",
+        default_recap_hour: tmpl.default_recap_hour != null ? tmpl.default_recap_hour : 9,
       });
       setEditingTemplate(tmpl);
       setShowForm(true);
@@ -138,6 +169,15 @@ export default function TemplatesPage() {
         default_biographie: form.default_biographie || null,
         default_type: form.default_type,
         document_ids: form.document_ids,
+        default_email_tags: form.default_email_tags.length > 0 ? form.default_email_tags : null,
+        default_neo4j_enabled: form.default_neo4j_enabled,
+        default_neo4j_person_name: form.default_neo4j_person_name || null,
+        default_neo4j_depth: form.default_neo4j_depth,
+        default_weekly_recap_enabled: form.default_weekly_recap_enabled,
+        default_weekly_recap_prompt: form.default_weekly_recap_prompt || null,
+        default_weekly_recap_recipients: form.default_weekly_recap_recipients.length > 0 ? form.default_weekly_recap_recipients : null,
+        default_recap_frequency: form.default_recap_frequency,
+        default_recap_hour: form.default_recap_hour,
       };
 
       if (editingTemplate) {
@@ -499,6 +539,176 @@ export default function TemplatesPage() {
                     {t("agents:types.visuel.description")}
                   </option>
                 </select>
+              </div>
+
+              {/* Email Tags */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block flex items-center">
+                  <MessageCircle className="w-4 h-4 mr-2 text-purple-600" />
+                  {t("templates:form.emailTags.label")}
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(form.default_email_tags || []).map((tag, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((f) => ({
+                            ...f,
+                            default_email_tags: f.default_email_tags.filter((_, i) => i !== index),
+                          }));
+                        }}
+                        className="ml-2 text-purple-500 hover:text-purple-700"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 px-4 py-2 border border-gray-200 rounded-input focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all outline-none bg-white text-sm"
+                    placeholder={t("templates:form.emailTags.placeholder")}
+                    value={emailTagInput}
+                    onChange={(e) => setEmailTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && emailTagInput.trim()) {
+                        e.preventDefault();
+                        const newTag = `@${emailTagInput.trim().toLowerCase().replace(/^@/, "")}`;
+                        if (!form.default_email_tags.includes(newTag)) {
+                          setForm((f) => ({
+                            ...f,
+                            default_email_tags: [...(f.default_email_tags || []), newTag],
+                          }));
+                        }
+                        setEmailTagInput("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (emailTagInput.trim()) {
+                        const newTag = `@${emailTagInput.trim().toLowerCase().replace(/^@/, "")}`;
+                        if (!form.default_email_tags.includes(newTag)) {
+                          setForm((f) => ({
+                            ...f,
+                            default_email_tags: [...(f.default_email_tags || []), newTag],
+                          }));
+                        }
+                        setEmailTagInput("");
+                      }
+                    }}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-button hover:bg-purple-700 transition-colors text-sm font-medium"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Neo4j Knowledge Graph */}
+              <div className="p-4 bg-gradient-to-br from-teal-50 to-cyan-50 rounded-button border border-teal-200">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-gray-700 flex items-center">
+                    <Database className="w-4 h-4 mr-2 text-teal-600" />
+                    {t("templates:form.neo4j.label")}
+                  </label>
+                  <button
+                    type="button"
+                    className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border border-teal-600 ${form.default_neo4j_enabled ? "bg-teal-600" : "bg-gray-200"}`}
+                    onClick={() => setForm((f) => ({ ...f, default_neo4j_enabled: !f.default_neo4j_enabled }))}
+                  >
+                    <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.default_neo4j_enabled ? "bg-white translate-x-7" : "bg-gray-400 translate-x-0"}`} />
+                  </button>
+                </div>
+                {form.default_neo4j_enabled && (
+                  <div className="space-y-3 mt-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">{t("templates:form.neo4j.person")}</label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-teal-200 rounded-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition-all outline-none bg-white text-sm"
+                        placeholder={t("templates:form.neo4j.personPlaceholder")}
+                        value={form.default_neo4j_person_name}
+                        onChange={(e) => setForm((f) => ({ ...f, default_neo4j_person_name: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">{t("templates:form.neo4j.depth")}</label>
+                      <select
+                        className="w-full px-3 py-2 border border-teal-200 rounded-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition-all outline-none bg-white text-sm"
+                        value={form.default_neo4j_depth}
+                        onChange={(e) => setForm((f) => ({ ...f, default_neo4j_depth: parseInt(e.target.value) }))}
+                      >
+                        <option value={1}>{t("templates:form.neo4j.depth1")}</option>
+                        <option value={2}>{t("templates:form.neo4j.depth2")}</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Weekly Recap */}
+              <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-button border border-amber-200">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700 flex items-center">
+                    <FileText className="w-4 h-4 mr-2 text-amber-600" />
+                    {t("templates:form.recap.label")}
+                  </label>
+                  <button
+                    type="button"
+                    className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border border-amber-500 ${form.default_weekly_recap_enabled ? "bg-amber-500" : "bg-gray-200"}`}
+                    onClick={() => setForm((f) => ({ ...f, default_weekly_recap_enabled: !f.default_weekly_recap_enabled }))}
+                  >
+                    <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.default_weekly_recap_enabled ? "bg-white translate-x-7" : "bg-gray-400 translate-x-0"}`} />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">{t("templates:form.recap.helpText")}</p>
+                {form.default_weekly_recap_enabled && (
+                  <div className="space-y-3 mt-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">{t("templates:form.recap.prompt")}</label>
+                      <textarea
+                        className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm resize-none"
+                        rows="2"
+                        placeholder={t("templates:form.recap.promptPlaceholder")}
+                        value={form.default_weekly_recap_prompt}
+                        onChange={(e) => setForm((f) => ({ ...f, default_weekly_recap_prompt: e.target.value }))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">{t("templates:form.recap.frequency")}</label>
+                        <select
+                          className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
+                          value={form.default_recap_frequency}
+                          onChange={(e) => setForm((f) => ({ ...f, default_recap_frequency: e.target.value }))}
+                        >
+                          <option value="daily">{t("templates:form.recap.daily")}</option>
+                          <option value="weekly">{t("templates:form.recap.weekly")}</option>
+                          <option value="monthly">{t("templates:form.recap.monthly")}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">{t("templates:form.recap.hour")}</label>
+                        <select
+                          className="w-full px-3 py-2 border border-amber-200 rounded-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none bg-white text-sm"
+                          value={form.default_recap_hour}
+                          onChange={(e) => setForm((f) => ({ ...f, default_recap_hour: parseInt(e.target.value) }))}
+                        >
+                          {Array.from({ length: 24 }, (_, i) => (
+                            <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Document picker */}

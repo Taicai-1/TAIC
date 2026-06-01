@@ -339,6 +339,15 @@ class AgentTemplate(Base):
     default_contexte = Column(Text, nullable=True)
     default_biographie = Column(Text, nullable=True)
     default_type = Column(String(32), nullable=False, default="conversationnel")
+    default_email_tags = Column(Text, nullable=True)  # JSON array string
+    default_neo4j_enabled = Column(Boolean, nullable=False, default=False)
+    default_neo4j_person_name = Column(String(200), nullable=True)
+    default_neo4j_depth = Column(Integer, nullable=False, default=1)
+    default_weekly_recap_enabled = Column(Boolean, nullable=False, default=False)
+    default_weekly_recap_prompt = Column(Text, nullable=True)
+    default_weekly_recap_recipients = Column(Text, nullable=True)  # JSON array string
+    default_recap_frequency = Column(String(20), nullable=False, default="weekly")
+    default_recap_hour = Column(Integer, nullable=False, default=9)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -732,6 +741,15 @@ def ensure_columns():
         ("messages", "graph_data_json", "TEXT"),
         # Companion templates
         ("agents", "template_id", "INTEGER REFERENCES agent_templates(id) ON DELETE SET NULL"),
+        ("agent_templates", "default_email_tags", "TEXT"),
+        ("agent_templates", "default_neo4j_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("agent_templates", "default_neo4j_person_name", "VARCHAR(200)"),
+        ("agent_templates", "default_neo4j_depth", "INTEGER NOT NULL DEFAULT 1"),
+        ("agent_templates", "default_weekly_recap_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("agent_templates", "default_weekly_recap_prompt", "TEXT"),
+        ("agent_templates", "default_weekly_recap_recipients", "TEXT"),
+        ("agent_templates", "default_recap_frequency", "VARCHAR(20) NOT NULL DEFAULT 'weekly'"),
+        ("agent_templates", "default_recap_hour", "INTEGER NOT NULL DEFAULT 9"),
     ]
     try:
         with engine.connect() as conn:

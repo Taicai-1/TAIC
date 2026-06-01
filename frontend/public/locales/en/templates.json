@@ -23,6 +23,9 @@
     "contexte": { "label": "Context (system prompt)", "placeholder": "AI instructions..." },
     "biographie": { "label": "Biography", "placeholder": "User-facing description..." },
     "type": { "label": "Companion type" },
+    "emailTags": { "label": "Email tags", "placeholder": "Add a tag (e.g. finance, hr...)" },
+    "neo4j": { "label": "Knowledge Graph (Neo4j)", "person": "Primary person", "personPlaceholder": "Person name in the graph", "depth": "Depth", "depth1": "1 level (direct connections)", "depth2": "2 levels (extended connections)" },
+    "recap": { "label": "Automatic report", "helpText": "Generate periodic conversation summaries", "prompt": "Custom prompt", "promptPlaceholder": "Instructions for report generation...", "frequency": "Frequency", "hour": "Send time", "daily": "Daily", "weekly": "Weekly", "monthly": "Monthly" },
     "documents": { "label": "Linked documents", "search": "Search documents...", "noDocuments": "No documents available", "selected": "{{count}} document(s) selected", "upload": "Upload file" }
   },
   "modal": {

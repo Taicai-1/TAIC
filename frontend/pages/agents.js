@@ -125,6 +125,15 @@ export default function AgentsPage() {
         contexte: tmpl.default_contexte || "",
         biographie: tmpl.default_biographie || "",
         type: tmpl.default_type || "conversationnel",
+        email_tags: tmpl.default_email_tags || [],
+        neo4j_enabled: tmpl.default_neo4j_enabled || false,
+        neo4j_person_name: tmpl.default_neo4j_person_name || "",
+        neo4j_depth: tmpl.default_neo4j_depth || 1,
+        weekly_recap_enabled: tmpl.default_weekly_recap_enabled || false,
+        weekly_recap_prompt: tmpl.default_weekly_recap_prompt || "",
+        weekly_recap_recipients: tmpl.default_weekly_recap_recipients || [],
+        recap_frequency: tmpl.default_recap_frequency || "weekly",
+        recap_hour: tmpl.default_recap_hour != null ? tmpl.default_recap_hour : 9,
       }));
       setSelectedTemplate(tmpl);
       setCreationStep(2);
@@ -618,6 +627,15 @@ export default function AgentsPage() {
                         contexte: form.contexte || undefined,
                         biographie: form.biographie || undefined,
                         type: form.type || undefined,
+                        email_tags: form.email_tags?.length > 0 ? form.email_tags : undefined,
+                        neo4j_enabled: form.neo4j_enabled,
+                        neo4j_person_name: form.neo4j_person_name || undefined,
+                        neo4j_depth: form.neo4j_depth,
+                        weekly_recap_enabled: form.weekly_recap_enabled,
+                        weekly_recap_prompt: form.weekly_recap_prompt || undefined,
+                        weekly_recap_recipients: form.weekly_recap_recipients?.length > 0 ? form.weekly_recap_recipients : undefined,
+                        recap_frequency: form.recap_frequency,
+                        recap_hour: form.recap_hour,
                       });
                     } else {
                       await api.post('/agents', formData, {
