@@ -12,12 +12,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, User, Agent, Document, DocumentChunk, Conversation, Message, AgentAction, Team
+from database import get_db, User, Agent, Document, DocumentChunk, Conversation, Message, AgentAction, Team, TeamMember
 from helpers.agent_helpers import resolve_model_id, _user_can_access_agent
 from helpers.conversation_helpers import verify_conversation_owner
 from helpers.rate_limiting import _check_api_rate_limit, _API_ASK_LIMIT
 from helpers.tenant import _get_caller_company_id
-from mistral_embeddings import get_embedding
 from rag_engine import get_answer, get_answer_with_files, get_answer_stream
 from redis_client import get_cached_user
 from utils import logger as app_logger, event_tracker
@@ -87,102 +86,53 @@ async def ask_question(
             answer = result["answer"] if isinstance(result, dict) else result
             sources = result.get("sources", []) if isinstance(result, dict) else []
             graph_data = result.get("graph_data") if isinstance(result, dict) else None
-        # Si team_id fourni, on va chercher le chef d'équipe et les sous-agents
+        # Si team_id fourni, orchestration via leader + sous-agents
         elif request.team_id:
-            from database import Team, Agent
-            import numpy as np
+            from orchestrator import orchestrate_team_question
 
             team = db.query(Team).filter(Team.id == request.team_id).first()
             if not team:
                 raise HTTPException(status_code=404, detail="Team not found")
             if team.user_id != int(user_id):
                 raise HTTPException(status_code=403, detail="Access denied to this team")
-            leader = db.query(Agent).filter(Agent.id == team.leader_agent_id).first()
-            if not leader:
-                raise HTTPException(status_code=404, detail="Leader agent not found")
 
-            # Récupérer TOUS les sous-agents (actionnables ET conversationnels)
-            all_sub_agent_ids = []
-            if team.action_agent_ids:
-                try:
-                    action_ids = (
-                        json.loads(team.action_agent_ids)
-                        if isinstance(team.action_agent_ids, str)
-                        else team.action_agent_ids
-                    )
-                    all_sub_agent_ids.extend(action_ids)
-                except:
-                    pass
+            # Load members with agent data
+            members_db = db.query(TeamMember).filter(TeamMember.team_id == team.id).order_by(TeamMember.position).all()
+            agent_ids = [m.agent_id for m in members_db]
+            agents_db = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
+            agent_lookup = {a.id: a for a in agents_db}
 
-            # Récupérer les sous-agents depuis la base
-            # Security: filter by company_id to prevent cross-tenant agent access
-            sub_agents = []
-            if all_sub_agent_ids:
-                q = db.query(Agent).filter(Agent.id.in_(all_sub_agent_ids))
-                if team.company_id:
-                    q = q.filter(Agent.company_id == team.company_id)
-                sub_agents = q.all()
+            members_with_agents = []
+            for m in members_db:
+                a = agent_lookup.get(m.agent_id)
+                if not a:
+                    continue
+                members_with_agents.append({
+                    "agent_id": m.agent_id,
+                    "name": a.name,
+                    "role": m.role,
+                    "specialization": m.specialization or m.auto_specialization or "",
+                    "model_id": a.finetuned_model_id or resolve_model_id(a),
+                    "company_id": a.company_id,
+                    "agent": a,
+                })
 
-            best_agent = None
-            best_score = -1
-
-            # Si on a des sous-agents avec embeddings, faire le matching sémantique
-            if sub_agents:
-                try:
-                    prompt_embedding = get_embedding(request.question)
-                    for a in sub_agents:
-                        if not a.embedding:
-                            continue
-                        try:
-                            emb = np.array(json.loads(a.embedding))
-                            score = float(
-                                np.dot(prompt_embedding, emb) / (np.linalg.norm(prompt_embedding) * np.linalg.norm(emb))
-                            )
-                            if score > best_score:
-                                best_score = score
-                                best_agent = a
-                        except Exception:
-                            continue
-                except Exception as e:
-                    logger.warning(f"Error during semantic matching: {e}")
-
-            # Si aucun sous-agent qualifié, utiliser le leader directement
-            if not best_agent:
-                logger.info(f"No sub-agent matched, using leader agent {leader.name}")
-                best_agent = leader
-
-            # Appel get_answer avec l'agent sélectionné
-            if best_agent.finetuned_model_id:
-                model_id = best_agent.finetuned_model_id
-            else:
-                atype = getattr(best_agent, "type", "conversationnel")
-                if atype == "recherche_live":
-                    model_id = os.getenv("PERPLEXITY_MODEL", "perplexity:sonar")
-                else:
-                    model_id = os.getenv("MISTRAL_MODEL", "mistral:mistral-small-latest")
-            prompt = f"Sachant le contexte et la discussion en cours, réponds à cette question : {request.question}"
-            agent_result = get_answer(
-                prompt,
-                int(user_id),
-                db,
+            result = orchestrate_team_question(
+                question=request.question,
+                team=team,
+                members_with_agents=members_with_agents,
+                user_id=int(user_id),
+                db=db,
                 selected_doc_ids=request.selected_documents,
-                agent_id=best_agent.id,
                 history=history,
-                model_id=model_id,
-                company_id=best_agent.company_id,
                 use_rag=request.use_rag,
                 use_graph=request.use_graph,
             )
-            agent_answer = agent_result["answer"] if isinstance(agent_result, dict) else agent_result
-            sources = agent_result.get("sources", []) if isinstance(agent_result, dict) else []
-            graph_data = agent_result.get("graph_data") if isinstance(agent_result, dict) else None
 
-            # Réponse formatée
-            if best_agent.id == leader.id:
-                answer = agent_answer
-            else:
-                answer = f"Pour répondre à votre question, j'ai fait appel à l'agent {best_agent.name}. Voici sa réponse :\n{agent_answer}"
-            agent = best_agent
+            answer = result["answer"]
+            sources = result.get("sources", [])
+            graph_data = None
+            agent = agent_lookup.get(members_with_agents[0]["agent_id"]) if members_with_agents else None
 
         if answer is None:
             raise HTTPException(status_code=400, detail="Aucun agent ou équipe valide fourni.")
@@ -244,7 +194,12 @@ async def ask_question_stream(
                     use_graph=request.use_graph,
                 )
             elif request.team_id:
-                import numpy as np
+                from orchestrator import (
+                    select_agents_for_question,
+                    execute_agents_parallel,
+                    DEFAULT_SYNTHESIS_PROMPT,
+                )
+                from openai_client import get_chat_response_stream
 
                 team = db.query(Team).filter(Team.id == request.team_id).first()
                 if not team:
@@ -253,85 +208,127 @@ async def ask_question_stream(
                 if team.user_id != int(user_id):
                     yield sse_event("error", {"message": "Access denied", "code": "forbidden"})
                     return
-                leader = db.query(Agent).filter(Agent.id == team.leader_agent_id).first()
-                if not leader:
-                    yield sse_event("error", {"message": "Leader agent not found", "code": "not_found"})
+
+                members_db = db.query(TeamMember).filter(TeamMember.team_id == team.id).order_by(TeamMember.position).all()
+                agent_ids = [m.agent_id for m in members_db]
+                agents_db = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
+                agent_lookup = {a.id: a for a in agents_db}
+
+                members_with_agents = []
+                for m in members_db:
+                    a = agent_lookup.get(m.agent_id)
+                    if not a:
+                        continue
+                    members_with_agents.append({
+                        "agent_id": m.agent_id,
+                        "name": a.name,
+                        "role": m.role,
+                        "specialization": m.specialization or m.auto_specialization or "",
+                        "model_id": a.finetuned_model_id or resolve_model_id(a),
+                        "company_id": a.company_id,
+                    })
+
+                leader_info = next((m for m in members_with_agents if m["role"] == "leader"), None)
+                if not leader_info:
+                    yield sse_event("error", {"message": "No leader in team", "code": "bad_config"})
                     return
 
-                all_sub_agent_ids = []
-                if team.action_agent_ids:
-                    try:
-                        action_ids = (
-                            json.loads(team.action_agent_ids)
-                            if isinstance(team.action_agent_ids, str)
-                            else team.action_agent_ids
-                        )
-                        all_sub_agent_ids.extend(action_ids)
-                    except Exception:
-                        pass
+                # Phase 1: Routing (buffered)
+                routing_result = select_agents_for_question(
+                    question=request.question,
+                    members=members_with_agents,
+                    model_id=leader_info["model_id"],
+                    custom_routing_prompt=team.orchestration_prompt,
+                )
+                selected_ids = routing_result["agent_ids"]
 
-                # Security: filter by company_id to prevent cross-tenant agent access
-                sub_agents = []
-                if all_sub_agent_ids:
-                    q = db.query(Agent).filter(Agent.id.in_(all_sub_agent_ids))
-                    if team.company_id:
-                        q = q.filter(Agent.company_id == team.company_id)
-                    sub_agents = q.all()
+                if not selected_ids:
+                    # Leader responds alone, stream directly
+                    prompt = f"Sachant le contexte et la discussion en cours, reponds a cette question : {request.question}"
+                    yield from get_answer_stream(
+                        prompt, int(user_id), db,
+                        selected_doc_ids=request.selected_documents,
+                        agent_id=leader_info["agent_id"],
+                        history=history,
+                        model_id=leader_info["model_id"],
+                        company_id=leader_info.get("company_id"),
+                        use_rag=request.use_rag,
+                        use_graph=request.use_graph,
+                    )
+                    return
 
-                best_agent = None
-                best_score = -1
+                # Emit routing event
+                routed_agents = [
+                    {"id": m["agent_id"], "name": m["name"], "specialization": m.get("specialization", "")}
+                    for m in members_with_agents if m["agent_id"] in selected_ids
+                ]
+                yield sse_event("routing", {"agents": routed_agents})
 
-                if sub_agents:
-                    try:
-                        prompt_embedding = get_embedding(request.question)
-                        for a in sub_agents:
-                            if not a.embedding:
-                                continue
-                            try:
-                                emb = np.array(json.loads(a.embedding))
-                                score = float(
-                                    np.dot(prompt_embedding, emb)
-                                    / (np.linalg.norm(prompt_embedding) * np.linalg.norm(emb))
-                                )
-                                if score > best_score:
-                                    best_score = score
-                                    best_agent = a
-                            except Exception:
-                                continue
-                    except Exception as e:
-                        logger.warning(f"Error during semantic matching: {e}")
-
-                if not best_agent:
-                    best_agent = leader
-
-                if best_agent.finetuned_model_id:
-                    model_id = best_agent.finetuned_model_id
-                else:
-                    atype = getattr(best_agent, "type", "conversationnel")
-                    if atype == "recherche_live":
-                        model_id = os.getenv("PERPLEXITY_MODEL", "perplexity:sonar")
-                    else:
-                        model_id = os.getenv("MISTRAL_MODEL", "mistral:mistral-small-latest")
-
-                prompt = f"Sachant le contexte et la discussion en cours, réponds à cette question : {request.question}"
-
-                # If using a sub-agent, prepend routing info
-                if best_agent.id != leader.id:
-                    prefix = f"Pour répondre à votre question, j'ai fait appel à l'agent {best_agent.name}. Voici sa réponse :\n"
-                    yield sse_event("token", {"t": prefix})
-
-                yield from get_answer_stream(
-                    prompt,
-                    int(user_id),
-                    db,
+                # Phase 2: Execution (buffered)
+                agent_configs = [m for m in members_with_agents if m["agent_id"] in selected_ids]
+                contributions = execute_agents_parallel(
+                    agent_configs=agent_configs,
+                    question=request.question,
+                    user_id=int(user_id),
+                    db=db,
                     selected_doc_ids=request.selected_documents,
-                    agent_id=best_agent.id,
                     history=history,
-                    model_id=model_id,
-                    company_id=best_agent.company_id,
                     use_rag=request.use_rag,
                     use_graph=request.use_graph,
                 )
+
+                # Emit contribution events
+                for c in contributions:
+                    yield sse_event("contribution", {
+                        "agent_id": c["agent_id"],
+                        "agent_name": c.get("agent_name", ""),
+                        "specialization": c.get("specialization", ""),
+                        "content": c["content"],
+                        "status": c["status"],
+                    })
+
+                # Phase 3: Synthesis (streamed)
+                successful = [c for c in contributions if c["status"] == "ok" and c["content"]]
+                if not successful:
+                    # All failed, leader responds alone
+                    prompt = f"Sachant le contexte et la discussion en cours, reponds a cette question : {request.question}"
+                    yield from get_answer_stream(
+                        prompt, int(user_id), db,
+                        selected_doc_ids=request.selected_documents,
+                        agent_id=leader_info["agent_id"],
+                        history=history,
+                        model_id=leader_info["model_id"],
+                        company_id=leader_info.get("company_id"),
+                        use_rag=request.use_rag,
+                        use_graph=request.use_graph,
+                    )
+                    return
+
+                contributions_text = "\n\n".join(
+                    f'[Agent "{c["agent_name"]}" -- {c.get("specialization", "")}]:\n{c["content"]}'
+                    for c in successful
+                )
+                synthesis_prompt = DEFAULT_SYNTHESIS_PROMPT.format(
+                    team_name=team.name,
+                    team_contexte=team.contexte or "",
+                    contributions_text=contributions_text,
+                ) + f"\n\nQuestion originale: {request.question}"
+
+                messages = [{"role": "user", "content": synthesis_prompt}]
+                full_text = ""
+                for chunk in get_chat_response_stream(messages, model_id=leader_info["model_id"]):
+                    full_text += chunk
+                    yield sse_event("token", {"t": chunk})
+
+                yield sse_event("done", {
+                    "full_text": full_text,
+                    "contributions": [
+                        {"agent_id": c["agent_id"], "agent_name": c.get("agent_name", ""), "specialization": c.get("specialization", ""), "content": c["content"]}
+                        for c in contributions
+                    ],
+                    "sources": [],
+                    "graph_data": None,
+                })
             else:
                 yield sse_event("error", {"message": "Aucun agent ou équipe valide fourni.", "code": "bad_request"})
 
