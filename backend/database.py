@@ -464,6 +464,23 @@ class Team(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+    orchestration_prompt = Column(Text, nullable=True)
+
+
+class TeamMember(Base):
+    __tablename__ = "team_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(20), nullable=False, default="member")  # "leader" or "member"
+    specialization = Column(Text, nullable=True)
+    auto_specialization = Column(Text, nullable=True)
+    position = Column(Integer, nullable=False, default=0)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("team_id", "agent_id", name="uq_team_member"),)
 
 
 class Conversation(Base):
@@ -495,6 +512,7 @@ class Message(Base):
     buffered = Column(Integer, default=0)  # 0 = non bufferisé, 1 = à bufferiser
     sources_json = Column(Text, nullable=True)  # JSON array of RAG source chunks
     graph_data_json = Column(Text, nullable=True)  # JSON structured Neo4j graph data
+    contributions_json = Column(Text, nullable=True)  # JSON array of team agent contributions
 
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -750,6 +768,9 @@ def ensure_columns():
         ("agent_templates", "default_weekly_recap_recipients", "TEXT"),
         ("agent_templates", "default_recap_frequency", "VARCHAR(20) NOT NULL DEFAULT 'weekly'"),
         ("agent_templates", "default_recap_hour", "INTEGER NOT NULL DEFAULT 9"),
+        # Team orchestration
+        ("teams", "orchestration_prompt", "TEXT"),
+        ("messages", "contributions_json", "TEXT"),
     ]
     try:
         with engine.connect() as conn:
@@ -955,6 +976,61 @@ def migrate_existing_recaps():
         db.close()
     except Exception as e:
         logger.error(f"migrate_existing_recaps failed: {e}")
+
+
+def migrate_teams_to_members():
+    """Migrate existing teams from JSON action_agent_ids to team_members table.
+    Idempotent: skips if team_members already has entries."""
+    import json as _json
+    try:
+        db = SessionLocal()
+        existing_count = db.query(TeamMember).count()
+        if existing_count > 0:
+            logger.info("migrate_teams_to_members: team_members already populated, skipping")
+            db.close()
+            return
+
+        teams = db.query(Team).all()
+        if not teams:
+            logger.info("migrate_teams_to_members: no teams to migrate")
+            db.close()
+            return
+
+        for team in teams:
+            # Migrate leader
+            if team.leader_agent_id:
+                leader_member = TeamMember(
+                    team_id=team.id,
+                    agent_id=team.leader_agent_id,
+                    role="leader",
+                    position=0,
+                    company_id=team.company_id,
+                )
+                db.add(leader_member)
+
+            # Migrate action agents
+            action_ids = []
+            if team.action_agent_ids:
+                try:
+                    action_ids = _json.loads(team.action_agent_ids) if isinstance(team.action_agent_ids, str) else team.action_agent_ids
+                except (ValueError, TypeError):
+                    action_ids = []
+
+            for i, aid in enumerate(action_ids):
+                member = TeamMember(
+                    team_id=team.id,
+                    agent_id=int(aid),
+                    role="member",
+                    position=i + 1,
+                    company_id=team.company_id,
+                )
+                db.add(member)
+
+        db.commit()
+        logger.info(f"migrate_teams_to_members: migrated {len(teams)} teams")
+        db.close()
+    except Exception as e:
+        logger.error(f"migrate_teams_to_members failed: {e}")
 
 
 def test_connection():

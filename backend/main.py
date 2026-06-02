@@ -35,6 +35,7 @@ from database import (
     ensure_rls_policies,
     migrate_existing_company_memberships,
     migrate_existing_recaps,
+    migrate_teams_to_members,
     set_current_company_id,
 )
 
@@ -359,6 +360,7 @@ async def startup_event():
         logger.info("Alembic migrations applied successfully")
         migrate_existing_company_memberships()
         migrate_existing_recaps()
+        migrate_teams_to_members()
         logger.info("Database initialization completed successfully")
 
         # Validate GCS bucket is in EU (data sovereignty check)
