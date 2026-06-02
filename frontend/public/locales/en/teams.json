@@ -21,7 +21,24 @@
     "leaderPlaceholder": "Select a leader companion",
     "subAgentsLabel": "Conversational sub-companions",
     "teamLeader": "Team leader",
-    "subCompanions": "Sub-companions"
+    "subCompanions": "Sub-companions",
+    "step1Title": "Basic information",
+    "step2Title": "Team composition",
+    "step3Title": "Preview and confirmation",
+    "orchestrationPrompt": "Custom routing instructions (optional)",
+    "leaderSpecialization": "Leader specialization",
+    "memberSpecialization": "Specialization",
+    "addMember": "Add a companion",
+    "removeMember": "Remove",
+    "regenerateSpec": "Regenerate",
+    "autoDetected": "Auto-detected",
+    "customized": "Customized",
+    "nextStep": "Next",
+    "previousStep": "Previous",
+    "preview": "Team preview",
+    "selectAgent": "Select a companion",
+    "noAgentsAvailable": "No companions available",
+    "editTeam": "Edit team"
   },
   "emptyState": {
     "title": "No companion teams created",
@@ -35,11 +52,15 @@
     "deletingAgent": "Error deleting agent",
     "creatingTeam": "Error creating team",
     "nameRequired": "Name is required",
-    "leaderRequired": "Select a conversational companion"
+    "leaderRequired": "Select a conversational companion",
+    "suggestSpecialization": "Error suggesting specialization",
+    "updateMembers": "Error updating members"
   },
   "success": {
     "teamCreated": "Team created successfully!",
-    "agentDeleted": "Agent deleted"
+    "agentDeleted": "Agent deleted",
+    "teamUpdated": "Team updated successfully!",
+    "membersUpdated": "Members updated"
   },
   "confirmations": {
     "deleteAgent": "Are you sure you want to delete this agent?"
@@ -78,7 +99,14 @@
     "createError": "Error creating conversation",
     "deleteError": "Error deleting conversation",
     "updateError": "Error updating title",
-    "sendError": "Error sending message"
+    "sendError": "Error sending message",
+    "consultingAgents": "Consulting agents...",
+    "agentConsulted": "Agent consulted",
+    "agentUnavailable": "Unavailable",
+    "contributions": "Contributions",
+    "contribution": "Contribution",
+    "synthesizing": "Synthesizing...",
+    "routingTo": "Consulting"
   },
   "detail": {
     "loading": "Loading...",

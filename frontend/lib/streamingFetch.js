@@ -10,7 +10,7 @@ import { getApiUrl, getCsrfToken } from './api';
  * @returns {Promise<void>}
  */
 export async function streamAsk(path, body, callbacks, signal) {
-  const { onToken, onDone, onError } = callbacks;
+  const { onToken, onDone, onError, onRouting, onContribution } = callbacks;
   const url = `${getApiUrl()}${path}`;
 
   // Security: send CSRF token from shared memory store
@@ -109,6 +109,10 @@ export async function streamAsk(path, body, callbacks, signal) {
           onDone?.(data);
         } else if (eventType === 'error') {
           onError?.(data);
+        } else if (eventType === 'routing') {
+          onRouting?.(data);
+        } else if (eventType === 'contribution') {
+          onContribution?.(data);
         }
       }
     }
