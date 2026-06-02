@@ -10,6 +10,8 @@ import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useAuth } from '../../../hooks/useAuth';
 import api from '../../../lib/api';
 import { streamAsk } from '../../../lib/streamingFetch';
+import TeamRoutingBanner from '../../../components/TeamRoutingBanner';
+import TeamContributions from '../../../components/TeamContributions';
 
 export default function TeamChatPage() {
   const { t } = useTranslation(['chat', 'teams', 'common', 'errors']);
@@ -32,6 +34,9 @@ export default function TeamChatPage() {
   const [creatingConv, setCreatingConv] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState(null);
   const [editedTitle, setEditedTitle] = useState("");
+  const [routingAgents, setRoutingAgents] = useState([]);
+  const [showRoutingBanner, setShowRoutingBanner] = useState(false);
+  const [lastContributions, setLastContributions] = useState(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -77,7 +82,11 @@ export default function TeamChatPage() {
       if (pendingUserMessage && res.data.length === 0) {
         setMessages([pendingUserMessage]);
       } else {
-        setMessages(res.data);
+        const loadedMessages = res.data.map(m => ({
+          ...m,
+          contributions: m.contributions_json ? JSON.parse(m.contributions_json) : null,
+        }));
+        setMessages(loadedMessages);
       }
       setPendingUserMessage(null);
     } catch (e) {
@@ -199,7 +208,23 @@ export default function TeamChatPage() {
           team_id: teamId,
           history: history
         }, {
+          onRouting: (data) => {
+            const agents = (data.agents || []).map(a => ({
+              ...a, status: 'pending'
+            }));
+            setRoutingAgents(agents);
+            setShowRoutingBanner(true);
+          },
+          onContribution: (data) => {
+            setRoutingAgents(prev => prev.map(a =>
+              a.id === data.agent_id
+                ? { ...a, status: data.status === 'ok' ? 'done' : 'error' }
+                : a
+            ));
+          },
           onToken: (text) => {
+            // Hide routing banner once synthesis starts
+            setShowRoutingBanner(false);
             tokenBufferRef.current += text;
             if (!flushRafRef.current) {
               flushRafRef.current = requestAnimationFrame(() => {
@@ -214,6 +239,7 @@ export default function TeamChatPage() {
             }
           },
           onDone: (data) => {
+            setShowRoutingBanner(false);
             if (flushRafRef.current) {
               cancelAnimationFrame(flushRafRef.current);
               flushRafRef.current = null;
@@ -221,8 +247,12 @@ export default function TeamChatPage() {
             iaAnswer += tokenBufferRef.current;
             tokenBufferRef.current = '';
             iaAnswer = data.full_text || iaAnswer;
+            const contribs = data.contributions || null;
+            setLastContributions(contribs);
             setMessages(prev => prev.map((m, i) =>
-              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+              i === streamingMsgIdx.current
+                ? { ...m, content: iaAnswer, streaming: false, contributions: contribs }
+                : m
             ));
             streamSuccess = true;
           },
@@ -286,8 +316,10 @@ export default function TeamChatPage() {
         await api.post(`/conversations/${selectedConv}/messages`, {
           conversation_id: selectedConv,
           role: "agent",
-          content: iaAnswer
+          content: iaAnswer,
+          contributions_json: lastContributions ? JSON.stringify(lastContributions) : null,
         });
+        setLastContributions(null);
       } catch (e) {}
 
       await selectConversation(selectedConv);
@@ -523,6 +555,9 @@ export default function TeamChatPage() {
                       </ReactMarkdown>
                       {msg.streaming && <span className="inline-block w-2 h-5 bg-primary-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
                     </div>
+                    {msg.contributions && msg.contributions.length > 0 && (
+                      <TeamContributions contributions={msg.contributions} />
+                    )}
                     {isLastAgentMsg && (
                       <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
                         <button
@@ -550,6 +585,11 @@ export default function TeamChatPage() {
                 </div>
               );
             })
+          )}
+          {showRoutingBanner && (
+            <div className="px-4 md:px-0">
+              <TeamRoutingBanner agents={routingAgents} visible={showRoutingBanner} />
+            </div>
           )}
           {loading && !messages.some(m => m.streaming) && ((messages.length > 0 && messages[messages.length - 1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
             <div className="flex justify-start animate-fade-in">
