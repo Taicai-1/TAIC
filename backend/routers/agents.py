@@ -21,6 +21,7 @@ from database import (
     Agent,
     AgentShare,
     Team,
+    TeamMember,
     Company,
 )
 from helpers.agent_helpers import (
@@ -335,48 +336,49 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
 
 @router.get("/teams")
 async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
-    """List teams for the current user."""
+    """List teams for the current user, including members."""
     try:
         teams = db.query(Team).filter(Team.user_id == int(user_id)).order_by(Team.created_at.desc()).all()
+        team_ids = [t.id for t in teams]
 
-        # Batch-load all referenced agent IDs across all teams (avoids N+1)
-        all_agent_ids = set()
-        for t in teams:
-            all_agent_ids.add(t.leader_agent_id)
-            try:
-                ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
-                all_agent_ids.update(int(aid) for aid in ids)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
+        # Batch-load all members
+        members_by_team = {}
+        if team_ids:
+            all_members = db.query(TeamMember).filter(TeamMember.team_id.in_(team_ids)).order_by(TeamMember.position).all()
+            all_agent_ids = {m.agent_id for m in all_members}
+            agent_lookup = {}
+            if all_agent_ids:
+                agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
+                agent_lookup = {a.id: a for a in agents}
 
-        agent_lookup = {}
-        if all_agent_ids:
-            agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
-            agent_lookup = {a.id: a.name for a in agents}
+            for m in all_members:
+                members_by_team.setdefault(m.team_id, []).append({
+                    "agent_id": m.agent_id,
+                    "role": m.role,
+                    "name": agent_lookup[m.agent_id].name if m.agent_id in agent_lookup else None,
+                    "specialization": m.specialization,
+                    "auto_specialization": m.auto_specialization,
+                    "position": m.position,
+                })
 
         out = []
         for t in teams:
-            leader_name = agent_lookup.get(t.leader_agent_id)
-            action_ids = []
-            action_agent_names = []
-            try:
-                action_ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
-                action_agent_names = [agent_lookup[int(aid)] for aid in action_ids if int(aid) in agent_lookup]
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
-
-            out.append(
-                {
-                    "id": t.id,
-                    "name": t.name,
-                    "contexte": t.contexte,
-                    "leader_agent_id": t.leader_agent_id,
-                    "leader_name": leader_name,
-                    "action_agent_ids": action_ids,
-                    "action_agent_names": action_agent_names,
-                    "created_at": t.created_at.isoformat() if t.created_at else None,
-                }
-            )
+            t_members = members_by_team.get(t.id, [])
+            leader = next((m for m in t_members if m["role"] == "leader"), None)
+            action_members = [m for m in t_members if m["role"] == "member"]
+            out.append({
+                "id": t.id,
+                "name": t.name,
+                "contexte": t.contexte,
+                "orchestration_prompt": t.orchestration_prompt,
+                "members": t_members,
+                # Legacy fields for backward compat
+                "leader_agent_id": leader["agent_id"] if leader else t.leader_agent_id,
+                "leader_name": leader["name"] if leader else None,
+                "action_agent_ids": [m["agent_id"] for m in action_members],
+                "action_agent_names": [m["name"] for m in action_members if m["name"]],
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            })
         return {"teams": out}
     except Exception as e:
         logger.exception(f"Error listing teams: {e}")
@@ -385,103 +387,156 @@ async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends
 
 @router.post("/teams")
 async def create_team(
-    payload: TeamCreateValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+    payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
-    """Create a team. Expected payload: {name, contexte (opt), leader_agent_id, action_agent_ids: [id,id,id]}"""
+    """Create a team. Supports V2 (members array) and legacy (leader_agent_id) formats."""
     try:
-        name = payload.name
-        contexte = payload.contexte
-        leader_agent_id = payload.leader_agent_id
-        member_agent_ids = payload.action_agent_ids
-        # On accepte n'importe quel nombre d'agents
+        # Detect format
+        is_v2 = "members" in payload
 
-        # Valider le chef (doit être conversationnel)
-        leader = db.query(Agent).filter(Agent.id == int(leader_agent_id), Agent.user_id == int(user_id)).first()
-        if not leader or getattr(leader, "type", "conversationnel") != "conversationnel":
-            raise HTTPException(status_code=400, detail="Leader agent must be a conversationnel agent belonging to you")
+        if is_v2:
+            from validation import TeamCreateV2Validated
+            validated = TeamCreateV2Validated(**payload)
+            name = validated.name
+            contexte = validated.contexte
+            orchestration_prompt = validated.orchestration_prompt
+            members_data = validated.members
+        else:
+            from validation import TeamCreateValidated
+            validated = TeamCreateValidated(**payload)
+            name = validated.name
+            contexte = validated.contexte
+            orchestration_prompt = None
+            # Convert legacy to V2 member format
+            from validation import TeamMemberSchema
+            members_data = [TeamMemberSchema(agent_id=validated.leader_agent_id, role="leader")]
+            for aid in validated.action_agent_ids:
+                members_data.append(TeamMemberSchema(agent_id=aid, role="member"))
 
-        # Valider les membres (uniquement conversationnels)
-        member_agents = []
-        for aid in member_agent_ids:
-            a = db.query(Agent).filter(Agent.id == int(aid), Agent.user_id == int(user_id)).first()
-            if not a or getattr(a, "type", "") != "conversationnel":
+        # Validate all agents belong to user and are conversationnel
+        uid = int(user_id)
+        for m in members_data:
+            a = db.query(Agent).filter(Agent.id == m.agent_id, Agent.user_id == uid).first()
+            if not a or getattr(a, "type", "conversationnel") != "conversationnel":
                 raise HTTPException(
-                    status_code=400, detail=f"Agent {aid} doit être un agent conversationnel appartenant à vous"
+                    status_code=400,
+                    detail=f"Agent {m.agent_id} doit etre un agent conversationnel appartenant a vous"
                 )
-            member_agents.append(a)
+
+        caller_company_id = _get_caller_company_id(user_id, db)
+        leader_data = next(m for m in members_data if m.role == "leader")
 
         team = Team(
             name=name,
             contexte=contexte,
-            leader_agent_id=int(leader_agent_id),
-            action_agent_ids=json.dumps([int(x) for x in member_agent_ids]),
-            user_id=int(user_id),
-            company_id=_get_caller_company_id(user_id, db),
+            orchestration_prompt=orchestration_prompt,
+            leader_agent_id=leader_data.agent_id,
+            action_agent_ids=json.dumps([m.agent_id for m in members_data if m.role == "member"]),
+            user_id=uid,
+            company_id=caller_company_id,
         )
         db.add(team)
+        db.flush()
+
+        # Create TeamMember entries
+        for i, m in enumerate(members_data):
+            tm = TeamMember(
+                team_id=team.id,
+                agent_id=m.agent_id,
+                role=m.role,
+                specialization=m.specialization,
+                position=i,
+                company_id=caller_company_id,
+            )
+            db.add(tm)
+
         db.commit()
         db.refresh(team)
 
-        # Préparer la réponse avec les noms
-        resp = {
+        # Build response
+        all_agent_ids = [m.agent_id for m in members_data]
+        agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
+        agent_lookup = {a.id: a.name for a in agents}
+
+        resp_members = []
+        for i, m in enumerate(members_data):
+            resp_members.append({
+                "agent_id": m.agent_id,
+                "role": m.role,
+                "name": agent_lookup.get(m.agent_id),
+                "specialization": m.specialization,
+                "position": i,
+            })
+
+        leader = next(m for m in resp_members if m["role"] == "leader")
+        action_members = [m for m in resp_members if m["role"] == "member"]
+
+        return {
             "team": {
                 "id": team.id,
                 "name": team.name,
                 "contexte": team.contexte,
-                "leader_agent_id": team.leader_agent_id,
-                "leader_name": leader.name,
-                "member_agent_ids": [int(x) for x in member_agent_ids],
-                "member_agent_names": [a.name for a in member_agents],
+                "orchestration_prompt": team.orchestration_prompt,
+                "members": resp_members,
+                # Legacy compat
+                "leader_agent_id": leader["agent_id"],
+                "leader_name": leader["name"],
+                "member_agent_ids": [m["agent_id"] for m in action_members],
+                "member_agent_names": [m["name"] for m in action_members],
                 "created_at": team.created_at.isoformat() if team.created_at else None,
             }
         }
-        return resp
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error creating team: {e}")
-        # If the teams table does not exist, provide a helpful message
         if 'relation "teams"' in str(e) or "does not exist" in str(e):
-            raise HTTPException(
-                status_code=500,
-                detail="teams table not found in database. Please create the table before using this endpoint.",
-            )
+            raise HTTPException(status_code=500, detail="teams table not found in database.")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/teams/{team_id}")
 async def get_team(team_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+    """Get a single team with members."""
     try:
         t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
         if not t:
             raise HTTPException(status_code=404, detail="Team not found")
 
-        # Batch-load leader + action agents in one query (avoids N+1)
-        all_agent_ids = {t.leader_agent_id}
-        action_ids = []
-        try:
-            action_ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
-            all_agent_ids.update(int(aid) for aid in action_ids)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            pass
-
+        members = db.query(TeamMember).filter(TeamMember.team_id == t.id).order_by(TeamMember.position).all()
+        agent_ids = {m.agent_id for m in members}
         agent_lookup = {}
-        if all_agent_ids:
-            agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
-            agent_lookup = {a.id: a.name for a in agents}
+        if agent_ids:
+            agents = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
+            agent_lookup = {a.id: a for a in agents}
 
-        leader_name = agent_lookup.get(t.leader_agent_id)
-        action_agent_names = [agent_lookup[int(aid)] for aid in action_ids if int(aid) in agent_lookup]
+        resp_members = []
+        for m in members:
+            a = agent_lookup.get(m.agent_id)
+            resp_members.append({
+                "agent_id": m.agent_id,
+                "role": m.role,
+                "name": a.name if a else None,
+                "specialization": m.specialization,
+                "auto_specialization": m.auto_specialization,
+                "position": m.position,
+            })
+
+        leader = next((m for m in resp_members if m["role"] == "leader"), None)
+        action_members = [m for m in resp_members if m["role"] == "member"]
 
         return {
             "team": {
                 "id": t.id,
                 "name": t.name,
                 "contexte": t.contexte,
-                "leader_agent_id": t.leader_agent_id,
-                "leader_name": leader_name,
-                "action_agent_ids": action_ids,
-                "action_agent_names": action_agent_names,
+                "orchestration_prompt": t.orchestration_prompt,
+                "members": resp_members,
+                # Legacy compat
+                "leader_agent_id": leader["agent_id"] if leader else t.leader_agent_id,
+                "leader_name": leader["name"] if leader else None,
+                "action_agent_ids": [m["agent_id"] for m in action_members],
+                "action_agent_names": [m["name"] for m in action_members if m["name"]],
                 "created_at": t.created_at.isoformat() if t.created_at else None,
             }
         }
@@ -490,6 +545,109 @@ async def get_team(team_id: int, user_id: str = Depends(verify_token), db: Sessi
     except Exception as e:
         logger.exception(f"Error fetching team {team_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/teams/suggest-specialization")
+async def suggest_specialization_endpoint(
+    payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Auto-detect specialization for an agent."""
+    from validation import SuggestSpecializationRequest
+    validated = SuggestSpecializationRequest(**payload)
+
+    agent = db.query(Agent).filter(Agent.id == validated.agent_id, Agent.user_id == int(user_id)).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    from database import Document
+    docs = db.query(Document).filter(Document.agent_id == agent.id).limit(10).all()
+    doc_names = [d.filename for d in docs if d.filename]
+
+    from orchestrator import suggest_specialization
+    spec = suggest_specialization(
+        agent_name=agent.name,
+        agent_contexte=agent.contexte or "",
+        agent_biographie=agent.biographie or "",
+        document_names=doc_names,
+    )
+    return {"specialization": spec}
+
+
+@router.put("/teams/{team_id}/members")
+async def update_team_members(
+    team_id: int, payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Replace full team composition."""
+    from validation import TeamMemberSchema
+
+    t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    members_raw = payload.get("members", [])
+    members_data = [TeamMemberSchema(**m) for m in members_raw]
+
+    # Validate
+    leaders = [m for m in members_data if m.role == "leader"]
+    if len(leaders) != 1:
+        raise HTTPException(status_code=400, detail="Must have exactly one leader")
+    non_leaders = [m for m in members_data if m.role == "member"]
+    if len(non_leaders) < 1:
+        raise HTTPException(status_code=400, detail="Must have at least one member")
+
+    uid = int(user_id)
+    for m in members_data:
+        a = db.query(Agent).filter(Agent.id == m.agent_id, Agent.user_id == uid).first()
+        if not a or getattr(a, "type", "conversationnel") != "conversationnel":
+            raise HTTPException(status_code=400, detail=f"Agent {m.agent_id} invalid")
+
+    # Delete old members
+    db.query(TeamMember).filter(TeamMember.team_id == team_id).delete()
+
+    caller_company_id = _get_caller_company_id(user_id, db)
+    for i, m in enumerate(members_data):
+        tm = TeamMember(
+            team_id=team_id,
+            agent_id=m.agent_id,
+            role=m.role,
+            specialization=m.specialization,
+            position=i,
+            company_id=caller_company_id,
+        )
+        db.add(tm)
+
+    # Update legacy fields on Team
+    leader = next(m for m in members_data if m.role == "leader")
+    t.leader_agent_id = leader.agent_id
+    t.action_agent_ids = json.dumps([m.agent_id for m in members_data if m.role == "member"])
+
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.patch("/teams/{team_id}/members/{agent_id}")
+async def patch_team_member(
+    team_id: int, agent_id: int, payload: dict,
+    user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Update specialization or position of a team member."""
+    t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id, TeamMember.agent_id == agent_id
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    if "specialization" in payload:
+        member.specialization = payload["specialization"]
+    if "position" in payload:
+        member.position = payload["position"]
+
+    db.commit()
+    return {"status": "ok"}
 
 
 # Endpoint pour modifier un agent existant
