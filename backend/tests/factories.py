@@ -14,6 +14,8 @@ from database import (
     AgentShare,
     AgentTemplate,
     AgentTemplateDocument,
+    Team,
+    TeamMember,
 )
 from auth import hash_password
 
@@ -107,6 +109,23 @@ class AgentTemplateFactory(factory.Factory):
     default_contexte = "Tu es un expert technique."
     default_biographie = "Assistant technique"
     default_type = "conversationnel"
+
+
+class TeamFactory(factory.Factory):
+    class Meta:
+        model = Team
+
+    name = factory.Sequence(lambda n: f"team-{n}")
+    contexte = "Equipe de test"
+
+
+class TeamMemberFactory(factory.Factory):
+    class Meta:
+        model = TeamMember
+
+    role = "member"
+    specialization = None
+    position = 0
 
 
 class AgentTemplateDocumentFactory(factory.Factory):

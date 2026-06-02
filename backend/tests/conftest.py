@@ -246,6 +246,75 @@ def member_cookies(test_member_token):
     return {"token": test_member_token}
 
 
+@pytest.fixture
+def test_team(db_session, test_user):
+    """Create a test team owned by test_user with a leader agent."""
+    from tests.factories import AgentFactory, TeamFactory, TeamMemberFactory
+    import json
+
+    leader = AgentFactory.build(user_id=test_user.id, name="Leader Agent", company_id=getattr(test_user, 'company_id', None))
+    db_session.add(leader)
+    db_session.flush()
+
+    team = TeamFactory.build(
+        user_id=test_user.id,
+        leader_agent_id=leader.id,
+        action_agent_ids="[]",
+        company_id=getattr(test_user, 'company_id', None),
+    )
+    db_session.add(team)
+    db_session.flush()
+
+    leader_member = TeamMemberFactory.build(
+        team_id=team.id, agent_id=leader.id, role="leader", position=0,
+        company_id=getattr(test_user, 'company_id', None),
+    )
+    db_session.add(leader_member)
+    db_session.flush()
+
+    return team
+
+
+@pytest.fixture
+def test_team_with_members(db_session, test_user):
+    """Create a team with a leader + 2 member agents."""
+    from tests.factories import AgentFactory, TeamFactory, TeamMemberFactory
+    import json
+
+    company_id = getattr(test_user, 'company_id', None)
+
+    leader = AgentFactory.build(user_id=test_user.id, name="Leader", contexte="Coordinateur general", company_id=company_id)
+    member1 = AgentFactory.build(user_id=test_user.id, name="Expert Finance", contexte="Expert en comptabilite", company_id=company_id)
+    member2 = AgentFactory.build(user_id=test_user.id, name="Analyste Marche", contexte="Veille concurrentielle", company_id=company_id)
+    for a in [leader, member1, member2]:
+        db_session.add(a)
+    db_session.flush()
+
+    team = TeamFactory.build(
+        user_id=test_user.id,
+        leader_agent_id=leader.id,
+        action_agent_ids=json.dumps([member1.id, member2.id]),
+        company_id=company_id,
+    )
+    db_session.add(team)
+    db_session.flush()
+
+    members_data = [
+        (leader, "leader", 0),
+        (member1, "member", 1),
+        (member2, "member", 2),
+    ]
+    for agent, role, pos in members_data:
+        m = TeamMemberFactory.build(
+            team_id=team.id, agent_id=agent.id, role=role, position=pos,
+            specialization=agent.contexte, company_id=company_id,
+        )
+        db_session.add(m)
+    db_session.flush()
+
+    return {"team": team, "leader": leader, "members": [member1, member2]}
+
+
 # ---------------------------------------------------------------------------
 # Mock fixtures for external services
 # ---------------------------------------------------------------------------
