@@ -6,6 +6,7 @@ and auto-detection of agent specializations.
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from mistral_client import generate_text
@@ -137,24 +138,25 @@ def execute_agent(
         return {"agent_id": agent_id, "content": "", "sources": [], "status": "error", "error": str(e)}
 
 
-def execute_agents_parallel(
-    agent_configs: list[dict],
+def _execute_agent_in_thread(
+    config: dict,
     question: str,
     user_id: int,
-    db,
     selected_doc_ids: list[int],
     history: list,
-    use_rag: bool = True,
-    use_graph: bool = True,
-) -> list[dict]:
-    """Execute multiple agents sequentially (sync context, no async DB session).
+    company_id_for_tenant: int | None,
+    use_rag: bool,
+    use_graph: bool,
+) -> dict:
+    """Run a single agent in its own thread with a dedicated DB session."""
+    from database import SessionLocal, set_current_company_id
 
-    Each agent_config is: {"agent_id": int, "model_id": str, "company_id": int|None,
-                           "name": str, "specialization": str}
-    Returns list of contribution dicts.
-    """
-    contributions = []
-    for config in agent_configs:
+    # Propagate tenant context to this thread
+    if company_id_for_tenant is not None:
+        set_current_company_id(company_id_for_tenant)
+
+    db = SessionLocal()
+    try:
         result = execute_agent(
             agent_id=config["agent_id"],
             question=question,
@@ -169,7 +171,91 @@ def execute_agents_parallel(
         )
         result["agent_name"] = config["name"]
         result["specialization"] = config.get("specialization", "")
-        contributions.append(result)
+        return result
+    finally:
+        db.close()
+
+
+def execute_agents_parallel(
+    agent_configs: list[dict],
+    question: str,
+    user_id: int,
+    db,
+    selected_doc_ids: list[int],
+    history: list,
+    use_rag: bool = True,
+    use_graph: bool = True,
+) -> list[dict]:
+    """Execute multiple agents in parallel using threads.
+
+    Each thread gets its own DB session to avoid SQLAlchemy thread-safety issues.
+    Falls back to sequential execution if only one agent is selected.
+
+    Each agent_config is: {"agent_id": int, "model_id": str, "company_id": int|None,
+                           "name": str, "specialization": str}
+    Returns list of contribution dicts in the same order as agent_configs.
+    """
+    if len(agent_configs) <= 1:
+        # No point spawning threads for a single agent
+        contributions = []
+        for config in agent_configs:
+            result = execute_agent(
+                agent_id=config["agent_id"],
+                question=question,
+                user_id=user_id,
+                db=db,
+                selected_doc_ids=selected_doc_ids,
+                history=history,
+                model_id=config["model_id"],
+                company_id=config.get("company_id"),
+                use_rag=use_rag,
+                use_graph=use_graph,
+            )
+            result["agent_name"] = config["name"]
+            result["specialization"] = config.get("specialization", "")
+            contributions.append(result)
+        return contributions
+
+    # Capture current tenant context to propagate to threads
+    from database import _current_company_id
+    tenant_company_id = _current_company_id.get()
+
+    contributions = [None] * len(agent_configs)
+    max_workers = min(len(agent_configs), 3)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_index = {}
+        for i, config in enumerate(agent_configs):
+            future = executor.submit(
+                _execute_agent_in_thread,
+                config=config,
+                question=question,
+                user_id=user_id,
+                selected_doc_ids=selected_doc_ids,
+                history=history,
+                company_id_for_tenant=tenant_company_id,
+                use_rag=use_rag,
+                use_graph=use_graph,
+            )
+            future_to_index[future] = i
+
+        for future in as_completed(future_to_index):
+            idx = future_to_index[future]
+            try:
+                contributions[idx] = future.result()
+            except Exception as e:
+                logger.error(f"Agent thread {idx} failed: {e}")
+                config = agent_configs[idx]
+                contributions[idx] = {
+                    "agent_id": config["agent_id"],
+                    "agent_name": config["name"],
+                    "specialization": config.get("specialization", ""),
+                    "content": "",
+                    "sources": [],
+                    "status": "error",
+                    "error": str(e),
+                }
+
     return contributions
 
 
