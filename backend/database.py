@@ -574,6 +574,7 @@ class Message(Base):
     sources_json = Column(Text, nullable=True)  # JSON array of RAG source chunks
     graph_data_json = Column(Text, nullable=True)  # JSON structured Neo4j graph data
     contributions_json = Column(Text, nullable=True)  # JSON array of team agent contributions
+    action_proposal_json = Column(Text, nullable=True)  # JSON action proposal for actionnable agents
 
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -818,6 +819,7 @@ def ensure_columns():
         ("weekly_recap_logs", "recap_id", "INTEGER REFERENCES recaps(id)"),
         ("messages", "sources_json", "TEXT"),
         ("messages", "graph_data_json", "TEXT"),
+        ("messages", "action_proposal_json", "TEXT"),
         # Companion templates
         ("agents", "template_id", "INTEGER REFERENCES agent_templates(id) ON DELETE SET NULL"),
         ("agent_templates", "default_email_tags", "TEXT"),

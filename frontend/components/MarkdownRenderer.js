@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'next-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -43,7 +43,7 @@ const MarkdownImage = ({ src, alt, t }) => (
 );
 
 /* ── Code block with syntax highlighting + copy button ── */
-const CodeBlock = ({ className, children }) => {
+const CodeBlock = ({ className, children, t }) => {
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : null;
@@ -67,7 +67,7 @@ const CodeBlock = ({ className, children }) => {
         className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-white/10 border border-white/15 text-gray-400 hover:bg-white/20 hover:text-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-        {copied ? 'Copié' : 'Copier'}
+        {copied ? t('chat:messages.copied') : t('chat:messages.copyButton')}
       </button>
       <SyntaxHighlighter
         style={oneDark}
@@ -90,13 +90,10 @@ const CodeBlock = ({ className, children }) => {
 /* ── Main component ── */
 export default function MarkdownRenderer({ children, variant = 'agent' }) {
   const { t } = useTranslation(['chat']);
-
-  if (!children) return null;
-
   const isUser = variant === 'user';
 
-  /* Build component overrides based on variant */
-  const components = {
+  /* Build component overrides based on variant (memoized to avoid re-renders) */
+  const components = useMemo(() => ({
     /* ── Headings ── */
     h1: ({ node, ...props }) => <h1 className={isUser ? 'text-white' : ''} {...props} />,
     h2: ({ node, ...props }) => <h2 className={isUser ? 'text-white border-white/20' : ''} {...props} />,
@@ -153,10 +150,10 @@ export default function MarkdownRenderer({ children, variant = 'agent' }) {
     /* ── Code: inline vs block ── */
     code: ({ node, inline, className, children, ...props }) => {
       if (!inline && /language-(\w+)/.test(className || '')) {
-        return <CodeBlock className={className}>{children}</CodeBlock>;
+        return <CodeBlock className={className} t={t}>{children}</CodeBlock>;
       }
       if (!inline && String(children).includes('\n')) {
-        return <CodeBlock className={className}>{children}</CodeBlock>;
+        return <CodeBlock className={className} t={t}>{children}</CodeBlock>;
       }
       return (
         <code
@@ -210,7 +207,9 @@ export default function MarkdownRenderer({ children, variant = 'agent' }) {
 
     /* ── Images ── */
     img: ({ node, ...props }) => <MarkdownImage {...props} t={t} />,
-  };
+  }), [isUser, t]);
+
+  if (!children) return null;
 
   const proseClasses = isUser
     ? 'prose prose-sm prose-invert max-w-none'

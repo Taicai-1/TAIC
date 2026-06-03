@@ -356,6 +356,7 @@ export default function AgentChatPage() {
         ...m,
         sources: m.sources || undefined,
         graph_data: m.graph_data || undefined,
+        action_proposal: m.action_proposal || undefined,
       })));
     } catch (e) {
       setMessages([]);
@@ -455,6 +456,7 @@ const handleDeleteConversation = async (convId) => {
         content: resAsk.data.answer,
         sources_json: slashSources.length > 0 ? JSON.stringify(slashSources) : undefined,
         graph_data_json: slashGraphData ? JSON.stringify(slashGraphData) : undefined,
+        action_proposal_json: slashActionProposal ? JSON.stringify(slashActionProposal) : undefined,
       });
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Error');
@@ -689,7 +691,8 @@ const handleDeleteConversation = async (convId) => {
           role: "agent",
           content: iaAnswer,
           sources_json: iaSources.length > 0 ? JSON.stringify(iaSources) : undefined,
-          graph_data_json: iaGraphData ? JSON.stringify(iaGraphData) : undefined
+          graph_data_json: iaGraphData ? JSON.stringify(iaGraphData) : undefined,
+          action_proposal_json: iaActionProposal ? JSON.stringify(iaActionProposal) : undefined,
         });
         // Update with server-assigned id
         setMessages(prev => prev.map((m, i) =>

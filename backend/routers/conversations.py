@@ -92,6 +92,7 @@ async def add_message(
         sources_json=msg.sources_json,
         graph_data_json=msg.graph_data_json,
         contributions_json=msg.contributions_json,
+        action_proposal_json=msg.action_proposal_json,
         company_id=_get_caller_company_id(user_id, db),
     )
     db.add(message)
@@ -114,6 +115,7 @@ async def get_messages(conversation_id: int, db: Session = Depends(get_db), user
             "timestamp": m.timestamp,
             "sources": json.loads(m.sources_json) if m.sources_json else None,
             "graph_data": json.loads(m.graph_data_json) if m.graph_data_json else None,
+            "action_proposal": json.loads(m.action_proposal_json) if m.action_proposal_json else None,
             "contributions_json": m.contributions_json,
         }
         for m in messages
