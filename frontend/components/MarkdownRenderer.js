@@ -145,6 +145,11 @@ export default function MarkdownRenderer({ children, variant = 'agent' }) {
       />
     ),
 
+    /* ── Horizontal rule ── */
+    hr: ({ node, ...props }) => (
+      <hr className={isUser ? 'border-white/20' : ''} {...props} />
+    ),
+
     /* ── Code: inline vs block ── */
     code: ({ node, inline, className, children, ...props }) => {
       if (!inline && /language-(\w+)/.test(className || '')) {
