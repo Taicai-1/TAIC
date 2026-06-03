@@ -502,6 +502,10 @@ from routers.google_auth import router as google_auth_router  # noqa: E402
 from routers.plugins import router as plugins_router  # noqa: E402
 from routers.action_executions import router as action_executions_router  # noqa: E402
 
+# Discover and register all plugins
+from plugins import discover_plugins  # noqa: E402
+discover_plugins()
+
 app.include_router(auth_router)
 app.include_router(ask_router)
 app.include_router(documents_router)
