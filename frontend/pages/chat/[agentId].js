@@ -34,6 +34,7 @@ import {
   Users
 } from "lucide-react";
 import MarkdownRenderer from "../../components/MarkdownRenderer";
+import ActionProposal from '../../components/ActionProposal';
 
 
 
@@ -440,7 +441,8 @@ const handleDeleteConversation = async (convId) => {
 
       const slashSources = resAsk.data.sources || [];
       const slashGraphData = resAsk.data.graph_data || null;
-      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources, graph_data: slashGraphData };
+      const slashActionProposal = resAsk.data.action_proposal || null;
+      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources, graph_data: slashGraphData, action_proposal: slashActionProposal };
       setMessages(prev => [...prev, assistantMsg]);
       if (slashSources.length > 0) {
         setSelectedSources(slashSources);
@@ -556,6 +558,7 @@ const handleDeleteConversation = async (convId) => {
       let iaAnswer = "";
       let iaSources = [];
       let iaGraphData = null;
+      let iaActionProposal = null;
 
       try {
         const controller = new AbortController();
@@ -593,8 +596,9 @@ const handleDeleteConversation = async (convId) => {
             iaAnswer = data.full_text || iaAnswer;
             iaSources = data.sources || [];
             iaGraphData = data.graph_data || null;
+            iaActionProposal = data.action_proposal || null;
             setMessages(prev => prev.map((m, i) =>
-              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData } : m
+              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData, action_proposal: iaActionProposal } : m
             ));
             // Auto-open sources panel if sources exist
             if (iaSources.length > 0) {
@@ -626,8 +630,9 @@ const handleDeleteConversation = async (convId) => {
           iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
           iaSources = resAsk.data.sources || [];
           iaGraphData = resAsk.data.graph_data || null;
+          iaActionProposal = resAsk.data.action_proposal || null;
           setMessages(prev => prev.map((m, i) =>
-            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData } : m
+            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData, action_proposal: iaActionProposal } : m
           ));
           // Auto-open sources panel if sources exist
           if (iaSources.length > 0) {
@@ -1044,6 +1049,12 @@ const handleDeleteConversation = async (convId) => {
                         <>
                           <MarkdownRenderer>{msg.content}</MarkdownRenderer>
                           {msg.streaming && <span className="inline-block w-2 h-5 bg-primary-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
+                          {msg.action_proposal && (
+                            <ActionProposal
+                              proposal={msg.action_proposal}
+                              onResult={(result) => {}}
+                            />
+                          )}
                         </>
                       ) : (
                         <div className="leading-relaxed whitespace-pre-line">{msg.content}</div>
