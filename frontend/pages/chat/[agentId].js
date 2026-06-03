@@ -33,64 +33,9 @@ import {
   Sparkles,
   Users
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import MarkdownRenderer from "../../components/MarkdownRenderer";
 
-// Image block rendered inside markdown (generated images)
-const MarkdownImage = ({ src, alt, t }) => (
-  <div className="my-3">
-    <img src={src} alt={alt} className="max-w-full rounded-button shadow-card border border-gray-200"
-         style={{ maxHeight: '512px', objectFit: 'contain' }} loading="lazy" />
-    <div className="flex gap-2 mt-2">
-      <a href={src} download className="px-3 py-1.5 bg-primary-600 text-white rounded-sm hover:bg-primary-700 text-sm">
-        {t('chat:messages.downloadImage')}
-      </a>
-      <button className="px-3 py-1.5 bg-gray-200 text-gray-800 rounded-sm hover:bg-gray-300 text-sm"
-              onClick={() => window.open(src, '_blank')}>
-        {t('chat:messages.fullSize')}
-      </button>
-    </div>
-  </div>
-);
 
-// Composant pour afficher du texte avec Markdown (safe by default, no dangerouslySetInnerHTML)
-const MarkdownText = ({ children }) => {
-  const { t } = useTranslation(['chat']);
-  if (!children) return null;
-  return (
-    <div className="leading-relaxed markdown-content">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          strong: ({ node, ...props }) => <strong {...props} />,
-          em: ({ node, ...props }) => <em {...props} />,
-          code: ({ node, ...props }) => (
-            <code className="px-1 py-0.5 bg-gray-100 rounded text-sm" {...props} />
-          ),
-          ul: ({ node, ...props }) => (
-            <ul className="list-disc list-inside my-2" style={{ lineHeight: 1.4 }} {...props} />
-          ),
-          li: ({ node, ...props }) => <li className="ml-4" {...props} />,
-          p: ({ node, ...props }) => <p className="mb-1" {...props} />,
-          a: ({ node, ...props }) => (
-            <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
-          ),
-          img: ({ node, ...props }) => <MarkdownImage {...props} t={t} />,
-          table: ({ node, ...props }) => (
-            <div className="overflow-x-auto my-3">
-              <table className="min-w-full border-collapse border border-gray-200 rounded-sm text-sm" {...props} />
-            </div>
-          ),
-          thead: ({ node, ...props }) => <thead className="bg-gray-50" {...props} />,
-          th: ({ node, ...props }) => <th className="border border-gray-200 px-3 py-2 text-left font-semibold text-gray-700" {...props} />,
-          td: ({ node, ...props }) => <td className="border border-gray-200 px-3 py-2 text-gray-700" {...props} />,
-        }}
-      >
-        {children}
-      </ReactMarkdown>
-    </div>
-  );
-};
 
 // Single source card with expand/collapse
 const SourceCard = ({ src, t }) => {
@@ -1054,7 +999,7 @@ const handleDeleteConversation = async (convId) => {
                     <Bot className="w-3.5 h-3.5 text-primary-600" />
                   </div>
                 )}
-                <div className={`rounded-card px-5 py-3.5 shadow-subtle max-w-[70%] whitespace-pre-line overflow-hidden transition-all duration-200 ${
+                <div className={`rounded-card px-5 py-3.5 shadow-subtle max-w-[70%] overflow-hidden transition-all duration-200 ${
                   msg.role === "user"
                     ? "bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-br-none"
                     : msg.role === "system"
@@ -1097,7 +1042,7 @@ const handleDeleteConversation = async (convId) => {
                     <>
                       {msg.role === "agent" ? (
                         <>
-                          <MarkdownText>{msg.content}</MarkdownText>
+                          <MarkdownRenderer>{msg.content}</MarkdownRenderer>
                           {msg.streaming && <span className="inline-block w-2 h-5 bg-primary-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
                         </>
                       ) : (

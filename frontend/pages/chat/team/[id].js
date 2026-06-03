@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { Pencil, Trash2, Plus, Users, ArrowLeft, Send, ThumbsUp, MessageCircle, Sparkles, Bot } from "lucide-react";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownRenderer from '../../../components/MarkdownRenderer';
 import toast, { Toaster } from "react-hot-toast";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -523,35 +522,10 @@ export default function TeamChatPage() {
                         : "bg-white text-gray-900 rounded-bl-none border border-gray-100 shadow-subtle"
                     }`}
                   >
-                    <div className="prose prose-sm max-w-none">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          p: ({ node, ...props }) => <p className={msg.role === "user" ? "text-white mb-2 last:mb-0" : "text-gray-900 mb-2 last:mb-0"} {...props} />,
-                          strong: ({ node, ...props }) => <strong className={msg.role === "user" ? "text-white font-bold" : "text-gray-900 font-bold"} {...props} />,
-                          em: ({ node, ...props }) => <em className={msg.role === "user" ? "text-white italic" : "text-gray-700 italic"} {...props} />,
-                          ul: ({ node, ...props }) => <ul className={`${msg.role === "user" ? "text-white" : "text-gray-900"} list-disc ml-4 mb-2`} {...props} />,
-                          ol: ({ node, ...props }) => <ol className={`${msg.role === "user" ? "text-white" : "text-gray-900"} list-decimal ml-4 mb-2`} {...props} />,
-                          li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                          code: ({ node, inline, ...props }) =>
-                            inline ? (
-                              <code className={`${msg.role === "user" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-900"} px-1.5 py-0.5 rounded text-sm`} {...props} />
-                            ) : (
-                              <code className={`block ${msg.role === "user" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-900"} p-3 rounded-sm text-sm overflow-x-auto`} {...props} />
-                            ),
-                          a: ({ node, ...props }) => <a className={msg.role === "user" ? "text-blue-200 underline hover:text-blue-100" : "text-blue-600 underline hover:text-blue-800"} target="_blank" rel="noopener noreferrer" {...props} />,
-                          table: ({ node, ...props }) => (
-                            <div className="overflow-x-auto my-3">
-                              <table className="min-w-full border-collapse border border-gray-200 rounded-sm text-sm" {...props} />
-                            </div>
-                          ),
-                          thead: ({ node, ...props }) => <thead className="bg-gray-50" {...props} />,
-                          th: ({ node, ...props }) => <th className="border border-gray-200 px-3 py-2 text-left font-semibold text-gray-700" {...props} />,
-                          td: ({ node, ...props }) => <td className="border border-gray-200 px-3 py-2 text-gray-700" {...props} />,
-                        }}
-                      >
+                    <div>
+                      <MarkdownRenderer variant={msg.role === "user" ? "user" : "agent"}>
                         {msg.content}
-                      </ReactMarkdown>
+                      </MarkdownRenderer>
                       {msg.streaming && <span className="inline-block w-2 h-5 bg-primary-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
                     </div>
                     {msg.contributions && msg.contributions.length > 0 && (

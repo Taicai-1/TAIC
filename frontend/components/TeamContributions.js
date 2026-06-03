@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'next-i18next';
 import { ChevronDown, ChevronUp, Bot, Users } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownRenderer from './MarkdownRenderer';
 
 /**
  * Collapsible accordion showing individual agent contributions
@@ -95,13 +94,13 @@ export default function TeamContributions({ contributions }) {
                 {/* Card content */}
                 <div className="px-4 pb-3">
                   <div
-                    className={`text-sm text-gray-700 prose prose-sm max-w-none ${
+                    className={`text-sm text-gray-700 ${
                       !isExpanded && isLong ? 'line-clamp-4' : ''
                     }`}
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <MarkdownRenderer variant="contribution">
                       {content}
-                    </ReactMarkdown>
+                    </MarkdownRenderer>
                   </div>
                   {isLong && (
                     <button
