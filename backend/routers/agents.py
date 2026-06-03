@@ -150,6 +150,7 @@ async def create_agent(
     weekly_recap_recipients: str = Form(None),
     recap_frequency: str = Form("weekly"),
     recap_hour: str = Form("9"),
+    enabled_plugins: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -201,6 +202,14 @@ async def create_agent(
                 parsed_email_tags = [f"@{t.lstrip('@').lower()}" for t in tags_list]
             parsed_email_tags = json.dumps(parsed_email_tags) if parsed_email_tags else None
 
+        # Parse enabled_plugins for actionnable agents
+        parsed_plugins = None
+        if type == "actionnable" and enabled_plugins:
+            try:
+                parsed_plugins = json.dumps(json.loads(enabled_plugins))
+            except json.JSONDecodeError:
+                parsed_plugins = json.dumps([p.strip() for p in enabled_plugins.split(",") if p.strip()])
+
         # Auto-calculate llm_provider from type
         effective_llm_provider = resolve_llm_provider(type)
         caller_company_id = _get_caller_company_id(user_id, db)
@@ -223,6 +232,7 @@ async def create_agent(
             else None,
             recap_frequency=recap_frequency if recap_frequency in ("daily", "weekly", "monthly") else "weekly",
             recap_hour=max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9,
+            enabled_plugins=parsed_plugins,
             user_id=int(user_id),
             company_id=caller_company_id,
         )
@@ -667,6 +677,7 @@ async def update_agent(
     weekly_recap_recipients: str = Form(None),
     recap_frequency: str = Form("weekly"),
     recap_hour: str = Form("9"),
+    enabled_plugins: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -680,7 +691,17 @@ async def update_agent(
         agent.biographie = biographie
         agent.statut = "privé"
         agent.type = type
-        agent.llm_provider = "perplexity" if type == "recherche_live" else "mistral"
+        agent.llm_provider = resolve_llm_provider(type)
+
+        # Update enabled_plugins for actionnable agents
+        if enabled_plugins is not None:
+            if agent.type == "actionnable":
+                try:
+                    agent.enabled_plugins = json.dumps(json.loads(enabled_plugins))
+                except json.JSONDecodeError:
+                    agent.enabled_plugins = json.dumps([p.strip() for p in enabled_plugins.split(",") if p.strip()])
+            else:
+                agent.enabled_plugins = None
 
         # Parser et mettre à jour les email_tags
         if email_tags is not None:
