@@ -467,12 +467,7 @@ def get_answer(
         logger.info(
             "Getting response from OpenAI with structured messages (system + RAG context, full history, current question)"
         )
-        gemini_only_flag = False
-        try:
-            gemini_only_flag = bool(agent and getattr(agent, "type", "") == "actionnable")
-        except Exception:
-            gemini_only_flag = False
-        response = get_chat_response(messages, model_id=model_id, gemini_only=gemini_only_flag)
+        response = get_chat_response(messages, model_id=model_id)
         logger.info("Successfully got response from OpenAI")
         return {"answer": response, "sources": sources, "graph_data": graph_data}
     except Exception as e:
@@ -702,14 +697,8 @@ def get_answer_stream(
             return
 
         # --- Stream from LLM ---
-        gemini_only_flag = False
-        try:
-            gemini_only_flag = bool(agent and getattr(agent, "type", "") == "actionnable")
-        except Exception:
-            pass
-
         full_text = ""
-        for chunk in get_chat_response_stream(messages, model_id=model_id, gemini_only=gemini_only_flag):
+        for chunk in get_chat_response_stream(messages, model_id=model_id):
             full_text += chunk
             yield sse_event("token", {"t": chunk})
 
