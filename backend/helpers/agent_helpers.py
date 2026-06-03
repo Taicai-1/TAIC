@@ -27,12 +27,14 @@ logger = logging.getLogger(__name__)
 _AGENT_TYPE_MODEL_MAP = {
     "recherche_live": ("PERPLEXITY_MODEL", "perplexity:sonar"),
     "visuel": (None, "imagen:imagen-3.0-generate-002"),
+    "actionnable": ("GEMINI_MODEL", "gemini:gemini-2.0-flash"),
 }
 _DEFAULT_MODEL = ("MISTRAL_MODEL", "mistral:mistral-small-latest")
 
 _AGENT_TYPE_PROVIDER_MAP = {
     "recherche_live": "perplexity",
     "visuel": "imagen",
+    "actionnable": "gemini",
 }
 
 

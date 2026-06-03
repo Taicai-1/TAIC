@@ -323,9 +323,70 @@ class Agent(Base):
     recap_frequency = Column(String(20), default="weekly", nullable=False)
     recap_hour = Column(Integer, default=9, nullable=False)
 
+    # Actionnable plugins
+    enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
+
     # Relations
     owner = relationship("User", back_populates="agents")
     documents = relationship("Document", back_populates="agent", cascade="all, delete-orphan")
+
+
+class UserGoogleToken(Base):
+    __tablename__ = "user_google_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    _access_token = Column("access_token", Text, nullable=False)
+    _refresh_token = Column("refresh_token", Text, nullable=False)
+    token_expiry = Column(DateTime, nullable=False)
+    granted_scopes = Column(Text, nullable=False)  # JSON array of scope strings
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+    @property
+    def access_token(self):
+        from encryption import decrypt_value
+        return decrypt_value(self._access_token)
+
+    @access_token.setter
+    def access_token(self, value):
+        from encryption import encrypt_value
+        self._access_token = encrypt_value(value)
+
+    @property
+    def refresh_token(self):
+        from encryption import decrypt_value
+        return decrypt_value(self._refresh_token)
+
+    @refresh_token.setter
+    def refresh_token(self, value):
+        from encryption import encrypt_value
+        self._refresh_token = encrypt_value(value)
+
+
+class ActionExecution(Base):
+    __tablename__ = "action_executions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    plugin_name = Column(String(64), nullable=False)
+    action_name = Column(String(64), nullable=False)
+    action_params = Column(Text, nullable=False)  # JSON
+    status = Column(String(32), nullable=False, default="pending_confirmation")
+    result = Column(Text, nullable=True)  # JSON
+    error_message = Column(Text, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    executed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    agent = relationship("Agent", foreign_keys=[agent_id])
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class AgentTemplate(Base):

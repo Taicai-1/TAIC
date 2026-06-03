@@ -16,6 +16,8 @@ from database import (
     AgentTemplateDocument,
     Team,
     TeamMember,
+    ActionExecution,
+    UserGoogleToken,
 )
 from auth import hash_password
 
@@ -131,3 +133,23 @@ class TeamMemberFactory(factory.Factory):
 class AgentTemplateDocumentFactory(factory.Factory):
     class Meta:
         model = AgentTemplateDocument
+
+
+class ActionExecutionFactory(factory.Factory):
+    class Meta:
+        model = ActionExecution
+
+    plugin_name = "google_docs"
+    action_name = "create_doc"
+    action_params = '{"title": "Test Doc"}'
+    status = "pending_confirmation"
+
+
+class UserGoogleTokenFactory(factory.Factory):
+    class Meta:
+        model = UserGoogleToken
+
+    _access_token = "test-access-token"
+    _refresh_token = "test-refresh-token"
+    token_expiry = factory.LazyFunction(lambda: __import__("datetime").datetime.utcnow() + __import__("datetime").timedelta(hours=1))
+    granted_scopes = '["https://www.googleapis.com/auth/documents"]'
