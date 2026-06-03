@@ -499,6 +499,8 @@ from routers.graph import router as graph_router  # noqa: E402
 from routers.recaps import router as recaps_router  # noqa: E402
 from routers.templates import router as templates_router  # noqa: E402
 from routers.google_auth import router as google_auth_router  # noqa: E402
+from routers.plugins import router as plugins_router  # noqa: E402
+from routers.action_executions import router as action_executions_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(ask_router)
@@ -517,3 +519,5 @@ app.include_router(graph_router)
 app.include_router(recaps_router)
 app.include_router(templates_router)
 app.include_router(google_auth_router)
+app.include_router(plugins_router)
+app.include_router(action_executions_router)
