@@ -36,7 +36,6 @@ export default function TeamChatPage() {
   const [editedTitle, setEditedTitle] = useState("");
   const [routingAgents, setRoutingAgents] = useState([]);
   const [showRoutingBanner, setShowRoutingBanner] = useState(false);
-  const [lastContributions, setLastContributions] = useState(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -198,6 +197,7 @@ export default function TeamChatPage() {
 
       let streamSuccess = false;
       let iaAnswer = "";
+      let streamContributions = null;
 
       try {
         const controller = new AbortController();
@@ -248,7 +248,7 @@ export default function TeamChatPage() {
             tokenBufferRef.current = '';
             iaAnswer = data.full_text || iaAnswer;
             const contribs = data.contributions || null;
-            setLastContributions(contribs);
+            streamContributions = contribs;
             setMessages(prev => prev.map((m, i) =>
               i === streamingMsgIdx.current
                 ? { ...m, content: iaAnswer, streaming: false, contributions: contribs }
@@ -317,9 +317,8 @@ export default function TeamChatPage() {
           conversation_id: selectedConv,
           role: "agent",
           content: iaAnswer,
-          contributions_json: lastContributions ? JSON.stringify(lastContributions) : null,
+          contributions_json: streamContributions ? JSON.stringify(streamContributions) : null,
         });
-        setLastContributions(null);
       } catch (e) {}
 
       await selectConversation(selectedConv);
