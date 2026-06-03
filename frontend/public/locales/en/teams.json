@@ -105,6 +105,9 @@
     "agentUnavailable": "Unavailable",
     "contributions": "Contributions",
     "contribution": "Contribution",
+    "companionsUsed": "Companions used: {{count}}",
+    "collapse": "Show less",
+    "expand": "Show more",
     "synthesizing": "Synthesizing...",
     "routingTo": "Consulting"
   },
