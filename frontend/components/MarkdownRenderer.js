@@ -2,9 +2,18 @@ import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'next-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import dynamic from 'next/dynamic';
 import { Copy, Check } from 'lucide-react';
+
+// Dynamic import to avoid ESM/CJS conflict with refractor during SSR
+const CodeHighlighter = dynamic(() => import('./CodeHighlighter'), {
+  ssr: false,
+  loading: () => (
+    <pre style={{ margin: 0, borderRadius: '8px', padding: '1rem 1.25rem', fontSize: '0.825rem', lineHeight: '1.6', background: '#282c34', color: '#abb2bf' }}>
+      <code>...</code>
+    </pre>
+  ),
+});
 
 /**
  * Shared markdown renderer for all chat messages.
@@ -69,10 +78,8 @@ const CodeBlock = ({ className, children, t }) => {
         {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         {copied ? t('chat:messages.copied') : t('chat:messages.copyButton')}
       </button>
-      <SyntaxHighlighter
-        style={oneDark}
-        language={language || 'text'}
-        PreTag="div"
+      <CodeHighlighter
+        language={language}
         customStyle={{
           margin: 0,
           borderRadius: '8px',
@@ -82,7 +89,7 @@ const CodeBlock = ({ className, children, t }) => {
         }}
       >
         {codeString}
-      </SyntaxHighlighter>
+      </CodeHighlighter>
     </div>
   );
 };
