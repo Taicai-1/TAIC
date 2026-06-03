@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup — Rendu Markdown Chat</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #f3f4f6; padding: 2rem; }
+
+  h1.page-title { font-size: 1.25rem; font-weight: 700; color: #1f2937; margin-bottom: 0.5rem; text-align: center; }
+  p.page-subtitle { font-size: 0.875rem; color: #6b7280; margin-bottom: 2rem; text-align: center; }
+
+  .chat-container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+
+  /* User bubble */
+  .msg-user { display: flex; justify-content: flex-end; }
+  .msg-user .bubble {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: white; border-radius: 16px 16px 4px 16px;
+    padding: 12px 20px; max-width: 70%; font-size: 0.9rem; line-height: 1.6;
+  }
+
+  /* Agent bubble */
+  .msg-agent { display: flex; gap: 8px; align-items: flex-end; }
+  .bot-icon {
+    width: 28px; height: 28px; border-radius: 8px; background: #ede9fe;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-bottom: 4px;
+  }
+  .bot-icon svg { width: 16px; height: 16px; color: #7c3aed; }
+  .msg-agent .bubble {
+    background: white; border: 1px solid #e5e7eb; border-radius: 16px 16px 16px 4px;
+    padding: 20px 24px; max-width: 75%; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    overflow: hidden;
+  }
+
+  /* ── Prose-like styles (simulating @tailwindcss/typography) ── */
+  .prose { font-size: 0.9rem; line-height: 1.75; color: #374151; }
+  .prose h1 { font-size: 1.5rem; font-weight: 700; color: #111827; margin: 1.25rem 0 0.75rem 0; line-height: 1.3; }
+  .prose h2 { font-size: 1.25rem; font-weight: 700; color: #111827; margin: 1.25rem 0 0.5rem 0; line-height: 1.3; padding-bottom: 0.35rem; border-bottom: 1px solid #e5e7eb; }
+  .prose h3 { font-size: 1.1rem; font-weight: 600; color: #1f2937; margin: 1rem 0 0.4rem 0; }
+  .prose h4 { font-size: 0.95rem; font-weight: 600; color: #374151; margin: 0.75rem 0 0.35rem 0; }
+  .prose p { margin-bottom: 0.75rem; }
+  .prose p:last-child { margin-bottom: 0; }
+  .prose strong { font-weight: 600; color: #111827; }
+  .prose em { font-style: italic; color: #4b5563; }
+
+  /* Lists */
+  .prose ul { list-style: disc; padding-left: 1.5rem; margin: 0.5rem 0 0.75rem 0; }
+  .prose ol { list-style: decimal; padding-left: 1.5rem; margin: 0.5rem 0 0.75rem 0; }
+  .prose li { margin-bottom: 0.25rem; }
+  .prose li > ul, .prose li > ol { margin-top: 0.25rem; margin-bottom: 0; }
+
+  /* Links */
+  .prose a { color: #4f46e5; text-decoration: underline; text-underline-offset: 2px; }
+  .prose a:hover { color: #4338ca; }
+
+  /* Blockquote */
+  .prose blockquote {
+    border-left: 3px solid #6366f1;
+    background: #f5f3ff;
+    padding: 0.75rem 1rem;
+    margin: 0.75rem 0;
+    border-radius: 0 8px 8px 0;
+    color: #4b5563;
+    font-style: italic;
+  }
+  .prose blockquote p { margin-bottom: 0; }
+
+  /* Horizontal rule */
+  .prose hr { border: none; border-top: 1px solid #e5e7eb; margin: 1.25rem 0; }
+
+  /* Inline code */
+  .prose code:not(pre code) {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    color: #dc2626;
+    font-weight: 500;
+  }
+
+  /* Code blocks */
+  .prose pre {
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 0.75rem 0;
+    overflow-x: auto;
+    border: 1px solid #334155;
+  }
+  .prose pre code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 0.825rem;
+    line-height: 1.6;
+    color: #e2e8f0;
+    background: none;
+    padding: 0;
+  }
+  /* Copy button */
+  .code-block-wrapper { position: relative; }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+    color: #94a3b8; font-size: 0.7rem; padding: 4px 8px; border-radius: 4px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.2); color: #e2e8f0; }
+  .lang-tag {
+    position: absolute; top: 8px; left: 12px;
+    color: #64748b; font-size: 0.7rem; font-family: 'Inter', sans-serif; text-transform: uppercase;
+  }
+
+  /* Tables */
+  .prose .table-wrapper { overflow-x: auto; margin: 0.75rem 0; border-radius: 8px; border: 1px solid #e5e7eb; }
+  .prose table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .prose thead { background: #f9fafb; }
+  .prose th { padding: 10px 14px; text-align: left; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb; }
+  .prose td { padding: 10px 14px; color: #4b5563; border-bottom: 1px solid #f3f4f6; }
+  .prose tbody tr:hover { background: #f9fafb; }
+  .prose tbody tr:nth-child(even) { background: #fafafa; }
+  .prose tbody tr:nth-child(even):hover { background: #f5f5f5; }
+
+  /* Divider label */
+  .section-label {
+    display: inline-block; background: #dbeafe; color: #1d4ed8; font-size: 0.7rem;
+    font-weight: 600; padding: 3px 10px; border-radius: 999px; margin: 1.5rem 0 0.75rem 0;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+
+  /* Feedback bar */
+  .feedback-bar {
+    display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #f3f4f6;
+  }
+  .feedback-btn {
+    display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+    font-size: 0.8rem; color: #6b7280; cursor: pointer; transition: all 0.2s;
+  }
+  .feedback-btn:hover { background: #f0fdf4; border-color: #86efac; color: #16a34a; }
+  .feedback-btn.sources { background: #f5f3ff; border-color: #c4b5fd; color: #7c3aed; }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Mockup — Rendu Markdown dans le Chat</h1>
+<p class="page-subtitle">Voici à quoi ressembleraient les réponses IA avec prose + syntax highlighting</p>
+
+<div class="chat-container">
+
+  <!-- User message -->
+  <div class="msg-user">
+    <div class="bubble">Analyse cette proposition de contrat et donne-moi une synthèse structurée avec les risques financiers.</div>
+  </div>
+
+  <!-- Agent response - Full markdown demo -->
+  <div class="msg-agent">
+    <div class="bot-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="m2 14 6-6 6 6 6-6"/></svg>
+    </div>
+    <div class="bubble">
+      <div class="prose">
+        <h2>Analyse Globale : Opportunité à Haut Risque</h2>
+        <p>Cette proposition représente une <strong>opportunité majeure</strong> pour votre entreprise, mais elle comporte des risques financiers et opérationnels qui nécessitent une évaluation rigoureuse.</p>
+
+        <h3>1. Évaluation des Opportunités</h3>
+        <ul>
+          <li><strong>Croissance explosive du CA</strong> — doublement du chiffre d'affaires, accès à un écosystème premium</li>
+          <li><strong>Positionnement stratégique</strong> — accès aux secteurs réglementés (finance, santé, énergie)</li>
+          <li><strong>Notoriété</strong> — référence CAC40 = argument commercial puissant</li>
+        </ul>
+
+        <h3>2. Risques Majeurs</h3>
+        <ol>
+          <li><strong>Trésorerie</strong> : délai de paiement à 90 jours → cash-flow négatif immédiat</li>
+          <li><strong>Dépendance client</strong> : un seul client &gt;50% du CA → concentration de risque</li>
+          <li><strong>Exigences techniques</strong> : serveurs sécurisés en 60 jours + support 24/7</li>
+        </ol>
+
+        <blockquote>
+          <p>Si l'entreprise n'a pas les fonds pour couvrir ~3,5M€ de trésorerie, le projet est insoutenable à court terme.</p>
+        </blockquote>
+
+        <h3>3. Analyse Financière</h3>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>Indicateur</th><th>Actuel</th><th>Après Contrat</th><th>Impact</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Chiffre d'affaires</td><td>X</td><td>~2X</td><td style="color:#16a34a;font-weight:600;">+100%</td></tr>
+              <tr><td>Marge brute</td><td>40%</td><td>35%</td><td style="color:#dc2626;font-weight:600;">-5%</td></tr>
+              <tr><td>Dépendance client</td><td>Faible</td><td>&gt;50%</td><td style="color:#dc2626;font-weight:600;">Risque élevé</td></tr>
+              <tr><td>Délai de paiement</td><td>30 jours</td><td>90 jours</td><td style="color:#f59e0b;font-weight:600;">Cash-flow négatif</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>4. Recommandation</h3>
+        <p>Voici un exemple de configuration pour automatiser l'audit :</p>
+
+        <div class="code-block-wrapper">
+          <span class="lang-tag">python</span>
+          <button class="copy-btn">Copier</button>
+          <pre><code><span style="color:#c792ea;">def</span> <span style="color:#82aaff;">audit_financier</span>(<span style="color:#f78c6c;">contrat</span>):
+    <span style="color:#c3e88d;">"""Évalue la viabilité financière d'un contrat."""</span>
+    marge = contrat.revenu * <span style="color:#f78c6c;">0.35</span>
+    cout_mensuel = <span style="color:#f78c6c;">60_000</span>  <span style="color:#546e7a;"># infra + support</span>
+
+    <span style="color:#c792ea;">if</span> contrat.tresorerie < <span style="color:#f78c6c;">3_500_000</span>:
+        <span style="color:#c792ea;">return</span> {<span style="color:#c3e88d;">"decision"</span>: <span style="color:#c3e88d;">"REFUSER"</span>, <span style="color:#c3e88d;">"raison"</span>: <span style="color:#c3e88d;">"Trésorerie insuffisante"</span>}
+
+    roi = (marge - cout_mensuel) * <span style="color:#f78c6c;">12</span>
+    <span style="color:#c792ea;">return</span> {<span style="color:#c3e88d;">"decision"</span>: <span style="color:#c3e88d;">"ACCEPTER"</span>, <span style="color:#c3e88d;">"roi_annuel"</span>: roi}</code></pre>
+        </div>
+
+        <hr>
+
+        <p><strong>Décision finale :</strong> accepter <em>sous conditions</em> — acompte de 30%, délai de paiement réduit à 60 jours, et ligne de crédit sécurisée de 4M€.</p>
+      </div>
+
+      <div class="feedback-bar">
+        <button class="feedback-btn sources">📚 Sources utilisées : 3</button>
+        <button class="feedback-btn">👍 Utile</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Second user message -->
+  <div class="msg-user">
+    <div class="bubble">Quels sont les coûts détaillés à prévoir ?</div>
+  </div>
+
+  <!-- Second agent response - Table-heavy -->
+  <div class="msg-agent">
+    <div class="bot-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="m2 14 6-6 6 6 6-6"/></svg>
+    </div>
+    <div class="bubble">
+      <div class="prose">
+        <h3>Coûts Estimés sur 12 mois</h3>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>Poste</th><th>Investissement Initial</th><th>Coût Mensuel</th><th>Total (12 mois)</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Serveurs dédiés</td><td>150k–300k€</td><td>20k–40k€</td><td><strong>400k–720k€</strong></td></tr>
+              <tr><td>Support 24/7</td><td>100k–200k€</td><td>15k–30k€</td><td><strong>300k–560k€</strong></td></tr>
+              <tr><td>Sécurité & Conformité</td><td>50k–100k€</td><td>5k–10k€</td><td><strong>110k–220k€</strong></td></tr>
+              <tr><td>Frais juridiques</td><td>30k–50k€</td><td>—</td><td><strong>50k–100k€</strong></td></tr>
+              <tr><td>Assurance cyber</td><td>—</td><td>5k–10k€</td><td><strong>60k–120k€</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <blockquote>
+          <p><strong>Total estimé :</strong> entre 920k€ et 1,7M€ sur la première année, avec un besoin en trésorerie immédiate de ~3,5M€ pour couvrir l'investissement + le décalage de paiement.</p>
+        </blockquote>
+
+        <p>Le retour sur investissement devient positif si le contrat dure <strong>≥ 12 mois</strong> avec un revenu net mensuel de ~523k€ après coûts.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="text-align:center; margin-top:2rem; padding:1rem; background:#dbeafe; border-radius:12px; max-width:800px; margin-left:auto; margin-right:auto;">
+  <p style="font-size:0.85rem; color:#1e40af; font-weight:500;">Ce mockup montre le rendu avec <code style="background:rgba(0,0,0,0.1);padding:2px 6px;border-radius:4px;">@tailwindcss/typography</code> (prose) + syntax highlighting.<br>Tous les éléments : titres, listes, tables, blockquotes, code blocks, inline code, liens, hr.</p>
+</div>
+
+</body>
+</html>
