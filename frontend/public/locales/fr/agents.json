@@ -14,6 +14,10 @@
     "visuel": {
       "name": "Visuel",
       "description": "Génération d'images par IA"
+    },
+    "actionnable": {
+      "name": "Actionnable",
+      "description": "Exécuter des tâches dans Google Workspace"
     }
   },
   "buttons": {
@@ -88,6 +92,13 @@
     },
     "photo": {
       "preview": "Aperçu"
+    },
+    "plugins": {
+      "label": "Plugins activés",
+      "description": "Sélectionnez les intégrations Google Workspace que ce companion peut utiliser",
+      "connectGoogle": "Connecter un compte Google",
+      "googleConnected": "Compte Google connecté",
+      "scopesMissing": "Permissions supplémentaires requises"
     },
     "weeklyRecap": {
       "label": "Recap Hebdomadaire",

@@ -27,6 +27,7 @@
     "fileCreated": "fichier créé",
     "openButton": "Ouvrir",
     "copyButton": "Copier",
+    "copied": "Copié !",
     "usefulButton": "Utile",
     "thinking": "{{agentName}} réfléchit",
     "thinkingImage": "{{agentName}} génère une image",
@@ -78,5 +79,16 @@
   },
   "voiceRecognition": {
     "notSupportedAlert": "Votre navigateur ne supporte pas la reconnaissance vocale"
+  },
+  "actions": {
+    "confirm": "Exécuter",
+    "cancel": "Annuler",
+    "pendingConfirmation": "En attente de confirmation",
+    "executing": "Exécution en cours...",
+    "completed": "Terminé",
+    "failed": "Échec",
+    "cancelled": "Annulé",
+    "connectGooglePrompt": "Connectez votre compte Google pour activer les actions",
+    "actionProposed": "Action proposée"
   }
 }
