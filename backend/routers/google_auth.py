@@ -5,6 +5,8 @@ import logging
 import os
 from datetime import datetime, timedelta
 
+os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
