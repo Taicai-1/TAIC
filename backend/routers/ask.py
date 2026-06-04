@@ -2,25 +2,19 @@
 
 import json
 import logging
-import os
 import time
-import traceback
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, User, Agent, Document, DocumentChunk, Conversation, Message, AgentAction, ActionExecution, Team, TeamMember
+from database import get_db, Agent, Message, Team, TeamMember
 from helpers.agent_helpers import resolve_model_id, _user_can_access_agent
-from plugins import plugin_manager
 from helpers.conversation_helpers import verify_conversation_owner
 from helpers.rate_limiting import _check_api_rate_limit, _API_ASK_LIMIT
-from helpers.tenant import _get_caller_company_id
-from rag_engine import get_answer, get_answer_with_files, get_answer_stream
-from redis_client import get_cached_user
-from utils import logger as app_logger, event_tracker
+from rag_engine import get_answer, get_answer_stream
+from utils import event_tracker
 from utils_ai import normalize_model_output, extract_json_object_from_text
 from validation import QuestionRequestValidated
 from agent_executor import AgentExecutor
@@ -65,8 +59,6 @@ async def ask_question(
         model_id = None
         # Si agent_id fourni, comportement agent classique
         if request.agent_id:
-            from database import Agent
-
             agent = _user_can_access_agent(int(user_id), request.agent_id, db)
             model_id = agent.finetuned_model_id or resolve_model_id(agent)
             logger.info(
