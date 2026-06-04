@@ -19,6 +19,7 @@ class ToolDefinition:
     parameters_schema: dict
     plugin_name: str
     side_effect: bool  # True = write (needs confirmation), False = read-only
+    display_name: str = ""  # Human-readable name for UI display
 
     def to_prompt_str(self) -> str:
         """Format this tool for inclusion in the ReAct system prompt."""
@@ -55,6 +56,7 @@ def build_tools_from_plugins(
                     parameters_schema=action_def.parameters_schema,
                     plugin_name=pname,
                     side_effect=action_def.side_effect,
+                    display_name=action_def.display_name,
                 )
             )
     return tools
