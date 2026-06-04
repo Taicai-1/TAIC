@@ -5,17 +5,20 @@ import {
   ArrowLeft, Bot, MessageCircle, Check, Camera, Trash2, Plus,
   Upload, Loader2, FileText, Database, Link, Zap, Users, TrendingUp,
   LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive, Globe,
-  Pencil, Sparkles, AlertCircle
+  Pencil, Sparkles, AlertCircle, ImageIcon
 } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import Layout from '../components/Layout';
 import { useAuth } from '../hooks/useAuth';
 import api from '../lib/api';
+import PluginSelector from '../components/PluginSelector';
 
 const AGENT_TYPES_CONFIG = {
   conversationnel: { key: 'conversationnel', icon: Users, color: 'bg-blue-500', gradient: 'from-blue-500 to-blue-600' },
-  recherche_live: { key: 'recherche_live', icon: TrendingUp, color: 'bg-purple-500', gradient: 'from-purple-500 to-violet-600' }
+  recherche_live: { key: 'recherche_live', icon: TrendingUp, color: 'bg-purple-500', gradient: 'from-purple-500 to-violet-600' },
+  visuel: { key: 'visuel', icon: ImageIcon, color: 'bg-pink-500', gradient: 'from-pink-500 to-pink-600' },
+  actionnable: { key: 'actionnable', icon: Zap, color: 'bg-amber-500', gradient: 'from-amber-500 to-amber-600' }
 };
 
 // Collapsible section wrapper
@@ -57,7 +60,7 @@ export default function CompanionSettings() {
   // Form state
   const [form, setForm] = useState({
     name: "", contexte: "", biographie: "", profile_photo: null,
-    type: 'conversationnel',
+    type: 'conversationnel', enabled_plugins: [],
     email_tags: [], neo4j_enabled: false, neo4j_person_name: "",
     neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "",
     weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9
@@ -139,7 +142,9 @@ export default function CompanionSettings() {
 
   const AGENT_TYPES = useMemo(() => ({
     conversationnel: { ...AGENT_TYPES_CONFIG.conversationnel, name: t('agents:types.conversationnel.name'), description: t('agents:types.conversationnel.description') },
-    recherche_live: { ...AGENT_TYPES_CONFIG.recherche_live, name: t('agents:types.recherche_live.name'), description: t('agents:types.recherche_live.description') }
+    recherche_live: { ...AGENT_TYPES_CONFIG.recherche_live, name: t('agents:types.recherche_live.name'), description: t('agents:types.recherche_live.description') },
+    visuel: { ...AGENT_TYPES_CONFIG.visuel, name: t('agents:types.visuel.name'), description: t('agents:types.visuel.description') },
+    actionnable: { ...AGENT_TYPES_CONFIG.actionnable, name: t('agents:types.actionnable.name'), description: t('agents:types.actionnable.description') }
   }), [t]);
 
   // --- Data loading ---
@@ -164,10 +169,16 @@ export default function CompanionSettings() {
         catch { parsedEmailTags = []; }
       }
 
+      let parsedPlugins = [];
+      if (agent.enabled_plugins) {
+        try { parsedPlugins = typeof agent.enabled_plugins === 'string' ? JSON.parse(agent.enabled_plugins) : agent.enabled_plugins; }
+        catch { parsedPlugins = []; }
+      }
+
       setForm({
         name: agent.name || "", contexte: agent.contexte || "", biographie: agent.biographie || "",
         profile_photo: null,
-        type: agent.type || 'conversationnel',
+        type: agent.type || 'conversationnel', enabled_plugins: parsedPlugins,
         email_tags: parsedEmailTags, neo4j_enabled: agent.neo4j_enabled || false,
         neo4j_person_name: agent.neo4j_person_name || "", neo4j_depth: agent.neo4j_depth || 1,
         weekly_recap_enabled: agent.weekly_recap_enabled || false,
@@ -480,6 +491,9 @@ export default function CompanionSettings() {
       formData.append("biographie", f.biographie);
       if (f.profile_photo) formData.append("profile_photo", f.profile_photo);
       formData.append("type", f.type || 'conversationnel');
+      if (f.type === 'actionnable' && f.enabled_plugins?.length > 0) {
+        formData.append("enabled_plugins", JSON.stringify(f.enabled_plugins));
+      }
       formData.append("email_tags", f.email_tags.length > 0 ? JSON.stringify(f.email_tags) : "[]");
       formData.append("neo4j_enabled", f.neo4j_enabled ? "true" : "false");
       if (f.neo4j_person_name) formData.append("neo4j_person_name", f.neo4j_person_name);
@@ -1001,6 +1015,16 @@ export default function CompanionSettings() {
             </div>
 
           </div>
+
+          {/* Plugin selector for actionnable agents */}
+          {form.type === 'actionnable' && (
+            <div className="mt-4">
+              <PluginSelector
+                enabledPlugins={form.enabled_plugins}
+                onChange={(plugins) => setForm(f => ({ ...f, enabled_plugins: plugins }))}
+              />
+            </div>
+          )}
 
           {/* Email Tags */}
           <div className="mt-4">

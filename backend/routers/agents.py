@@ -312,6 +312,7 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
             "profile_photo": agent.profile_photo,
             "llm_provider": agent.llm_provider,
             "neo4j_enabled": agent.neo4j_enabled,
+            "enabled_plugins": agent.enabled_plugins,
             "created_at": agent.created_at.isoformat() if agent.created_at else None,
             "shared": not is_owner,
             "can_edit": can_edit,

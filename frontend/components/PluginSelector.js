@@ -18,6 +18,15 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
   const [googleStatus, setGoogleStatus] = useState({ connected: false, granted_scopes: [] });
   const [loading, setLoading] = useState(true);
 
+  const refreshGoogleStatus = async () => {
+    try {
+      const res = await api.get('/auth/google/status');
+      setGoogleStatus(res.data);
+    } catch (e) {
+      console.error('Failed to refresh Google status:', e);
+    }
+  };
+
   useEffect(() => {
     async function load() {
       try {
@@ -34,6 +43,13 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
       }
     }
     load();
+  }, []);
+
+  // Re-check Google status when window regains focus (after OAuth popup)
+  useEffect(() => {
+    const onFocus = () => refreshGoogleStatus();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, []);
 
   const togglePlugin = (pluginName) => {

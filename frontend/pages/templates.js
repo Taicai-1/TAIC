@@ -538,6 +538,10 @@ export default function TemplatesPage() {
                     {t("agents:types.visuel.name")} -{" "}
                     {t("agents:types.visuel.description")}
                   </option>
+                  <option value="actionnable">
+                    {t("agents:types.actionnable.name")} -{" "}
+                    {t("agents:types.actionnable.description")}
+                  </option>
                 </select>
               </div>
 
