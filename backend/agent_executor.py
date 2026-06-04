@@ -497,3 +497,160 @@ class AgentExecutor:
             "loop_state": None,
             "sources": sources,
         }
+
+    def run_stream(
+        self,
+        question: str,
+        agent,
+        history: list[dict],
+        db,
+        user_id: int,
+        credentials,
+        selected_doc_ids: list[int] | None = None,
+        use_rag: bool = True,
+        use_graph: bool = True,
+    ):
+        """Generator yielding SSE event strings for the ReAct loop.
+
+        Yields: str (formatted SSE events via sse_event())
+        """
+        from agent_tools import build_tools_from_plugins
+        from plugins import plugin_manager
+        from streaming_response import sse_event
+        from database import ActionExecution
+        from helpers.tenant import _get_caller_company_id
+
+        # Setup (same as run)
+        enabled_plugins = []
+        if agent.enabled_plugins:
+            try:
+                enabled_plugins = json.loads(agent.enabled_plugins)
+            except Exception:
+                enabled_plugins = []
+        tools = build_tools_from_plugins(enabled_plugins, plugin_manager)
+        tool_names = [t.name for t in tools]
+        tool_map = {t.name: t for t in tools}
+
+        rag_context, sources = get_rag_context(
+            agent, user_id, db, question,
+            selected_doc_ids=selected_doc_ids,
+            use_rag=use_rag, use_graph=use_graph,
+            company_id=agent.company_id,
+        )
+
+        system_prompt = build_react_prompt(
+            agent_name=agent.name,
+            agent_contexte=getattr(agent, "contexte", "") or "",
+            agent_biographie=getattr(agent, "biographie", "") or "",
+            tools=tools,
+            rag_context=rag_context,
+        )
+
+        model_id = agent.finetuned_model_id or resolve_model_id(agent)
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            for msg in history[-10:]:
+                role = msg.get("role", "user")
+                if role == "agent":
+                    role = "assistant"
+                elif role == "system":
+                    continue
+                messages.append({"role": role, "content": msg.get("content", "")})
+        messages.append({"role": "user", "content": question})
+
+        steps = []
+        for i in range(self.MAX_ITERATIONS):
+            llm_response = get_chat_response(messages, model_id=model_id)
+            step = parse_llm_output(llm_response, tool_names)
+
+            if isinstance(step, FinishStep):
+                steps.append({"type": "finish", "answer": step.answer})
+                for char in step.answer:
+                    yield sse_event("token", {"t": char})
+                yield sse_event("done", {
+                    "full_text": step.answer, "steps": steps, "sources": sources,
+                    "graph_data": None, "action_proposal": None,
+                })
+                return
+
+            if isinstance(step, FallbackStep):
+                steps.append({"type": "fallback", "text": step.text})
+                for char in step.text:
+                    yield sse_event("token", {"t": char})
+                yield sse_event("done", {
+                    "full_text": step.text, "steps": steps, "sources": sources,
+                    "graph_data": None, "action_proposal": None,
+                })
+                return
+
+            if isinstance(step, ActionStep):
+                tool_def = tool_map.get(step.tool_name)
+                steps.append({
+                    "type": "action", "thought": step.thought,
+                    "tool": step.tool_name, "args": step.tool_args,
+                    "side_effect": tool_def.side_effect if tool_def else True,
+                })
+
+                yield sse_event("thought", {"content": step.thought})
+                yield sse_event("action", {
+                    "tool": step.tool_name, "args": step.tool_args,
+                    "type": "write" if (tool_def and tool_def.side_effect) else "read",
+                })
+
+                if tool_def and not tool_def.side_effect:
+                    result = _execute_read_tool(tool_def.plugin_name, step.tool_name, step.tool_args, credentials)
+                    obs = _observation_from_result(result)
+                    steps.append({"type": "observation", "tool": step.tool_name, "result": obs})
+                    yield sse_event("observation", {"tool": step.tool_name, "result": obs})
+                    messages.append({"role": "assistant", "content": llm_response})
+                    messages.append({"role": "user", "content": f"Observation: {obs}"})
+                    continue
+                else:
+                    # Write tool — suspend
+                    company_id = getattr(agent, "company_id", None) or _get_caller_company_id(str(user_id), db)
+                    plugin_name = tool_def.plugin_name if tool_def else "unknown"
+
+                    ae = ActionExecution(
+                        agent_id=agent.id, user_id=user_id, company_id=company_id,
+                        plugin_name=plugin_name, action_name=step.tool_name,
+                        action_params=json.dumps(step.tool_args, ensure_ascii=False),
+                        status="pending_confirmation",
+                    )
+                    db.add(ae)
+                    messages.append({"role": "assistant", "content": llm_response})
+                    state = AgentLoopState(
+                        messages=messages, iteration=i + 1, steps=steps,
+                        agent_id=agent.id, user_id=user_id, question=question,
+                        model_id=model_id, sources=sources,
+                    )
+                    ae.loop_state = state.to_json()
+                    db.commit()
+                    db.refresh(ae)
+
+                    display_parts = [f"{k}: {v}" for k, v in list(step.tool_args.items())[:3]]
+                    display_summary = f"{tool_def.display_name if tool_def else step.tool_name} — {', '.join(display_parts)}"
+
+                    proposal = {
+                        "execution_id": ae.id, "plugin": plugin_name,
+                        "action": step.tool_name, "params": step.tool_args,
+                        "display_summary": display_summary, "thought": step.thought,
+                    }
+                    yield sse_event("action_proposal", proposal)
+                    yield sse_event("done", {
+                        "full_text": step.thought or "", "steps": steps, "sources": sources,
+                        "graph_data": None, "action_proposal": proposal,
+                    })
+                    return
+
+        # Max iterations
+        messages.append({"role": "user", "content": "Tu as atteint le nombre maximum d'etapes. Donne ta reponse finale maintenant."})
+        forced = get_chat_response(messages, model_id=model_id)
+        forced_step = parse_llm_output(forced, tool_names)
+        answer = forced_step.answer if isinstance(forced_step, FinishStep) else str(forced)
+        steps.append({"type": "forced_finish", "answer": answer})
+        for char in answer:
+            yield sse_event("token", {"t": char})
+        yield sse_event("done", {
+            "full_text": answer, "steps": steps, "sources": sources,
+            "graph_data": None, "action_proposal": None,
+        })
