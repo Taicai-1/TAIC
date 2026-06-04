@@ -23,46 +23,11 @@ from redis_client import get_cached_user
 from utils import logger as app_logger, event_tracker
 from utils_ai import normalize_model_output, extract_json_object_from_text
 from validation import QuestionRequestValidated
+from agent_executor import AgentExecutor
+from google_credentials import get_google_credentials
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def detect_action_with_gemini(user_message: str, rag_response: str, function_definitions: list) -> dict | None:
-    """Stage 2: Use Gemini to detect if an action should be proposed.
-
-    Returns a dict with 'function_call' key if action detected, None otherwise.
-    """
-    if not function_definitions:
-        return None
-
-    from gemini_client import generate_text
-
-    funcs_desc = json.dumps(function_definitions, indent=2)
-    prompt = (
-        "You are an action detection system. Analyze the user's message and determine "
-        "if any of the available actions should be executed.\n\n"
-        f"Available actions:\n{funcs_desc}\n\n"
-        f"User message: {user_message}\n\n"
-        f"Assistant's RAG response: {rag_response}\n\n"
-        "If an action should be executed, respond ONLY with a JSON object:\n"
-        '{"function_call": {"name": "<action_name>", "arguments": {<arguments>}}}\n\n'
-        "If NO action is needed, respond ONLY with: null\n"
-        "Respond with nothing else."
-    )
-
-    try:
-        result = generate_text(prompt, model_name="gemini-2.0-flash", temperature=0.0)
-        result = result.strip()
-        if result == "null" or not result:
-            return None
-        parsed = json.loads(result)
-        if isinstance(parsed, dict) and "function_call" in parsed:
-            return parsed
-        return None
-    except Exception:
-        logger.exception("Gemini action detection failed")
-        return None
 
 
 @router.post("/ask")
@@ -107,6 +72,41 @@ async def ask_question(
             logger.info(
                 f"[LLM ROUTING] Agent '{agent.name}' type={getattr(agent, 'type', 'unknown')} -> model_id={model_id}"
             )
+
+            # Actionnable agents use the ReAct loop
+            if getattr(agent, "type", "") == "actionnable":
+                credentials = get_google_credentials(int(user_id), db)
+                executor = AgentExecutor()
+                result = executor.run(
+                    question=request.question,
+                    agent=agent,
+                    history=history,
+                    db=db,
+                    user_id=int(user_id),
+                    credentials=credentials,
+                    selected_doc_ids=request.selected_documents,
+                    use_rag=request.use_rag,
+                    use_graph=request.use_graph,
+                )
+                response_time = time.time() - start_time
+                logger.info(f"Question answered for user {user_id} in {response_time:.2f}s")
+                event_tracker.track_question_asked(int(user_id), request.question, response_time)
+
+                answer_text = result["answer"] or ""
+                if not answer_text and result.get("action_proposal"):
+                    thought = result["action_proposal"].get("thought", "")
+                    if thought:
+                        answer_text = thought
+
+                return {
+                    "answer": answer_text,
+                    "sources": result.get("sources", []),
+                    "graph_data": None,
+                    "action_proposal": result.get("action_proposal"),
+                    "steps": result.get("steps", []),
+                }
+
+            # Non-actionnable agents use the standard RAG pipeline
             question_finale = request.question
             prompt = f"Sachant le contexte et la discussion en cours, réponds à cette question : {question_finale}"
             result = get_answer(
@@ -175,60 +175,10 @@ async def ask_question(
         if answer is None:
             raise HTTPException(status_code=400, detail="Aucun agent ou équipe valide fourni.")
 
-        # Stage 2: Action detection for actionnable agents
-        action_proposal = None
-        if agent and getattr(agent, "type", "") == "actionnable":
-            enabled = []
-            if agent.enabled_plugins:
-                try:
-                    enabled = json.loads(agent.enabled_plugins)
-                except Exception:
-                    enabled = []
-
-            if enabled:
-                func_defs = plugin_manager.get_function_definitions(enabled)
-                detection = detect_action_with_gemini(request.question, answer, func_defs)
-
-                if detection and "function_call" in detection:
-                    fc = detection["function_call"]
-                    action_name = fc.get("name", "")
-                    action_args = fc.get("arguments", {})
-
-                    # Find which plugin owns this action
-                    actions_map = plugin_manager.get_actions_for_plugins(enabled)
-                    action_info = actions_map.get(action_name)
-                    plugin_name = action_info["plugin"] if action_info else "unknown"
-
-                    # Create ActionExecution record
-                    company_id = agent.company_id or _get_caller_company_id(user_id, db)
-                    ae = ActionExecution(
-                        agent_id=agent.id,
-                        user_id=int(user_id),
-                        company_id=company_id,
-                        plugin_name=plugin_name,
-                        action_name=action_name,
-                        action_params=json.dumps(action_args),
-                        status="pending_confirmation",
-                    )
-                    db.add(ae)
-                    db.commit()
-                    db.refresh(ae)
-
-                    # Build display summary
-                    display_summary = f"{action_name}({', '.join(f'{k}={v!r}' for k, v in list(action_args.items())[:3])})"
-
-                    action_proposal = {
-                        "execution_id": ae.id,
-                        "plugin": plugin_name,
-                        "action": action_name,
-                        "params": action_args,
-                        "display_summary": display_summary,
-                    }
-
         response_time = time.time() - start_time
         logger.info(f"Question answered for user {user_id} in {response_time:.2f}s")
         event_tracker.track_question_asked(int(user_id), request.question, response_time)
-        return {"answer": answer, "sources": sources, "graph_data": graph_data, "action_proposal": action_proposal}
+        return {"answer": answer, "sources": sources, "graph_data": graph_data, "action_proposal": None}
     except Exception as e:
         logger.error(f"Error answering question for user {user_id}: {e}")
         return {"answer": "Désolé, une erreur s'est produite lors du traitement de votre question. Veuillez réessayer."}
@@ -267,6 +217,25 @@ async def ask_question_stream(
             if request.agent_id:
                 agent = _user_can_access_agent(int(user_id), request.agent_id, db)
                 model_id = agent.finetuned_model_id or resolve_model_id(agent)
+
+                # Actionnable agents use the ReAct streaming loop
+                if getattr(agent, "type", "") == "actionnable":
+                    credentials = get_google_credentials(int(user_id), db)
+                    executor = AgentExecutor()
+                    yield from executor.run_stream(
+                        question=request.question,
+                        agent=agent,
+                        history=history,
+                        db=db,
+                        user_id=int(user_id),
+                        credentials=credentials,
+                        selected_doc_ids=request.selected_documents,
+                        use_rag=request.use_rag,
+                        use_graph=request.use_graph,
+                    )
+                    return
+
+                # Non-actionnable: standard streaming
                 question_finale = request.question
                 prompt = f"Sachant le contexte et la discussion en cours, réponds à cette question : {question_finale}"
                 yield from get_answer_stream(
