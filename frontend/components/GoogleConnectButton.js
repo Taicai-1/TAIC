@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'next-i18next';
+import toast from 'react-hot-toast';
 import { ExternalLink, Check } from 'lucide-react';
 import api from '../lib/api';
 
@@ -31,6 +32,12 @@ export default function GoogleConnectButton({ requiredScopes = [] }) {
       }
     } catch (e) {
       if (popup) popup.close();
+      const detail = e.response?.data?.detail || '';
+      if (detail.includes('not configured')) {
+        toast.error(t('agents:form.plugins.googleNotConfigured', 'Google OAuth is not configured on the server.'));
+      } else {
+        toast.error(t('agents:form.plugins.googleAuthError', 'Failed to connect Google account.'));
+      }
       console.error('Failed to start Google auth:', e);
     }
   };
