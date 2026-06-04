@@ -443,7 +443,8 @@ const handleDeleteConversation = async (convId) => {
       const slashSources = resAsk.data.sources || [];
       const slashGraphData = resAsk.data.graph_data || null;
       const slashActionProposal = resAsk.data.action_proposal || null;
-      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources, graph_data: slashGraphData, action_proposal: slashActionProposal };
+      const slashSteps = resAsk.data.steps || [];
+      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources, graph_data: slashGraphData, action_proposal: slashActionProposal, steps: slashSteps };
       setMessages(prev => [...prev, assistantMsg]);
       if (slashSources.length > 0) {
         setSelectedSources(slashSources);
@@ -1056,6 +1057,16 @@ const handleDeleteConversation = async (convId) => {
                             <ActionProposal
                               proposal={msg.action_proposal}
                               onResult={(result) => {}}
+                              onContinuation={(continuation) => {
+                                if (continuation.answer) {
+                                  setMessages(prev => [...prev, {
+                                    role: 'agent',
+                                    content: continuation.answer,
+                                    sources: [],
+                                    action_proposal: continuation.action_proposal || undefined,
+                                  }]);
+                                }
+                              }}
                             />
                           )}
                         </>
