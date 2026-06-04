@@ -14,9 +14,9 @@ class GoogleSlidesPlugin(BasePlugin):
     def get_actions(self):
         return {
             "create_presentation": ActionDefinition(name="create_presentation", description="Create a new Google Slides presentation with optional slides",
-                                                   parameters_schema=schemas.CREATE_PRESENTATION, display_name="Create Presentation", icon="plus-square"),
+                                                   parameters_schema=schemas.CREATE_PRESENTATION, display_name="Create Presentation", icon="plus-square", side_effect=True),
             "add_slide": ActionDefinition(name="add_slide", description="Add a new slide to an existing presentation",
-                                        parameters_schema=schemas.ADD_SLIDE, display_name="Add Slide", icon="layers"),
+                                        parameters_schema=schemas.ADD_SLIDE, display_name="Add Slide", icon="layers", side_effect=True),
         }
     def execute(self, action_name, args, credentials):
         action_map = {"create_presentation": actions.create_presentation, "add_slide": actions.add_slide}

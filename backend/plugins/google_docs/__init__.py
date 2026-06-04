@@ -22,6 +22,7 @@ class GoogleDocsPlugin(BasePlugin):
                 parameters_schema=schemas.CREATE_DOC,
                 display_name="Create Document",
                 icon="file-plus",
+                side_effect=True,
             ),
             "update_doc": ActionDefinition(
                 name="update_doc",
@@ -29,6 +30,7 @@ class GoogleDocsPlugin(BasePlugin):
                 parameters_schema=schemas.UPDATE_DOC,
                 display_name="Update Document",
                 icon="file-edit",
+                side_effect=True,
             ),
             "share_doc": ActionDefinition(
                 name="share_doc",
@@ -36,6 +38,7 @@ class GoogleDocsPlugin(BasePlugin):
                 parameters_schema=schemas.SHARE_DOC,
                 display_name="Share Document",
                 icon="share",
+                side_effect=True,
             ),
         }
 

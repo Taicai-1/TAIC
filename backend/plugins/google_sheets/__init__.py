@@ -14,11 +14,11 @@ class GoogleSheetsPlugin(BasePlugin):
     def get_actions(self):
         return {
             "create_sheet": ActionDefinition(name="create_sheet", description="Create a new spreadsheet with optional sheets, headers and data",
-                                            parameters_schema=schemas.CREATE_SHEET, display_name="Create Spreadsheet", icon="table"),
+                                            parameters_schema=schemas.CREATE_SHEET, display_name="Create Spreadsheet", icon="table", side_effect=True),
             "update_sheet": ActionDefinition(name="update_sheet", description="Update cell values in an existing spreadsheet",
-                                           parameters_schema=schemas.UPDATE_SHEET, display_name="Update Spreadsheet", icon="edit"),
+                                           parameters_schema=schemas.UPDATE_SHEET, display_name="Update Spreadsheet", icon="edit", side_effect=True),
             "read_sheet": ActionDefinition(name="read_sheet", description="Read cell values from a spreadsheet",
-                                          parameters_schema=schemas.READ_SHEET, display_name="Read Spreadsheet", icon="eye"),
+                                          parameters_schema=schemas.READ_SHEET, display_name="Read Spreadsheet", icon="eye", side_effect=False),
         }
     def execute(self, action_name, args, credentials):
         action_map = {"create_sheet": actions.create_sheet, "update_sheet": actions.update_sheet, "read_sheet": actions.read_sheet}

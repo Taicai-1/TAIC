@@ -11,11 +11,11 @@ class GoogleCalendarPlugin(BasePlugin):
     def get_actions(self):
         return {
             "create_event": ActionDefinition(name="create_event", description="Create a new calendar event with title, time and optional attendees",
-                                            parameters_schema=schemas.CREATE_EVENT, display_name="Create Event", icon="calendar-plus"),
+                                            parameters_schema=schemas.CREATE_EVENT, display_name="Create Event", icon="calendar-plus", side_effect=True),
             "list_events": ActionDefinition(name="list_events", description="List calendar events in a time range",
-                                           parameters_schema=schemas.LIST_EVENTS, display_name="List Events", icon="calendar"),
+                                           parameters_schema=schemas.LIST_EVENTS, display_name="List Events", icon="calendar", side_effect=False),
             "update_event": ActionDefinition(name="update_event", description="Update an existing calendar event",
-                                           parameters_schema=schemas.UPDATE_EVENT, display_name="Update Event", icon="calendar-edit"),
+                                           parameters_schema=schemas.UPDATE_EVENT, display_name="Update Event", icon="calendar-edit", side_effect=True),
         }
     def execute(self, action_name, args, credentials):
         action_map = {"create_event": actions.create_event, "list_events": actions.list_events, "update_event": actions.update_event}
