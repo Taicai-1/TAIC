@@ -1,4 +1,4 @@
-import { MessageCircle, Settings, Trash2, Share2, Users, TrendingUp, Image as ImageIcon } from 'lucide-react';
+import { MessageCircle, Settings, Trash2, Share2, Users, TrendingUp, Image as ImageIcon, Zap } from 'lucide-react';
 import { useTranslation } from 'next-i18next';
 import { getApiUrl } from '../lib/api';
 
@@ -6,6 +6,7 @@ const TYPE_META = {
   conversationnel: { labelKey: 'types.conversationnel.name', Icon: Users,      color: 'text-primary-600',   bg: 'bg-primary-50',   stripe: 'bg-primary-600'  },
   recherche_live:  { labelKey: 'types.recherche_live.name',  Icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50', stripe: 'bg-violet-600' },
   visuel:          { labelKey: 'types.visuel.name',          Icon: ImageIcon,  color: 'text-pink-600',   bg: 'bg-pink-50',   stripe: 'bg-pink-600'   },
+  actionnable:     { labelKey: 'types.actionnable.name',     Icon: Zap,        color: 'text-amber-600',  bg: 'bg-amber-50',  stripe: 'bg-amber-600'  },
 };
 
 export default function AgentCard({ agent, onChat, onEdit, onDelete }) {

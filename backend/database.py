@@ -834,6 +834,8 @@ def ensure_columns():
         # Team orchestration
         ("teams", "orchestration_prompt", "TEXT"),
         ("messages", "contributions_json", "TEXT"),
+        # Actionnable agents
+        ("agents", "enabled_plugins", "TEXT"),
     ]
     try:
         with engine.connect() as conn:
