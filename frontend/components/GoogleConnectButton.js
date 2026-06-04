@@ -17,10 +17,20 @@ export default function GoogleConnectButton({ requiredScopes = [] }) {
 
   const handleConnect = async () => {
     const scopes = requiredScopes.length > 0 ? requiredScopes : [];
+    if (scopes.length === 0) return;
+
+    // Open popup immediately (before await) to avoid browser popup blocker
+    const popup = window.open('about:blank', '_blank', 'width=600,height=700');
+
     try {
       const res = await api.get(`/auth/google/authorize?scopes=${scopes.join(',')}`);
-      window.open(res.data.authorization_url, '_blank', 'width=600,height=700');
+      if (popup) {
+        popup.location.href = res.data.authorization_url;
+      } else {
+        window.location.href = res.data.authorization_url;
+      }
     } catch (e) {
+      if (popup) popup.close();
       console.error('Failed to start Google auth:', e);
     }
   };

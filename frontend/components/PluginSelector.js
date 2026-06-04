@@ -61,15 +61,28 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
   };
 
   const connectGoogle = async () => {
-    const allScopes = plugins
-      .filter(p => (enabledPlugins || []).includes(p.name))
-      .flatMap(p => p.required_scopes);
+    // Collect scopes from selected plugins, or ALL plugins if none selected yet
+    const selectedPlugins = (enabledPlugins || []).length > 0
+      ? plugins.filter(p => enabledPlugins.includes(p.name))
+      : plugins;
+    const allScopes = selectedPlugins.flatMap(p => p.required_scopes);
     const uniqueScopes = [...new Set(allScopes)];
+
+    if (uniqueScopes.length === 0) return;
+
+    // Open popup immediately (before await) to avoid browser popup blocker
+    const popup = window.open('about:blank', '_blank', 'width=600,height=700');
 
     try {
       const res = await api.get(`/auth/google/authorize?scopes=${uniqueScopes.join(',')}`);
-      window.open(res.data.authorization_url, '_blank', 'width=600,height=700');
+      if (popup) {
+        popup.location.href = res.data.authorization_url;
+      } else {
+        // Fallback if popup was still blocked
+        window.location.href = res.data.authorization_url;
+      }
     } catch (e) {
+      if (popup) popup.close();
       console.error('Failed to start Google auth:', e);
     }
   };
