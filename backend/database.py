@@ -384,6 +384,7 @@ class ActionExecution(Base):
     confirmed_at = Column(DateTime, nullable=True)
     executed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    loop_state = Column(Text, nullable=True)  # JSON: serialized AgentLoopState for ReAct resume
 
     agent = relationship("Agent", foreign_keys=[agent_id])
     user = relationship("User", foreign_keys=[user_id])
