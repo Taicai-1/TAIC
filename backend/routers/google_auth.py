@@ -70,41 +70,45 @@ async def google_callback(
     db: Session = Depends(get_db),
 ):
     """Handle OAuth2 callback from Google. Exchange code for tokens and store."""
-    user_id = int(state)
+    try:
+        user_id = int(state)
 
-    flow = Flow.from_client_config(
-        _build_client_config(),
-        scopes=[],
-        redirect_uri=GOOGLE_REDIRECT_URI,
-    )
-    flow.fetch_token(code=code)
-    credentials = flow.credentials
-
-    granted_scopes = list(credentials.scopes) if credentials.scopes else []
-
-    existing = db.query(UserGoogleToken).filter(UserGoogleToken.user_id == user_id).first()
-    if existing:
-        existing.access_token = credentials.token
-        existing.refresh_token = credentials.refresh_token or existing.refresh_token
-        existing.token_expiry = credentials.expiry or (datetime.utcnow() + timedelta(hours=1))
-        old_scopes = json.loads(existing.granted_scopes) if existing.granted_scopes else []
-        merged = list(set(old_scopes + granted_scopes))
-        existing.granted_scopes = json.dumps(merged)
-        existing.updated_at = datetime.utcnow()
-    else:
-        token_row = UserGoogleToken(
-            user_id=user_id,
-            token_expiry=credentials.expiry or (datetime.utcnow() + timedelta(hours=1)),
-            granted_scopes=json.dumps(granted_scopes),
+        flow = Flow.from_client_config(
+            _build_client_config(),
+            scopes=[],
+            redirect_uri=GOOGLE_REDIRECT_URI,
         )
-        token_row.access_token = credentials.token
-        token_row.refresh_token = credentials.refresh_token
-        db.add(token_row)
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
 
-    db.commit()
-    logger.info(f"Stored Google OAuth token for user {user_id}, scopes={granted_scopes}")
+        granted_scopes = list(credentials.scopes) if credentials.scopes else []
 
-    return RedirectResponse(url=f"{FRONTEND_URL}/agents?google_connected=true")
+        existing = db.query(UserGoogleToken).filter(UserGoogleToken.user_id == user_id).first()
+        if existing:
+            existing.access_token = credentials.token
+            existing.refresh_token = credentials.refresh_token or existing.refresh_token
+            existing.token_expiry = credentials.expiry or (datetime.utcnow() + timedelta(hours=1))
+            old_scopes = json.loads(existing.granted_scopes) if existing.granted_scopes else []
+            merged = list(set(old_scopes + granted_scopes))
+            existing.granted_scopes = json.dumps(merged)
+            existing.updated_at = datetime.utcnow()
+        else:
+            token_row = UserGoogleToken(
+                user_id=user_id,
+                token_expiry=credentials.expiry or (datetime.utcnow() + timedelta(hours=1)),
+                granted_scopes=json.dumps(granted_scopes),
+            )
+            token_row.access_token = credentials.token
+            token_row.refresh_token = credentials.refresh_token or ""
+            db.add(token_row)
+
+        db.commit()
+        logger.info(f"Stored Google OAuth token for user {user_id}, scopes={granted_scopes}")
+
+        return RedirectResponse(url=f"{FRONTEND_URL}/agents?google_connected=true")
+    except Exception as e:
+        logger.error(f"Google OAuth callback failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"OAuth callback error: {e}")
 
 
 @router.get("/status")
