@@ -15,6 +15,7 @@ class ActionDefinition:
     parameters_schema: dict
     display_name: str
     icon: str
+    side_effect: bool = True  # True = write (needs confirmation), False = read-only
 
 
 @dataclass
