@@ -389,6 +389,12 @@ class AgentExecutor:
 
         for i in range(iteration, self.MAX_ITERATIONS):
             llm_response = get_chat_response(messages, model_id=model_id)
+            if not llm_response:
+                logger.warning(f"[ReAct iter {i}] LLM returned empty response")
+                return {
+                    "answer": "Désolé, je n'ai pas pu générer de réponse.",
+                    "steps": steps, "action_proposal": None, "loop_state": None, "sources": sources,
+                }
             logger.info(f"[ReAct iter {i}] LLM response: {llm_response[:300]}")
 
             step = parse_llm_output(llm_response, tool_names)
@@ -561,6 +567,10 @@ class AgentExecutor:
         steps = []
         for i in range(self.MAX_ITERATIONS):
             llm_response = get_chat_response(messages, model_id=model_id)
+            if not llm_response:
+                logger.warning(f"[ReAct stream iter {i}] LLM returned empty response")
+                yield sse_event("done", {"full_text": "Désolé, je n'ai pas pu générer de réponse.", "sources": sources})
+                return
             step = parse_llm_output(llm_response, tool_names)
 
             if isinstance(step, FinishStep):

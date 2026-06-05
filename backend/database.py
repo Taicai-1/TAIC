@@ -837,6 +837,7 @@ def ensure_columns():
         ("messages", "contributions_json", "TEXT"),
         # Actionnable agents
         ("agents", "enabled_plugins", "TEXT"),
+        ("action_executions", "loop_state", "TEXT"),
     ]
     try:
         with engine.connect() as conn:

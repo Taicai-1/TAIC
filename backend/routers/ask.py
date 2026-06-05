@@ -172,7 +172,7 @@ async def ask_question(
         event_tracker.track_question_asked(int(user_id), request.question, response_time)
         return {"answer": answer, "sources": sources, "graph_data": graph_data, "action_proposal": None}
     except Exception as e:
-        logger.error(f"Error answering question for user {user_id}: {e}")
+        logger.error(f"Error answering question for user {user_id}: {e}", exc_info=True)
         return {"answer": "Désolé, une erreur s'est produite lors du traitement de votre question. Veuillez réessayer."}
 
 
@@ -382,7 +382,7 @@ async def ask_question_stream(
                 yield sse_event("error", {"message": "Aucun agent ou équipe valide fourni.", "code": "bad_request"})
 
         except Exception as e:
-            logger.error(f"Error in ask-stream: {e}")
+            logger.error(f"Error in ask-stream: {e}", exc_info=True)
             yield sse_event("error", {"message": str(e), "code": "llm_error"})
 
     return StreamingResponse(
