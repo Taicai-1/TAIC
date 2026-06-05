@@ -44,13 +44,17 @@ async def confirm_action(
 
 
 async def _do_confirm(execution_id: int, user_id: str, db: Session):
+    print(f"[CONFIRM] Starting confirm for execution_id={execution_id}, user_id={user_id}")
     ae = db.query(ActionExecution).filter(
         ActionExecution.id == execution_id,
         ActionExecution.user_id == int(user_id),
     ).first()
     if not ae:
+        print(f"[CONFIRM] Action execution {execution_id} not found for user {user_id}")
         raise HTTPException(status_code=404, detail="Action execution not found")
+    print(f"[CONFIRM] Found AE id={ae.id}, status={ae.status}, plugin={ae.plugin_name}, action={ae.action_name}")
     if ae.status != "pending_confirmation":
+        print(f"[CONFIRM] REJECTED: status is '{ae.status}', not 'pending_confirmation'")
         raise HTTPException(status_code=400, detail=f"Action is not pending confirmation (status: {ae.status})")
 
     ae.status = "confirmed"
@@ -60,10 +64,12 @@ async def _do_confirm(execution_id: int, user_id: str, db: Session):
     # Get user credentials
     credentials = get_google_credentials(int(user_id), db)
     if not credentials:
+        print(f"[CONFIRM] FAILED: No Google credentials for user {user_id}")
         ae.status = "failed"
         ae.error_message = "Google account not connected. Please connect your Google account first."
         db.commit()
         raise HTTPException(status_code=400, detail="Google account not connected")
+    print(f"[CONFIRM] Got Google credentials for user {user_id}")
 
     # Scope validation
     plugin = plugin_manager.get_plugin(ae.plugin_name)
@@ -73,18 +79,25 @@ async def _do_confirm(execution_id: int, user_id: str, db: Session):
         token = db.query(UserGoogleToken).filter(UserGoogleToken.user_id == int(user_id)).first()
         if token:
             granted = json.loads(token.granted_scopes) if token.granted_scopes else []
+            print(f"[CONFIRM] Granted scopes: {granted}")
+            print(f"[CONFIRM] Required scopes: {plugin.required_scopes}")
             if not check_scopes_covered(granted, plugin.required_scopes):
+                missing = set(plugin.required_scopes) - set(granted)
+                print(f"[CONFIRM] FAILED: Missing scopes: {missing}")
                 ae.status = "failed"
-                ae.error_message = "Required Google scopes not granted. Please reconnect your Google account."
+                ae.error_message = f"Missing Google scopes: {', '.join(missing)}. Please reconnect your Google account with the required permissions."
                 db.commit()
                 raise HTTPException(status_code=400, detail=ae.error_message)
+            print(f"[CONFIRM] Scope check passed")
 
     # Execute
     ae.status = "executing"
     db.flush()
+    print(f"[CONFIRM] Executing {ae.plugin_name}.{ae.action_name}")
 
     params = json.loads(ae.action_params)
     result = _execute_action(ae.plugin_name, ae.action_name, params, credentials)
+    print(f"[CONFIRM] Result: success={result.success}, error={result.error_message}")
 
     if result.success:
         ae.status = "completed"

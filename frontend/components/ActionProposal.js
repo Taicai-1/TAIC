@@ -35,7 +35,7 @@ export default function ActionProposal({ proposal, onResult, onContinuation }) {
       }
     } catch (e) {
       setStatus('failed');
-      setResult({ error_message: e.response?.data?.detail || 'Execution failed' });
+      setResult({ error_message: e.response?.data?.detail || e.response?.data?.message || 'Execution failed' });
     } finally {
       setLoading(false);
     }

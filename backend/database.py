@@ -841,7 +841,20 @@ def ensure_columns():
     ]
     try:
         with engine.connect() as conn:
+            # Pre-fetch existing columns to avoid unnecessary ALTER TABLE locks
+            existing = set()
+            try:
+                rows = conn.execute(text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public'"
+                )).fetchall()
+                existing = {(r[0], r[1]) for r in rows}
+            except Exception:
+                pass  # Fall back to ALTER TABLE IF NOT EXISTS
+
             for table, column, col_def in migrations:
+                if (table, column) in existing:
+                    continue
                 try:
                     stmt = "ALTER TABLE " + table + " ADD COLUMN IF NOT EXISTS " + column + " " + col_def
                     conn.execute(text(stmt))
