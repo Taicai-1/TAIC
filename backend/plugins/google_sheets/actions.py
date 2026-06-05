@@ -13,17 +13,18 @@ def create_sheet(args: dict, credentials) -> ActionResult:
         service = build("sheets", "v4", credentials=credentials)
         body = {"properties": {"title": title}}
         if sheets_data:
-            body["sheets"] = [{"properties": {"title": s.get("name", f"Sheet{i+1}")}} for i, s in enumerate(sheets_data)]
+            body["sheets"] = [{"properties": {"title": s.get("title") or s.get("name") or f"Sheet{i+1}"}} for i, s in enumerate(sheets_data)]
         ss = service.spreadsheets().create(body=body).execute()
         ss_id = ss["spreadsheetId"]
         # Write headers and rows if provided
         for i, sheet in enumerate(sheets_data):
-            sheet_name = sheet.get("name", f"Sheet{i+1}")
+            sheet_name = sheet.get("title") or sheet.get("name") or f"Sheet{i+1}"
             values = []
             if sheet.get("headers"):
                 values.append(sheet["headers"])
-            if sheet.get("rows"):
-                values.extend(sheet["rows"])
+            rows = sheet.get("rows") or sheet.get("data") or []
+            if rows:
+                values.extend(rows)
             if values:
                 service.spreadsheets().values().update(
                     spreadsheetId=ss_id, range=f"{sheet_name}!A1",

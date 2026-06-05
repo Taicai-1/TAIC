@@ -34,6 +34,16 @@ async def confirm_action(
     db: Session = Depends(get_db),
 ):
     """Confirm and execute a pending action, then resume the ReAct loop."""
+    try:
+        return await _do_confirm(execution_id, user_id, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error confirming action {execution_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Execution failed: {e}")
+
+
+async def _do_confirm(execution_id: int, user_id: str, db: Session):
     ae = db.query(ActionExecution).filter(
         ActionExecution.id == execution_id,
         ActionExecution.user_id == int(user_id),
