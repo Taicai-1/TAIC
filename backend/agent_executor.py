@@ -1,17 +1,16 @@
 """ReAct agent executor for actionnable agents.
 
-Implements a lightweight Reasoning + Acting loop that:
-- Builds a system prompt with agent personality, tools, and RAG context
-- Iteratively calls the LLM and parses Thought/Action/Final Answer
+Implements a Reasoning + Acting loop using native LLM function calling:
+- Builds a system prompt with agent personality and RAG context
+- Iteratively calls the LLM with tools via function calling API
 - Auto-executes read-only tools, suspends on write tools for user confirmation
-- Resumes after confirmation with the action result as Observation
+- Resumes after confirmation with the action result
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Step types returned by the parser
+# Step types returned by the loop
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -34,78 +33,6 @@ class FinishStep:
     """LLM has a final answer."""
     answer: str
 
-@dataclass
-class FallbackStep:
-    """LLM didn't follow ReAct format — treat text as final answer."""
-    text: str
-
-
-# ---------------------------------------------------------------------------
-# Parser
-# ---------------------------------------------------------------------------
-
-_ACTION_RE = re.compile(r"Action\s*:\s*(.+)", re.IGNORECASE)
-_ACTION_INPUT_RE = re.compile(r"Action\s+Input\s*:\s*(.*)", re.IGNORECASE | re.DOTALL)
-_FINAL_ANSWER_RE = re.compile(r"Final\s+Answer\s*:\s*(.*)", re.IGNORECASE | re.DOTALL)
-_THOUGHT_RE = re.compile(r"Thought\s*:\s*(.*?)(?=\n(?:Action|Final Answer)\s*:|\Z)", re.IGNORECASE | re.DOTALL)
-
-
-def _clean_json(text: str) -> str:
-    """Strip markdown fences and whitespace from a JSON string."""
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    return text.strip()
-
-
-def parse_llm_output(text: str, available_tools: list[str]) -> ActionStep | FinishStep | FallbackStep:
-    """Parse LLM text output into a structured step.
-
-    Rules:
-    1. If "Final Answer:" is found, return FinishStep with everything after it.
-    2. If "Action:" and "Action Input:" are found, extract tool name + JSON args.
-       Validate tool name exists in available_tools.
-    3. Otherwise, treat as FallbackStep (graceful degradation).
-    """
-    text = text.strip()
-
-    # Check for Final Answer first
-    fa_match = _FINAL_ANSWER_RE.search(text)
-    if fa_match:
-        answer = fa_match.group(1).strip()
-        return FinishStep(answer=answer)
-
-    # Check for Action
-    action_match = _ACTION_RE.search(text)
-    ai_match = _ACTION_INPUT_RE.search(text)
-
-    if action_match and ai_match:
-        tool_name = action_match.group(1).strip()
-        raw_input = ai_match.group(1).strip()
-
-        # Validate tool name
-        if tool_name not in available_tools:
-            logger.warning(f"ReAct parser: unknown tool '{tool_name}', available: {available_tools}")
-            return FallbackStep(text=text)
-
-        # Parse JSON
-        cleaned = _clean_json(raw_input)
-        try:
-            tool_args = json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning(f"ReAct parser: invalid JSON for tool '{tool_name}': {cleaned[:200]}")
-            return FallbackStep(text=text)
-
-        # Extract thought
-        thought_match = _THOUGHT_RE.search(text)
-        thought = thought_match.group(1).strip() if thought_match else ""
-
-        return ActionStep(thought=thought, tool_name=tool_name, tool_args=tool_args)
-
-    # Nothing matched — fallback
-    return FallbackStep(text=text)
-
 
 # ---------------------------------------------------------------------------
 # Prompt builder
@@ -115,27 +42,12 @@ _REACT_SYSTEM_TEMPLATE = """Tu es {agent_name}, un assistant IA actionnable.
 {agent_contexte}
 {agent_biographie}
 
-Tu as acces aux outils suivants :
-
-{tools_block}
-
 REGLES :
-1. Utilise EXACTEMENT le format ci-dessous pour raisonner et agir.
-2. Tu peux enchainer plusieurs actions avant de donner ta reponse finale.
-3. Ne fabrique JAMAIS le resultat d'une action. Attends toujours l'Observation.
-4. Si tu n'as pas besoin d'outil, reponds directement avec "Final Answer:".
+1. Raisonne etape par etape avant d'agir.
+2. Tu peux enchainer plusieurs appels d'outils avant de donner ta reponse finale.
+3. Ne fabrique JAMAIS le resultat d'un outil. Attends toujours le retour.
+4. Si tu n'as pas besoin d'outil, reponds directement en texte.
 5. Reponds toujours dans la langue de l'utilisateur.
-
-FORMAT OBLIGATOIRE :
-
-Thought: [ton raisonnement sur ce qu'il faut faire]
-Action: [nom exact de l'outil]
-Action Input: [objet JSON valide avec les parametres]
-
-... tu recevras ensuite une Observation avec le resultat ...
-
-Thought: [raisonnement sur le resultat]
-Final Answer: [reponse finale a l'utilisateur]
 {rag_block}"""
 
 
@@ -146,14 +58,7 @@ def build_react_prompt(
     tools: list,
     rag_context: str,
 ) -> str:
-    """Build the ReAct system prompt."""
-    from agent_tools import ToolDefinition
-
-    if tools:
-        tools_block = "\n".join(t.to_prompt_str() for t in tools)
-    else:
-        tools_block = "(aucun outil disponible)"
-
+    """Build the system prompt for the agent (tools are provided via function calling API)."""
     rag_block = ""
     if rag_context:
         rag_block = f"\n\n--- Contexte documentaire ---\n{rag_context}"
@@ -162,7 +67,6 @@ def build_react_prompt(
         agent_name=agent_name,
         agent_contexte=agent_contexte.strip() if agent_contexte else "",
         agent_biographie=agent_biographie.strip() if agent_biographie else "",
-        tools_block=tools_block,
         rag_block=rag_block,
     )
 
@@ -192,7 +96,7 @@ class AgentLoopState:
         return cls(**data)
 
 
-from openai_client import get_chat_response
+from openai_client import get_chat_response, get_chat_response_with_tools
 from helpers.agent_helpers import resolve_model_id
 
 
@@ -281,6 +185,200 @@ def _observation_from_result(result: "ActionResult") -> str:
 
 
 # ---------------------------------------------------------------------------
+# Shared helpers for run() and run_stream()
+# ---------------------------------------------------------------------------
+
+def _load_agent_tools(agent):
+    """Load tools from agent's enabled plugins.
+
+    Returns (tools, tool_names, tool_map, openai_tools).
+    """
+    from agent_tools import build_tools_from_plugins, tools_to_openai_format
+    from plugins import plugin_manager
+
+    enabled_plugins = []
+    if agent.enabled_plugins:
+        try:
+            enabled_plugins = json.loads(agent.enabled_plugins)
+        except Exception:
+            enabled_plugins = []
+    tools = build_tools_from_plugins(enabled_plugins, plugin_manager)
+    tool_names = [t.name for t in tools]
+    tool_map = {t.name: t for t in tools}
+    openai_tools = tools_to_openai_format(tools)
+    return tools, tool_names, tool_map, openai_tools
+
+
+def _build_initial_messages(agent, question: str, history: list[dict], tools: list, rag_context: str):
+    """Build the initial messages list and resolve model_id.
+
+    Returns (model_id, messages).
+    """
+    system_prompt = build_react_prompt(
+        agent_name=agent.name,
+        agent_contexte=getattr(agent, "contexte", "") or "",
+        agent_biographie=getattr(agent, "biographie", "") or "",
+        tools=tools,
+        rag_context=rag_context,
+    )
+
+    model_id = agent.finetuned_model_id or resolve_model_id(agent)
+    messages = [{"role": "system", "content": system_prompt}]
+    if history:
+        for msg in history[-10:]:
+            role = msg.get("role", "user")
+            if role == "agent":
+                role = "assistant"
+            elif role == "system":
+                continue
+            messages.append({"role": role, "content": msg.get("content", "")})
+    messages.append({"role": "user", "content": question})
+    return model_id, messages
+
+
+# ---------------------------------------------------------------------------
+# Iteration result — structured outcome of a single ReAct iteration
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _IterationResult:
+    """Result of a single ReAct loop iteration."""
+    kind: str  # "finish", "read_continue", "write_suspend", "empty"
+    step: ActionStep | FinishStep | None = None
+    llm_response: str = ""
+    observation: str = ""
+    # Only set for write_suspend
+    action_execution_id: int | None = None
+    loop_state_json: str | None = None
+    display_summary: str = ""
+    proposal: dict | None = None
+
+
+def _process_iteration(
+    messages: list[dict],
+    steps: list[dict],
+    tool_names: list[str],
+    tool_map: dict,
+    openai_tools: list[dict],
+    model_id: str,
+    sources: list,
+    agent,
+    user_id: int,
+    question: str,
+    db,
+    credentials,
+    iteration: int,
+) -> _IterationResult:
+    """Process a single iteration of the ReAct loop using native function calling.
+
+    Calls the LLM with tools, then:
+    - If tool_call is present -> ActionStep (read: auto-execute, write: suspend)
+    - If only content -> FinishStep (direct text answer)
+    - If neither -> empty
+    """
+    from database import ActionExecution
+    from helpers.tenant import _get_caller_company_id
+
+    response = get_chat_response_with_tools(messages, tools=openai_tools, model_id=model_id)
+
+    if response.tool_call is None and not response.content:
+        logger.warning(f"[ReAct iter {iteration}] LLM returned empty response")
+        return _IterationResult(kind="empty")
+
+    # No tool call -> treat content as final answer
+    if response.tool_call is None:
+        answer = response.content or ""
+        logger.info(f"[ReAct iter {iteration}] Final answer: {answer[:300]}")
+        step = FinishStep(answer=answer)
+        steps.append({"type": "finish", "answer": answer})
+        return _IterationResult(kind="finish", step=step, llm_response=answer)
+
+    # Tool call present
+    tc = response.tool_call
+    thought = response.content or ""  # Some providers put reasoning in content alongside the tool call
+    logger.info(f"[ReAct iter {iteration}] Tool call: {tc.name}({json.dumps(tc.arguments, ensure_ascii=False)[:200]})")
+
+    tool_def = tool_map.get(tc.name)
+    step = ActionStep(thought=thought, tool_name=tc.name, tool_args=tc.arguments)
+    steps.append({
+        "type": "action",
+        "thought": thought,
+        "tool": tc.name,
+        "args": tc.arguments,
+        "side_effect": tool_def.side_effect if tool_def else True,
+    })
+
+    if tool_def and not tool_def.side_effect:
+        # Read-only tool — execute immediately
+        result = _execute_read_tool(tool_def.plugin_name, tc.name, tc.arguments, credentials)
+        obs = _observation_from_result(result)
+        steps.append({"type": "observation", "tool": tc.name, "result": obs})
+
+        # Append assistant message with the tool call, then tool result
+        assistant_msg = {"role": "assistant", "content": thought}
+        assistant_msg["tool_call"] = {"name": tc.name, "arguments": tc.arguments}
+        messages.append(assistant_msg)
+        messages.append({"role": "tool", "name": tc.name, "content": obs})
+        return _IterationResult(kind="read_continue", step=step, llm_response=thought, observation=obs)
+
+    # Write tool — suspend for user confirmation
+    company_id = getattr(agent, "company_id", None) or _get_caller_company_id(str(user_id), db)
+    plugin_name = tool_def.plugin_name if tool_def else "unknown"
+
+    ae = ActionExecution(
+        agent_id=agent.id,
+        user_id=user_id,
+        company_id=company_id,
+        plugin_name=plugin_name,
+        action_name=tc.name,
+        action_params=json.dumps(tc.arguments, ensure_ascii=False),
+        status="pending_confirmation",
+    )
+    db.add(ae)
+
+    # Store assistant message with tool call for resume
+    assistant_msg = {"role": "assistant", "content": thought}
+    assistant_msg["tool_call"] = {"name": tc.name, "arguments": tc.arguments}
+    messages.append(assistant_msg)
+
+    state = AgentLoopState(
+        messages=messages,
+        iteration=iteration + 1,
+        steps=steps,
+        agent_id=agent.id,
+        user_id=user_id,
+        question=question,
+        model_id=model_id,
+        sources=sources,
+    )
+    ae.loop_state = state.to_json()
+    db.commit()
+    db.refresh(ae)
+
+    display_parts = [f"{k}: {v}" for k, v in list(tc.arguments.items())[:3]]
+    display_summary = f"{tool_def.display_name if tool_def else tc.name} — {', '.join(display_parts)}"
+
+    proposal = {
+        "execution_id": ae.id,
+        "plugin": plugin_name,
+        "action": tc.name,
+        "params": tc.arguments,
+        "display_summary": display_summary,
+        "thought": thought,
+    }
+
+    return _IterationResult(
+        kind="write_suspend",
+        step=step,
+        llm_response=thought,
+        action_execution_id=ae.id,
+        loop_state_json=state.to_json(),
+        display_summary=display_summary,
+        proposal=proposal,
+    )
+
+
+# ---------------------------------------------------------------------------
 # AgentExecutor — the ReAct loop
 # ---------------------------------------------------------------------------
 
@@ -311,18 +409,7 @@ class AgentExecutor:
                 "sources": list,
             }
         """
-        from agent_tools import build_tools_from_plugins
-        from plugins import plugin_manager
-
-        enabled_plugins = []
-        if agent.enabled_plugins:
-            try:
-                enabled_plugins = json.loads(agent.enabled_plugins)
-            except Exception:
-                enabled_plugins = []
-        tools = build_tools_from_plugins(enabled_plugins, plugin_manager)
-        tool_names = [t.name for t in tools]
-        tool_map = {t.name: t for t in tools}
+        tools, tool_names, tool_map, openai_tools = _load_agent_tools(agent)
 
         rag_context, sources = get_rag_context(
             agent, user_id, db, question,
@@ -331,170 +418,76 @@ class AgentExecutor:
             company_id=agent.company_id,
         )
 
-        system_prompt = build_react_prompt(
-            agent_name=agent.name,
-            agent_contexte=getattr(agent, "contexte", "") or "",
-            agent_biographie=getattr(agent, "biographie", "") or "",
-            tools=tools,
-            rag_context=rag_context,
-        )
-
-        model_id = agent.finetuned_model_id or resolve_model_id(agent)
-        messages = [{"role": "system", "content": system_prompt}]
-        if history:
-            for msg in history[-10:]:
-                role = msg.get("role", "user")
-                if role == "agent":
-                    role = "assistant"
-                elif role == "system":
-                    continue
-                messages.append({"role": role, "content": msg.get("content", "")})
-        messages.append({"role": "user", "content": question})
+        model_id, messages = _build_initial_messages(agent, question, history, tools, rag_context)
 
         steps = []
-        return self._loop(messages, steps, tool_names, tool_map, model_id, sources,
+        return self._loop(messages, steps, tool_names, tool_map, openai_tools, model_id, sources,
                          agent, user_id, question, db, credentials, iteration=0)
 
     def resume(self, loop_state: str, observation: str, db, credentials) -> dict:
         """Resume a suspended loop after user confirmation/cancellation."""
         state = AgentLoopState.from_json(loop_state)
 
-        from agent_tools import build_tools_from_plugins
-        from plugins import plugin_manager
         from database import Agent
 
         agent = db.query(Agent).filter(Agent.id == state.agent_id).first()
-        enabled_plugins = []
-        if agent and agent.enabled_plugins:
-            try:
-                enabled_plugins = json.loads(agent.enabled_plugins)
-            except Exception:
-                enabled_plugins = []
-        tools = build_tools_from_plugins(enabled_plugins, plugin_manager)
-        tool_names = [t.name for t in tools]
-        tool_map = {t.name: t for t in tools}
+        _, tool_names, tool_map, openai_tools = _load_agent_tools(agent)
 
         messages = state.messages
-        messages.append({"role": "user", "content": f"Observation: {observation}"})
+        # After confirmation, add the tool result.
+        # New format: assistant msg has tool_call -> use role "tool".
+        # Old format (pre-migration): no tool_call in assistant msg -> use role "user" with Observation prefix.
+        last_tool_name = None
+        for msg in reversed(messages):
+            if msg.get("role") == "assistant" and msg.get("tool_call"):
+                last_tool_name = msg["tool_call"]["name"]
+                break
+        if last_tool_name:
+            messages.append({"role": "tool", "name": last_tool_name, "content": observation})
+        else:
+            messages.append({"role": "user", "content": f"Observation: {observation}"})
 
-        return self._loop(messages, state.steps, tool_names, tool_map,
+        return self._loop(messages, state.steps, tool_names, tool_map, openai_tools,
                          state.model_id, state.sources, agent, state.user_id,
                          state.question, db, credentials, iteration=state.iteration)
 
-    def _loop(self, messages, steps, tool_names, tool_map, model_id, sources,
+    def _loop(self, messages, steps, tool_names, tool_map, openai_tools, model_id, sources,
               agent, user_id, question, db, credentials, iteration):
         """Core ReAct loop shared by run() and resume()."""
-        from database import ActionExecution
-        from helpers.tenant import _get_caller_company_id
-
         for i in range(iteration, self.MAX_ITERATIONS):
-            llm_response = get_chat_response(messages, model_id=model_id)
-            if not llm_response:
-                logger.warning(f"[ReAct iter {i}] LLM returned empty response")
+            result = _process_iteration(
+                messages, steps, tool_names, tool_map, openai_tools, model_id, sources,
+                agent, user_id, question, db, credentials, i,
+            )
+
+            if result.kind == "empty":
                 return {
                     "answer": "Désolé, je n'ai pas pu générer de réponse.",
                     "steps": steps, "action_proposal": None, "loop_state": None, "sources": sources,
                 }
-            logger.info(f"[ReAct iter {i}] LLM response: {llm_response[:300]}")
 
-            step = parse_llm_output(llm_response, tool_names)
-
-            if isinstance(step, FinishStep):
-                steps.append({"type": "finish", "answer": step.answer})
+            if result.kind == "finish":
                 return {
-                    "answer": step.answer,
+                    "answer": result.step.answer,
+                    "steps": steps, "action_proposal": None, "loop_state": None, "sources": sources,
+                }
+
+            if result.kind == "read_continue":
+                continue
+
+            if result.kind == "write_suspend":
+                return {
+                    "answer": None,
                     "steps": steps,
-                    "action_proposal": None,
-                    "loop_state": None,
+                    "action_proposal": result.proposal,
+                    "loop_state": result.loop_state_json,
                     "sources": sources,
                 }
 
-            if isinstance(step, FallbackStep):
-                steps.append({"type": "fallback", "text": step.text})
-                return {
-                    "answer": step.text,
-                    "steps": steps,
-                    "action_proposal": None,
-                    "loop_state": None,
-                    "sources": sources,
-                }
-
-            if isinstance(step, ActionStep):
-                tool_def = tool_map.get(step.tool_name)
-                steps.append({
-                    "type": "action",
-                    "thought": step.thought,
-                    "tool": step.tool_name,
-                    "args": step.tool_args,
-                    "side_effect": tool_def.side_effect if tool_def else True,
-                })
-
-                if tool_def and not tool_def.side_effect:
-                    result = _execute_read_tool(tool_def.plugin_name, step.tool_name, step.tool_args, credentials)
-                    obs = _observation_from_result(result)
-                    steps.append({"type": "observation", "tool": step.tool_name, "result": obs})
-                    messages.append({"role": "assistant", "content": llm_response})
-                    messages.append({"role": "user", "content": f"Observation: {obs}"})
-                    continue
-
-                else:
-                    company_id = getattr(agent, "company_id", None) or _get_caller_company_id(str(user_id), db)
-                    plugin_name = tool_def.plugin_name if tool_def else "unknown"
-
-                    ae = ActionExecution(
-                        agent_id=agent.id,
-                        user_id=user_id,
-                        company_id=company_id,
-                        plugin_name=plugin_name,
-                        action_name=step.tool_name,
-                        action_params=json.dumps(step.tool_args, ensure_ascii=False),
-                        status="pending_confirmation",
-                    )
-                    db.add(ae)
-
-                    messages.append({"role": "assistant", "content": llm_response})
-                    state = AgentLoopState(
-                        messages=messages,
-                        iteration=i + 1,
-                        steps=steps,
-                        agent_id=agent.id,
-                        user_id=user_id,
-                        question=question,
-                        model_id=model_id,
-                        sources=sources,
-                    )
-                    ae.loop_state = state.to_json()
-                    db.commit()
-                    db.refresh(ae)
-
-                    display_parts = []
-                    for k, v in list(step.tool_args.items())[:3]:
-                        display_parts.append(f"{k}: {v}")
-                    display_summary = f"{tool_def.display_name if tool_def else step.tool_name} — {', '.join(display_parts)}"
-
-                    return {
-                        "answer": None,
-                        "steps": steps,
-                        "action_proposal": {
-                            "execution_id": ae.id,
-                            "plugin": plugin_name,
-                            "action": step.tool_name,
-                            "params": step.tool_args,
-                            "display_summary": display_summary,
-                            "thought": step.thought,
-                        },
-                        "loop_state": state.to_json(),
-                        "sources": sources,
-                    }
-
-        # Max iterations reached
+        # Max iterations reached — force a text-only response (no tools)
         messages.append({"role": "user", "content": "Tu as atteint le nombre maximum d'etapes. Donne ta reponse finale maintenant avec ce que tu sais."})
         forced = get_chat_response(messages, model_id=model_id)
-        forced_step = parse_llm_output(forced, tool_names)
-        if isinstance(forced_step, FinishStep):
-            answer = forced_step.answer
-        else:
-            answer = forced if isinstance(forced, str) else str(forced)
+        answer = forced if forced else "Désolé, je n'ai pas pu finaliser ma réponse."
         steps.append({"type": "forced_finish", "answer": answer})
         return {
             "answer": answer,
@@ -520,22 +513,9 @@ class AgentExecutor:
 
         Yields: str (formatted SSE events via sse_event())
         """
-        from agent_tools import build_tools_from_plugins
-        from plugins import plugin_manager
         from streaming_response import sse_event
-        from database import ActionExecution
-        from helpers.tenant import _get_caller_company_id
 
-        # Setup (same as run)
-        enabled_plugins = []
-        if agent.enabled_plugins:
-            try:
-                enabled_plugins = json.loads(agent.enabled_plugins)
-            except Exception:
-                enabled_plugins = []
-        tools = build_tools_from_plugins(enabled_plugins, plugin_manager)
-        tool_names = [t.name for t in tools]
-        tool_map = {t.name: t for t in tools}
+        tools, tool_names, tool_map, openai_tools = _load_agent_tools(agent)
 
         rag_context, sources = get_rag_context(
             agent, user_id, db, question,
@@ -544,119 +524,52 @@ class AgentExecutor:
             company_id=agent.company_id,
         )
 
-        system_prompt = build_react_prompt(
-            agent_name=agent.name,
-            agent_contexte=getattr(agent, "contexte", "") or "",
-            agent_biographie=getattr(agent, "biographie", "") or "",
-            tools=tools,
-            rag_context=rag_context,
-        )
-
-        model_id = agent.finetuned_model_id or resolve_model_id(agent)
-        messages = [{"role": "system", "content": system_prompt}]
-        if history:
-            for msg in history[-10:]:
-                role = msg.get("role", "user")
-                if role == "agent":
-                    role = "assistant"
-                elif role == "system":
-                    continue
-                messages.append({"role": role, "content": msg.get("content", "")})
-        messages.append({"role": "user", "content": question})
+        model_id, messages = _build_initial_messages(agent, question, history, tools, rag_context)
 
         steps = []
         for i in range(self.MAX_ITERATIONS):
-            llm_response = get_chat_response(messages, model_id=model_id)
-            if not llm_response:
-                logger.warning(f"[ReAct stream iter {i}] LLM returned empty response")
+            result = _process_iteration(
+                messages, steps, tool_names, tool_map, openai_tools, model_id, sources,
+                agent, user_id, question, db, credentials, i,
+            )
+
+            if result.kind == "empty":
                 yield sse_event("done", {"full_text": "Désolé, je n'ai pas pu générer de réponse.", "sources": sources})
                 return
-            step = parse_llm_output(llm_response, tool_names)
 
-            if isinstance(step, FinishStep):
-                steps.append({"type": "finish", "answer": step.answer})
-                for char in step.answer:
+            if result.kind == "finish":
+                for char in result.step.answer:
                     yield sse_event("token", {"t": char})
                 yield sse_event("done", {
-                    "full_text": step.answer, "steps": steps, "sources": sources,
+                    "full_text": result.step.answer, "steps": steps, "sources": sources,
                     "graph_data": None, "action_proposal": None,
                 })
                 return
 
-            if isinstance(step, FallbackStep):
-                steps.append({"type": "fallback", "text": step.text})
-                for char in step.text:
-                    yield sse_event("token", {"t": char})
-                yield sse_event("done", {
-                    "full_text": step.text, "steps": steps, "sources": sources,
-                    "graph_data": None, "action_proposal": None,
-                })
-                return
-
-            if isinstance(step, ActionStep):
-                tool_def = tool_map.get(step.tool_name)
-                steps.append({
-                    "type": "action", "thought": step.thought,
-                    "tool": step.tool_name, "args": step.tool_args,
-                    "side_effect": tool_def.side_effect if tool_def else True,
-                })
-
-                yield sse_event("thought", {"content": step.thought})
+            if result.kind == "read_continue":
+                yield sse_event("thought", {"content": result.step.thought})
                 yield sse_event("action", {
-                    "tool": step.tool_name, "args": step.tool_args,
-                    "type": "write" if (tool_def and tool_def.side_effect) else "read",
+                    "tool": result.step.tool_name, "args": result.step.tool_args, "type": "read",
                 })
+                yield sse_event("observation", {"tool": result.step.tool_name, "result": result.observation})
+                continue
 
-                if tool_def and not tool_def.side_effect:
-                    result = _execute_read_tool(tool_def.plugin_name, step.tool_name, step.tool_args, credentials)
-                    obs = _observation_from_result(result)
-                    steps.append({"type": "observation", "tool": step.tool_name, "result": obs})
-                    yield sse_event("observation", {"tool": step.tool_name, "result": obs})
-                    messages.append({"role": "assistant", "content": llm_response})
-                    messages.append({"role": "user", "content": f"Observation: {obs}"})
-                    continue
-                else:
-                    # Write tool — suspend
-                    company_id = getattr(agent, "company_id", None) or _get_caller_company_id(str(user_id), db)
-                    plugin_name = tool_def.plugin_name if tool_def else "unknown"
-
-                    ae = ActionExecution(
-                        agent_id=agent.id, user_id=user_id, company_id=company_id,
-                        plugin_name=plugin_name, action_name=step.tool_name,
-                        action_params=json.dumps(step.tool_args, ensure_ascii=False),
-                        status="pending_confirmation",
-                    )
-                    db.add(ae)
-                    messages.append({"role": "assistant", "content": llm_response})
-                    state = AgentLoopState(
-                        messages=messages, iteration=i + 1, steps=steps,
-                        agent_id=agent.id, user_id=user_id, question=question,
-                        model_id=model_id, sources=sources,
-                    )
-                    ae.loop_state = state.to_json()
-                    db.commit()
-                    db.refresh(ae)
-
-                    display_parts = [f"{k}: {v}" for k, v in list(step.tool_args.items())[:3]]
-                    display_summary = f"{tool_def.display_name if tool_def else step.tool_name} — {', '.join(display_parts)}"
-
-                    proposal = {
-                        "execution_id": ae.id, "plugin": plugin_name,
-                        "action": step.tool_name, "params": step.tool_args,
-                        "display_summary": display_summary, "thought": step.thought,
-                    }
-                    yield sse_event("action_proposal", proposal)
-                    yield sse_event("done", {
-                        "full_text": step.thought or "", "steps": steps, "sources": sources,
-                        "graph_data": None, "action_proposal": proposal,
-                    })
-                    return
+            if result.kind == "write_suspend":
+                yield sse_event("thought", {"content": result.step.thought})
+                yield sse_event("action", {
+                    "tool": result.step.tool_name, "args": result.step.tool_args, "type": "write",
+                })
+                yield sse_event("action_proposal", result.proposal)
+                yield sse_event("done", {
+                    "full_text": result.step.thought or "", "steps": steps, "sources": sources,
+                    "graph_data": None, "action_proposal": result.proposal,
+                })
+                return
 
         # Max iterations
         messages.append({"role": "user", "content": "Tu as atteint le nombre maximum d'etapes. Donne ta reponse finale maintenant."})
         forced = get_chat_response(messages, model_id=model_id)
-        forced_step = parse_llm_output(forced, tool_names)
-        answer = forced_step.answer if isinstance(forced_step, FinishStep) else str(forced)
+        answer = forced if forced else "Désolé, je n'ai pas pu finaliser ma réponse."
         steps.append({"type": "forced_finish", "answer": answer})
         for char in answer:
             yield sse_event("token", {"t": char})

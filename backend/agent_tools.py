@@ -21,6 +21,17 @@ class ToolDefinition:
     side_effect: bool  # True = write (needs confirmation), False = read-only
     display_name: str = ""  # Human-readable name for UI display
 
+    def to_openai_tool(self) -> dict:
+        """Convert to OpenAI function-calling tool format."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters_schema,
+            },
+        }
+
     def to_prompt_str(self) -> str:
         """Format this tool for inclusion in the ReAct system prompt."""
         params_desc = []
@@ -37,6 +48,11 @@ class ToolDefinition:
             f"  Type: {side_label}\n"
             f"  Parametres:\n{params_text}"
         )
+
+
+def tools_to_openai_format(tools: list["ToolDefinition"]) -> list[dict]:
+    """Convert a list of ToolDefinitions to OpenAI function-calling format."""
+    return [t.to_openai_tool() for t in tools]
 
 
 def build_tools_from_plugins(

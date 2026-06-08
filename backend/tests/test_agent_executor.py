@@ -1,89 +1,46 @@
 """Tests for agent_executor module."""
 import json
 import pytest
+from unittest.mock import patch, MagicMock, call
 
 
-class TestParseLlmOutput:
-    """Test the ReAct output parser."""
+class TestToolConversion:
+    """Test ToolDefinition.to_openai_tool() and tools_to_openai_format()."""
 
-    def test_parses_final_answer(self):
-        from agent_executor import parse_llm_output, FinishStep
-        text = "Thought: The email has been sent.\nFinal Answer: J'ai envoyé l'email à alice@example.com."
-        step = parse_llm_output(text, ["send_email"])
-        assert isinstance(step, FinishStep)
-        assert "envoyé" in step.answer
-
-    def test_parses_action_step(self):
-        from agent_executor import parse_llm_output, ActionStep
-        text = (
-            'Thought: I need to search for emails from Pierre.\n'
-            'Action: search_emails\n'
-            'Action Input: {"query": "from:pierre"}'
+    def test_to_openai_tool_format(self):
+        from agent_tools import ToolDefinition
+        tool = ToolDefinition(
+            name="send_email",
+            description="Send an email",
+            parameters_schema={
+                "type": "object",
+                "properties": {"to": {"type": "string", "description": "Recipient"}},
+                "required": ["to"],
+            },
+            plugin_name="gmail",
+            side_effect=True,
         )
-        step = parse_llm_output(text, ["search_emails", "send_email"])
-        assert isinstance(step, ActionStep)
-        assert step.tool_name == "search_emails"
-        assert step.tool_args == {"query": "from:pierre"}
-        assert "Pierre" in step.thought
+        result = tool.to_openai_tool()
+        assert result["type"] == "function"
+        assert result["function"]["name"] == "send_email"
+        assert result["function"]["description"] == "Send an email"
+        assert result["function"]["parameters"]["required"] == ["to"]
 
-    def test_parses_action_with_markdown_fenced_json(self):
-        from agent_executor import parse_llm_output, ActionStep
-        text = (
-            'Thought: Sending the email.\n'
-            'Action: send_email\n'
-            'Action Input: ```json\n{"to": "alice@test.com", "subject": "Hi", "body": "Hello"}\n```'
-        )
-        step = parse_llm_output(text, ["send_email"])
-        assert isinstance(step, ActionStep)
-        assert step.tool_args["to"] == "alice@test.com"
-
-    def test_fallback_on_unformatted_text(self):
-        from agent_executor import parse_llm_output, FallbackStep
-        text = "Bonjour, je suis votre assistant."
-        step = parse_llm_output(text, ["send_email"])
-        assert isinstance(step, FallbackStep)
-        assert step.text == text
-
-    def test_rejects_unknown_tool_name(self):
-        from agent_executor import parse_llm_output, FallbackStep
-        text = (
-            'Thought: Doing something.\n'
-            'Action: nonexistent_tool\n'
-            'Action Input: {"foo": "bar"}'
-        )
-        step = parse_llm_output(text, ["send_email"])
-        assert isinstance(step, FallbackStep)
-
-    def test_handles_invalid_json_gracefully(self):
-        from agent_executor import parse_llm_output, FallbackStep
-        text = (
-            'Thought: Sending email.\n'
-            'Action: send_email\n'
-            'Action Input: {to: alice, subject: test}'
-        )
-        step = parse_llm_output(text, ["send_email"])
-        assert isinstance(step, FallbackStep)
-
-    def test_final_answer_without_thought(self):
-        from agent_executor import parse_llm_output, FinishStep
-        text = "Final Answer: Voici la réponse."
-        step = parse_llm_output(text, [])
-        assert isinstance(step, FinishStep)
-        assert step.answer == "Voici la réponse."
-
-    def test_multiline_final_answer(self):
-        from agent_executor import parse_llm_output, FinishStep
-        text = "Thought: Done.\nFinal Answer: Ligne 1\nLigne 2\nLigne 3"
-        step = parse_llm_output(text, [])
-        assert isinstance(step, FinishStep)
-        assert "Ligne 1" in step.answer
-        assert "Ligne 3" in step.answer
+    def test_tools_to_openai_format(self):
+        from agent_tools import ToolDefinition, tools_to_openai_format
+        tools = [
+            ToolDefinition(name="t1", description="d1", parameters_schema={"type": "object"}, plugin_name="p", side_effect=False),
+            ToolDefinition(name="t2", description="d2", parameters_schema={"type": "object"}, plugin_name="p", side_effect=True),
+        ]
+        result = tools_to_openai_format(tools)
+        assert len(result) == 2
+        assert result[0]["function"]["name"] == "t1"
+        assert result[1]["function"]["name"] == "t2"
 
 
 class TestBuildReactPrompt:
     def test_includes_agent_personality(self):
         from agent_executor import build_react_prompt
-        from agent_tools import ToolDefinition
         prompt = build_react_prompt(
             agent_name="TestBot",
             agent_contexte="Tu es un assistant RH.",
@@ -95,19 +52,6 @@ class TestBuildReactPrompt:
         assert "assistant RH" in prompt
         assert "recrutement" in prompt
 
-    def test_includes_tool_descriptions(self):
-        from agent_executor import build_react_prompt
-        from agent_tools import ToolDefinition
-        tools = [
-            ToolDefinition(name="send_email", description="Send an email",
-                          parameters_schema={"type": "object", "properties": {"to": {"type": "string"}}, "required": ["to"]},
-                          plugin_name="gmail", side_effect=True),
-        ]
-        prompt = build_react_prompt("Bot", "", "", tools, "")
-        assert "send_email" in prompt
-        assert "Send an email" in prompt
-        assert "confirmation" in prompt.lower()
-
     def test_includes_rag_context_when_provided(self):
         from agent_executor import build_react_prompt
         prompt = build_react_prompt("Bot", "", "", [], "Document X says: blah blah")
@@ -118,13 +62,19 @@ class TestBuildReactPrompt:
         prompt = build_react_prompt("Bot", "", "", [], "")
         assert "Contexte documentaire" not in prompt
 
-    def test_includes_react_format_instructions(self):
+    def test_no_format_obligatoire(self):
+        """The old FORMAT OBLIGATOIRE block should no longer be in the prompt."""
         from agent_executor import build_react_prompt
         prompt = build_react_prompt("Bot", "", "", [], "")
-        assert "Thought:" in prompt
-        assert "Action:" in prompt
-        assert "Action Input:" in prompt
-        assert "Final Answer:" in prompt
+        assert "FORMAT OBLIGATOIRE" not in prompt
+        assert "Thought:" not in prompt
+        assert "Action Input:" not in prompt
+
+    def test_includes_rules(self):
+        from agent_executor import build_react_prompt
+        prompt = build_react_prompt("Bot", "", "", [], "")
+        assert "REGLES" in prompt
+        assert "fabrique JAMAIS" in prompt
 
 
 class TestAgentLoopState:
@@ -148,9 +98,6 @@ class TestAgentLoopState:
         assert restored.question == "send a mail"
 
 
-from unittest.mock import patch, MagicMock, call
-
-
 class TestAgentExecutorRun:
     """Integration tests for the ReAct loop with mocked LLM."""
 
@@ -167,12 +114,18 @@ class TestAgentExecutorRun:
         agent.llm_provider = "gemini"
         return agent
 
-    @patch("agent_executor.get_chat_response")
+    @patch("agent_executor.get_chat_response_with_tools")
     @patch("agent_executor.get_rag_context")
-    def test_simple_final_answer_no_tools(self, mock_rag, mock_llm):
+    def test_simple_final_answer_no_tool_call(self, mock_rag, mock_llm):
+        """When LLM returns content without tool_call, it's a final answer."""
         from agent_executor import AgentExecutor
+        from openai_client import ToolCallResponse
+
         mock_rag.return_value = ("", [])
-        mock_llm.return_value = "Final Answer: Bonjour, comment puis-je vous aider ?"
+        mock_llm.return_value = ToolCallResponse(
+            content="Bonjour, comment puis-je vous aider ?",
+            tool_call=None,
+        )
 
         executor = AgentExecutor()
         result = executor.run(
@@ -187,12 +140,14 @@ class TestAgentExecutorRun:
         assert result["action_proposal"] is None
         assert result["loop_state"] is None
 
-    @patch("agent_executor.get_chat_response")
+    @patch("agent_executor.get_chat_response_with_tools")
     @patch("agent_executor.get_rag_context")
     @patch("agent_executor._execute_read_tool")
     @patch("plugins.plugin_manager")
     def test_read_tool_auto_executed(self, mock_pm, mock_exec, mock_rag, mock_llm):
+        """When LLM returns a tool_call for a read-only tool, it's auto-executed."""
         from agent_executor import AgentExecutor
+        from openai_client import ToolCallResponse, ToolCall
         from plugins.base import ActionResult, ActionDefinition
 
         # Mock plugin with read-only tool
@@ -211,8 +166,14 @@ class TestAgentExecutorRun:
 
         mock_rag.return_value = ("", [])
         mock_llm.side_effect = [
-            'Thought: I need to search emails.\nAction: search_emails\nAction Input: {"query": "from:pierre"}',
-            'Thought: Found emails.\nFinal Answer: J\'ai trouve 2 emails de Pierre.',
+            ToolCallResponse(
+                content="Je vais chercher les emails de Pierre.",
+                tool_call=ToolCall(name="search_emails", arguments={"query": "from:pierre"}),
+            ),
+            ToolCallResponse(
+                content="J'ai trouve 2 emails de Pierre.",
+                tool_call=None,
+            ),
         ]
         mock_exec.return_value = ActionResult(
             success=True, data={"emails": [{"subject": "Test"}], "total": 1},
@@ -232,11 +193,13 @@ class TestAgentExecutorRun:
         assert result["action_proposal"] is None
         mock_exec.assert_called_once()
 
-    @patch("agent_executor.get_chat_response")
+    @patch("agent_executor.get_chat_response_with_tools")
     @patch("agent_executor.get_rag_context")
     @patch("plugins.plugin_manager")
     def test_write_tool_suspends_loop(self, mock_pm, mock_rag, mock_llm):
+        """When LLM returns a tool_call for a write tool, the loop suspends."""
         from agent_executor import AgentExecutor
+        from openai_client import ToolCallResponse, ToolCall
         from plugins.base import ActionDefinition
 
         # Mock plugin with write tool
@@ -254,10 +217,9 @@ class TestAgentExecutorRun:
         mock_pm.get_plugin.return_value = mock_plugin
 
         mock_rag.return_value = ("", [])
-        mock_llm.return_value = (
-            'Thought: I need to send an email.\n'
-            'Action: send_email\n'
-            'Action Input: {"to": "alice@test.com", "subject": "Hi", "body": "Hello"}'
+        mock_llm.return_value = ToolCallResponse(
+            content="Je vais envoyer un email.",
+            tool_call=ToolCall(name="send_email", arguments={"to": "alice@test.com", "subject": "Hi", "body": "Hello"}),
         )
 
         mock_db = MagicMock()
@@ -275,13 +237,23 @@ class TestAgentExecutorRun:
         assert result["action_proposal"]["action"] == "send_email"
         assert result["loop_state"] is not None
 
-    @patch("agent_executor.get_chat_response")
+    @patch("agent_executor.get_chat_response_with_tools")
     def test_resume_after_confirm(self, mock_llm):
+        """After confirmation, the loop resumes with the observation and finishes."""
         from agent_executor import AgentExecutor, AgentLoopState
-        mock_llm.return_value = "Thought: Email sent.\nFinal Answer: J'ai envoye l'email a alice."
+        from openai_client import ToolCallResponse
+
+        mock_llm.return_value = ToolCallResponse(
+            content="J'ai envoye l'email a alice.",
+            tool_call=None,
+        )
 
         state = AgentLoopState(
-            messages=[{"role": "system", "content": "prompt"}, {"role": "user", "content": "Envoie un mail"}],
+            messages=[
+                {"role": "system", "content": "prompt"},
+                {"role": "user", "content": "Envoie un mail"},
+                {"role": "assistant", "content": "Je vais envoyer.", "tool_call": {"name": "send_email", "arguments": {"to": "alice@test.com"}}},
+            ],
             iteration=1, steps=[], agent_id=1, user_id=42,
             question="Envoie un mail a alice", model_id="gemini:gemini-2.0-flash", sources=[],
         )
@@ -297,25 +269,97 @@ class TestAgentExecutorRun:
         assert "alice" in result["answer"]
 
     @patch("agent_executor.get_chat_response")
+    @patch("agent_executor.get_chat_response_with_tools")
     @patch("agent_executor.get_rag_context")
-    def test_max_iterations_forces_answer(self, mock_rag, mock_llm):
+    @patch("agent_executor._execute_read_tool")
+    @patch("plugins.plugin_manager")
+    def test_max_iterations_forces_answer(self, mock_pm, mock_exec, mock_rag, mock_llm_tools, mock_llm_plain):
+        """When max iterations reached, a forced plain text response is used."""
         from agent_executor import AgentExecutor
+        from openai_client import ToolCallResponse, ToolCall
+        from plugins.base import ActionResult, ActionDefinition
+
+        # Mock plugin with read-only tool
+        mock_plugin = MagicMock()
+        mock_plugin.get_actions.return_value = {
+            "search_emails": ActionDefinition(
+                name="search_emails",
+                description="Search emails",
+                parameters_schema={"type": "object", "properties": {"query": {"type": "string"}}},
+                display_name="Search Emails",
+                icon="mail",
+                side_effect=False,
+            )
+        }
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        mock_rag.return_value = ("", [])
+        # Every tool call iteration returns a read tool call
+        mock_llm_tools.return_value = ToolCallResponse(
+            content="Searching.",
+            tool_call=ToolCall(name="search_emails", arguments={"query": "test"}),
+        )
+        mock_exec.return_value = ActionResult(
+            success=True, data={"emails": []}, display_message="", resource_url=None, error_message=None,
+        )
+        # Forced plain text response at the end
+        mock_llm_plain.return_value = "Voici ce que je sais."
+
+        executor = AgentExecutor()
+        result = executor.run(
+            question="infinite loop test",
+            agent=self._make_agent(),
+            history=[], db=MagicMock(), user_id=42, credentials=MagicMock(),
+        )
+        assert result["answer"] is not None
+        assert result["answer"] == "Voici ce que je sais."
+
+    @patch("agent_executor.get_chat_response_with_tools")
+    @patch("agent_executor.get_rag_context")
+    def test_empty_response_returns_error(self, mock_rag, mock_llm):
+        """When LLM returns no content and no tool call, return error message."""
+        from agent_executor import AgentExecutor
+        from openai_client import ToolCallResponse
+
+        mock_rag.return_value = ("", [])
+        mock_llm.return_value = ToolCallResponse(content=None, tool_call=None)
+
+        executor = AgentExecutor()
+        result = executor.run(
+            question="Test",
+            agent=self._make_agent(),
+            history=[], db=MagicMock(), user_id=42, credentials=MagicMock(),
+        )
+        assert "Désolé" in result["answer"]
+
+    @patch("agent_executor.get_chat_response_with_tools")
+    @patch("agent_executor.get_rag_context")
+    def test_thought_captured_from_content(self, mock_rag, mock_llm):
+        """When LLM returns content alongside a tool call, it's captured as thought."""
+        from agent_executor import AgentExecutor
+        from openai_client import ToolCallResponse, ToolCall
+        from plugins.base import ActionResult
+
         mock_rag.return_value = ("", [])
         mock_llm.side_effect = [
-            'Thought: Searching.\nAction: search_emails\nAction Input: {"query": "test"}',
-        ] * 7 + [
-            "I'm stuck but here is what I know."
+            ToolCallResponse(
+                content="Let me search for that.",
+                tool_call=ToolCall(name="search_emails", arguments={"query": "test"}),
+            ),
+            ToolCallResponse(content="Found results.", tool_call=None),
         ]
 
         executor = AgentExecutor()
         with patch("agent_executor._execute_read_tool") as mock_exec:
-            from plugins.base import ActionResult
             mock_exec.return_value = ActionResult(
-                success=True, data={"emails": []}, display_message="", resource_url=None, error_message=None,
+                success=True, data={}, display_message="ok", resource_url=None, error_message=None,
             )
             result = executor.run(
-                question="infinite loop test",
+                question="Search",
                 agent=self._make_agent(),
                 history=[], db=MagicMock(), user_id=42, credentials=MagicMock(),
             )
-        assert result["answer"] is not None
+        # Check that thought was captured in steps
+        action_steps = [s for s in result["steps"] if s["type"] == "action"]
+        assert len(action_steps) == 1
+        assert action_steps[0]["thought"] == "Let me search for that."

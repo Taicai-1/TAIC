@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 from openai import OpenAI
 from google.cloud import secretmanager
 import logging
@@ -14,6 +15,10 @@ try:
     from gemini_client import generate_text_stream as gemini_generate_text_stream
 except Exception:
     gemini_generate_text_stream = None
+try:
+    from gemini_client import generate_with_tools as gemini_generate_with_tools
+except Exception:
+    gemini_generate_with_tools = None
 
 # Optional import for Mistral client
 try:
@@ -24,6 +29,10 @@ try:
     from mistral_client import generate_text_stream as mistral_generate_text_stream
 except Exception:
     mistral_generate_text_stream = None
+try:
+    from mistral_client import generate_with_tools as mistral_generate_with_tools
+except Exception:
+    mistral_generate_with_tools = None
 
 # Optional import for Perplexity client
 try:
@@ -51,6 +60,44 @@ def _messages_to_prompt(messages: list) -> str:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _is_strict_provider(gemini_only: bool) -> bool:
+    """Return True if the caller or environment mandates no OpenAI fallback."""
+    if gemini_only:
+        return True
+    return os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
+
+
+class _SimpleMsg:
+    """Lightweight message object returned by structured calls for non-OpenAI providers."""
+    def __init__(self, content, function_call=None):
+        self.content = content
+        self.function_call = function_call
+
+
+def _parse_structured_text(text: str) -> _SimpleMsg:
+    """Parse text from a non-OpenAI provider into a _SimpleMsg.
+
+    Attempts to extract a function_call-shaped JSON object from the text.
+    Returns a _SimpleMsg with .content and optionally .function_call set.
+    """
+    try:
+        parsed = json.loads(text)
+        fc = None
+        if isinstance(parsed, dict):
+            if "function_call" in parsed and isinstance(parsed["function_call"], dict):
+                fc = parsed["function_call"]
+            elif "name" in parsed and ("arguments" in parsed or "params" in parsed):
+                fc = {"name": parsed.get("name"), "arguments": parsed.get("arguments") or parsed.get("params")}
+        if fc:
+            return _SimpleMsg(
+                content=(parsed.get("content") if isinstance(parsed, dict) and "content" in parsed else text),
+                function_call=fc,
+            )
+    except Exception:
+        pass
+    return _SimpleMsg(text)
 
 
 def get_secret(secret_name: str, project_id: str = None) -> str:
@@ -210,9 +257,7 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
             try:
                 return gemini_generate_text(prompt, model_name=model_short, temperature=0.7, max_tokens=max_tokens)
             except Exception as e:
-                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
-                strict = bool(gemini_only) or env_gemini_only
-                if strict:
+                if _is_strict_provider(gemini_only):
                     logger.error(f"Gemini-only mode enabled and Gemini call failed: {e}")
                     raise
                 logger.warning(f"Gemini call failed (will fallback to OpenAI): {e}")
@@ -230,7 +275,7 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
                 return result
             except Exception as e:
                 logger.error(f"[LLM USED] Mistral ({model_short}) - FAILED: {e}, falling back to OpenAI")
-                if gemini_only:
+                if _is_strict_provider(gemini_only):
                     raise
                 model = DEFAULT_MODEL
         else:
@@ -250,7 +295,7 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
                 return result
             except Exception as e:
                 logger.error(f"[LLM USED] Perplexity ({model_short}) - FAILED: {e}, falling back to OpenAI")
-                if gemini_only:
+                if _is_strict_provider(gemini_only):
                     raise
                 model = DEFAULT_MODEL
         else:
@@ -296,8 +341,7 @@ def get_chat_response_stream(messages: list, model_id: str = None, gemini_only: 
                 )
                 return
             except Exception as e:
-                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
-                if bool(gemini_only) or env_gemini_only:
+                if _is_strict_provider(gemini_only):
                     raise
                 logger.warning(f"Gemini stream failed (falling back to OpenAI): {e}")
                 model = DEFAULT_MODEL
@@ -317,7 +361,7 @@ def get_chat_response_stream(messages: list, model_id: str = None, gemini_only: 
                 return
             except Exception as e:
                 logger.error(f"Mistral stream failed: {e}, falling back to OpenAI")
-                if gemini_only:
+                if _is_strict_provider(gemini_only):
                     raise
                 model = DEFAULT_MODEL
         else:
@@ -336,7 +380,7 @@ def get_chat_response_stream(messages: list, model_id: str = None, gemini_only: 
                 return
             except Exception as e:
                 logger.error(f"Perplexity stream failed: {e}, falling back to OpenAI")
-                if gemini_only:
+                if _is_strict_provider(gemini_only):
                     raise
                 model = DEFAULT_MODEL
         else:
@@ -374,50 +418,21 @@ def get_chat_response_structured(
     if isinstance(model, str) and model.startswith("gemini:"):
         if gemini_generate_text:
             model_short = model.split(":", 1)[1]
-            # For structured/function-calling we can't fully emulate OpenAI functions with Gemini yet.
-            # Attempt to emulate function-calling by calling Gemini with concatenated messages
-            # and trying to parse a JSON function_call object from its textual response.
             prompt = _messages_to_prompt(messages)
             try:
                 text = gemini_generate_text(
                     prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS
                 )
             except Exception as e:
-                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
-                strict = bool(gemini_only) or env_gemini_only
-                if strict:
+                if _is_strict_provider(gemini_only):
                     logger.error(f"Gemini-only mode enabled and structured Gemini call failed: {e}")
                     raise
                 logger.warning(f"Gemini structured call failed (falling back to OpenAI): {e}")
                 model = DEFAULT_MODEL
                 text = None
 
-            class SimpleMsg:
-                def __init__(self, content, function_call=None):
-                    self.content = content
-                    self.function_call = function_call
-
-            # Try to parse the model output as JSON. If it contains a function call-like object,
-            # expose it as `.function_call` so the main action flow can use it.
-            try:
-                parsed = json.loads(text)
-                # Look for common shapes: {"function_call": {...}} or {"name":..., "arguments": ...}
-                fc = None
-                if isinstance(parsed, dict):
-                    if "function_call" in parsed and isinstance(parsed["function_call"], dict):
-                        fc = parsed["function_call"]
-                    elif "name" in parsed and ("arguments" in parsed or "params" in parsed):
-                        fc = {"name": parsed.get("name"), "arguments": parsed.get("arguments") or parsed.get("params")}
-                if fc:
-                    return SimpleMsg(
-                        content=(parsed.get("content") if isinstance(parsed, dict) and "content" in parsed else text),
-                        function_call=fc,
-                    )
-            except Exception:
-                # Not JSON or not structured as function_call; fall back to plain text
-                pass
-
-            return SimpleMsg(text)
+            if text is not None:
+                return _parse_structured_text(text)
         else:
             logger.warning(f"Gemini client not available; falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
             model = DEFAULT_MODEL
@@ -430,42 +445,14 @@ def get_chat_response_structured(
                     prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS
                 )
             except Exception as e:
-                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
-                strict = bool(gemini_only) or env_gemini_only
-                if strict:
+                if _is_strict_provider(gemini_only):
                     raise
                 logger.warning(f"Mistral structured call failed (falling back to OpenAI): {e}")
                 model = DEFAULT_MODEL
                 text = None
 
             if text is not None:
-
-                class SimpleMsg:
-                    def __init__(self, content, function_call=None):
-                        self.content = content
-                        self.function_call = function_call
-
-                try:
-                    parsed = json.loads(text)
-                    fc = None
-                    if isinstance(parsed, dict):
-                        if "function_call" in parsed and isinstance(parsed["function_call"], dict):
-                            fc = parsed["function_call"]
-                        elif "name" in parsed and ("arguments" in parsed or "params" in parsed):
-                            fc = {
-                                "name": parsed.get("name"),
-                                "arguments": parsed.get("arguments") or parsed.get("params"),
-                            }
-                    if fc:
-                        return SimpleMsg(
-                            content=(
-                                parsed.get("content") if isinstance(parsed, dict) and "content" in parsed else text
-                            ),
-                            function_call=fc,
-                        )
-                except Exception:
-                    pass
-                return SimpleMsg(text)
+                return _parse_structured_text(text)
         else:
             logger.warning(f"Mistral client not available; falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
             model = DEFAULT_MODEL
@@ -478,42 +465,14 @@ def get_chat_response_structured(
                     prompt, model_name=model_short, temperature=0.2, max_tokens=DEFAULT_MAX_TOKENS
                 )
             except Exception as e:
-                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
-                strict = bool(gemini_only) or env_gemini_only
-                if strict:
+                if _is_strict_provider(gemini_only):
                     raise
                 logger.warning(f"Perplexity structured call failed (falling back to OpenAI): {e}")
                 model = DEFAULT_MODEL
                 text = None
 
             if text is not None:
-
-                class SimpleMsg:
-                    def __init__(self, content, function_call=None):
-                        self.content = content
-                        self.function_call = function_call
-
-                try:
-                    parsed = json.loads(text)
-                    fc = None
-                    if isinstance(parsed, dict):
-                        if "function_call" in parsed and isinstance(parsed["function_call"], dict):
-                            fc = parsed["function_call"]
-                        elif "name" in parsed and ("arguments" in parsed or "params" in parsed):
-                            fc = {
-                                "name": parsed.get("name"),
-                                "arguments": parsed.get("arguments") or parsed.get("params"),
-                            }
-                    if fc:
-                        return SimpleMsg(
-                            content=(
-                                parsed.get("content") if isinstance(parsed, dict) and "content" in parsed else text
-                            ),
-                            function_call=fc,
-                        )
-                except Exception:
-                    pass
-                return SimpleMsg(text)
+                return _parse_structured_text(text)
         else:
             logger.warning(f"Perplexity client not available; falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
             model = DEFAULT_MODEL
@@ -566,9 +525,7 @@ def get_chat_response_deterministic(
                     prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS
                 )
             except Exception as e:
-                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
-                strict = bool(gemini_only) or env_gemini_only
-                if strict:
+                if _is_strict_provider(gemini_only):
                     logger.error(f"Gemini-only mode enabled and deterministic Gemini call failed: {e}")
                     raise
                 logger.warning(f"Gemini deterministic call failed (falling back to OpenAI): {e}")
@@ -585,9 +542,7 @@ def get_chat_response_deterministic(
                     prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS
                 )
             except Exception as e:
-                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
-                strict = bool(gemini_only) or env_gemini_only
-                if strict:
+                if _is_strict_provider(gemini_only):
                     raise
                 logger.warning(f"Mistral deterministic call failed (falling back to OpenAI): {e}")
                 model = DEFAULT_MODEL
@@ -603,9 +558,7 @@ def get_chat_response_deterministic(
                     prompt, model_name=model_short, temperature=temperature, max_tokens=max_tokens or DEFAULT_MAX_TOKENS
                 )
             except Exception as e:
-                env_gemini_only = os.getenv("GEMINI_ONLY", "false").lower() in ("1", "true", "yes")
-                strict = bool(gemini_only) or env_gemini_only
-                if strict:
+                if _is_strict_provider(gemini_only):
                     raise
                 logger.warning(f"Perplexity deterministic call failed (falling back to OpenAI): {e}")
                 model = DEFAULT_MODEL
@@ -704,3 +657,126 @@ def get_chat_response_json(
         time.sleep(1)
 
     raise ValueError(f"Could not parse JSON from model after {retries + 1} attempts: {last_err}")
+
+
+# ---------------------------------------------------------------------------
+# Native function-calling support
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ToolCall:
+    """A structured tool call returned by the LLM."""
+    name: str
+    arguments: dict
+
+
+@dataclass
+class ToolCallResponse:
+    """Normalized response from an LLM that may contain a tool call."""
+    content: str | None  # text content (thought / final answer)
+    tool_call: ToolCall | None  # structured tool call if present
+
+
+def get_chat_response_with_tools(
+    messages: list[dict],
+    tools: list[dict],
+    model_id: str | None = None,
+    gemini_only: bool = False,
+) -> ToolCallResponse:
+    """Call the LLM with native function-calling and return a normalized ToolCallResponse.
+
+    Routes to the correct provider (Gemini, Mistral, OpenAI) based on model_id prefix,
+    then normalizes the provider-specific response into a ToolCallResponse.
+
+    Args:
+        messages: OpenAI-style messages list.
+        tools: Tools in OpenAI format [{"type": "function", "function": {...}}, ...].
+        model_id: Model identifier with optional provider prefix (gemini:, mistral:).
+        gemini_only: If True, don't fall back to OpenAI when Gemini fails.
+    """
+    import time
+
+    max_retries = 3
+    model = model_id if model_id else DEFAULT_MODEL
+
+    # Route to Gemini
+    if isinstance(model, str) and model.startswith("gemini:"):
+        model_short = model.split(":", 1)[1]
+        if gemini_generate_with_tools:
+            try:
+                result = gemini_generate_with_tools(
+                    messages=messages, tools=tools, model_name=model_short,
+                    temperature=0.7, max_tokens=DEFAULT_MAX_TOKENS,
+                )
+                tc = None
+                if result.get("tool_call"):
+                    tc = ToolCall(
+                        name=result["tool_call"]["name"],
+                        arguments=result["tool_call"]["arguments"],
+                    )
+                return ToolCallResponse(content=result.get("content"), tool_call=tc)
+            except Exception as e:
+                if _is_strict_provider(gemini_only):
+                    raise
+                logger.warning(f"Gemini tool call failed (falling back to OpenAI): {e}")
+                model = DEFAULT_MODEL
+        else:
+            logger.warning("Gemini tool client not available; falling back to OpenAI.")
+            model = DEFAULT_MODEL
+
+    # Route to Mistral
+    if isinstance(model, str) and model.startswith("mistral:"):
+        model_short = model.split(":", 1)[1]
+        if mistral_generate_with_tools:
+            try:
+                result = mistral_generate_with_tools(
+                    messages=messages, tools=tools, model_name=model_short,
+                    temperature=0.7, max_tokens=DEFAULT_MAX_TOKENS,
+                )
+                tc = None
+                if result.get("tool_call"):
+                    tc = ToolCall(
+                        name=result["tool_call"]["name"],
+                        arguments=result["tool_call"]["arguments"],
+                    )
+                return ToolCallResponse(content=result.get("content"), tool_call=tc)
+            except Exception as e:
+                if _is_strict_provider(gemini_only):
+                    raise
+                logger.warning(f"Mistral tool call failed (falling back to OpenAI): {e}")
+                model = DEFAULT_MODEL
+        else:
+            logger.warning("Mistral tool client not available; falling back to OpenAI.")
+            model = DEFAULT_MODEL
+
+    # Default: OpenAI with native tool calling
+    logger.info(f"[LLM TOOLS] OpenAI ({model}) - sending request with {len(tools)} tools")
+    for attempt in range(max_retries):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                max_tokens=DEFAULT_MAX_TOKENS,
+                temperature=0.7,
+            )
+            message = response.choices[0].message
+            text_content = message.content if message.content else None
+            tc = None
+            if message.tool_calls and len(message.tool_calls) > 0:
+                first_tc = message.tool_calls[0]
+                args = first_tc.function.arguments
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except Exception:
+                        args = {}
+                tc = ToolCall(name=first_tc.function.name, arguments=args)
+            return ToolCallResponse(content=text_content, tool_call=tc)
+        except Exception as e:
+            logger.error(f"Error in tool call chat (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            else:
+                raise

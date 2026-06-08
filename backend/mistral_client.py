@@ -107,6 +107,71 @@ def generate_text(
     return str(response)
 
 
+def _resolve_model(model_name: str) -> str:
+    """Resolve a model name to a concrete Mistral model id."""
+    if isinstance(model_name, str) and model_name.startswith("mistral:"):
+        model_short = model_name.split(":", 1)[1]
+    else:
+        model_short = model_name or ""
+    ms_lower = model_short.lower() if isinstance(model_short, str) else ""
+    if ms_lower in ALIASES:
+        model_short = ALIASES[ms_lower]
+    return model_short
+
+
+def generate_with_tools(
+    messages: list[dict],
+    tools: list[dict],
+    model_name: str = "mistral-small-latest",
+    temperature: float = 0.7,
+    max_tokens: int = 16000,
+) -> dict:
+    """Call Mistral chat with function calling support.
+
+    Args:
+        messages: OpenAI-style messages list.
+        tools: List of tools in OpenAI format (type: function, function: {name, description, parameters}).
+        model_name: Mistral model name.
+
+    Returns:
+        dict with keys:
+          - "content": str | None (text content if any)
+          - "tool_call": dict | None ({"name": str, "arguments": dict} if function call)
+    """
+    model_short = _resolve_model(model_name)
+    client = _get_client()
+    logger.info(f"Calling Mistral chat with tools: model={model_short}")
+
+    response = client.chat.complete(
+        model=model_short,
+        messages=messages,
+        tools=tools,
+        tool_choice="auto",
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+    if not response or not response.choices:
+        return {"content": None, "tool_call": None}
+
+    message = response.choices[0].message
+    text_content = message.content if message.content else None
+    tool_call = None
+
+    if message.tool_calls and len(message.tool_calls) > 0:
+        tc = message.tool_calls[0]
+        import json
+        args = tc.function.arguments
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                args = {}
+        tool_call = {"name": tc.function.name, "arguments": args}
+
+    return {"content": text_content, "tool_call": tool_call}
+
+
 def generate_text_stream(
     prompt: str,
     model_name: str = "mistral-small-latest",

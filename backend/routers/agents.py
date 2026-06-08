@@ -43,6 +43,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _parse_enabled_plugins(raw: str) -> str | None:
+    """Parse enabled_plugins from a JSON array string or CSV string.
+
+    Returns a JSON-encoded list string, or None if input is empty/invalid.
+    """
+    if not raw:
+        return None
+    try:
+        return json.dumps(json.loads(raw))
+    except json.JSONDecodeError:
+        return json.dumps([p.strip() for p in raw.split(",") if p.strip()])
+
+
 @router.get("/api/agent-photo/{agent_id}")
 async def get_agent_photo(agent_id: int, db: Session = Depends(get_db)):
     """Proxy endpoint to serve agent profile photos from GCS."""
@@ -206,12 +219,7 @@ async def create_agent(
             parsed_email_tags = json.dumps(parsed_email_tags) if parsed_email_tags else None
 
         # Parse enabled_plugins for actionnable agents
-        parsed_plugins = None
-        if type == "actionnable" and enabled_plugins:
-            try:
-                parsed_plugins = json.dumps(json.loads(enabled_plugins))
-            except json.JSONDecodeError:
-                parsed_plugins = json.dumps([p.strip() for p in enabled_plugins.split(",") if p.strip()])
+        parsed_plugins = _parse_enabled_plugins(enabled_plugins) if type == "actionnable" else None
 
         # Auto-calculate llm_provider from type
         effective_llm_provider = resolve_llm_provider(type)
@@ -702,13 +710,7 @@ async def update_agent(
 
         # Update enabled_plugins for actionnable agents
         if enabled_plugins is not None:
-            if agent.type == "actionnable":
-                try:
-                    agent.enabled_plugins = json.dumps(json.loads(enabled_plugins))
-                except json.JSONDecodeError:
-                    agent.enabled_plugins = json.dumps([p.strip() for p in enabled_plugins.split(",") if p.strip()])
-            else:
-                agent.enabled_plugins = None
+            agent.enabled_plugins = _parse_enabled_plugins(enabled_plugins) if agent.type == "actionnable" else None
 
         # Parser et mettre à jour les email_tags
         if email_tags is not None:
