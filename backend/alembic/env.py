@@ -54,7 +54,8 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         # Prevent hanging on table locks during startup (e.g. ALTER TABLE on busy tables)
-        connection.execute(text("SET lock_timeout = '10s'"))
+        connection.execute(text("SET lock_timeout = '5s'"))
+        connection.execute(text("SET statement_timeout = '30s'"))
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

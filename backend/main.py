@@ -341,16 +341,26 @@ app.mount("/profile_photos", StaticFiles(directory="profile_photos"), name="prof
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and run Alembic migrations on startup."""
+    import time as _time
+    t0 = _time.monotonic()
+
+    def _elapsed():
+        return f"{_time.monotonic() - t0:.1f}s"
+
     try:
         logger.info("Initializing database...")
         # Create tables for brand-new databases (Alembic needs the schema to exist)
         Base.metadata.create_all(bind=engine)
+        logger.info("create_all done (%s)", _elapsed())
         # pgvector extension must exist before Alembic migrations touch embedding columns
         ensure_pgvector()
+        logger.info("pgvector done (%s)", _elapsed())
         # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
         ensure_columns()
+        logger.info("ensure_columns done (%s)", _elapsed())
         # Add RLS bypass policies for service operations (email ingestion, etc.)
         ensure_rls_policies()
+        logger.info("ensure_rls_policies done (%s)", _elapsed())
         # Run Alembic migrations to apply any pending schema changes
         try:
             from alembic.config import Config as AlembicConfig
@@ -359,13 +369,14 @@ async def startup_event():
             alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
             alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
             alembic_command.upgrade(alembic_cfg, "head")
-            logger.info("Alembic migrations applied successfully")
+            logger.info("Alembic migrations done (%s)", _elapsed())
         except Exception as e:
-            logger.warning(f"Alembic migrations skipped (will retry next startup): {e}")
+            logger.warning("Alembic migrations skipped (%s): %s", _elapsed(), e)
         migrate_existing_company_memberships()
         migrate_existing_recaps()
         migrate_teams_to_members()
-        logger.info("Database initialization completed successfully")
+        logger.info("Data migrations done (%s)", _elapsed())
+        logger.info("Database initialization completed successfully (%s total)", _elapsed())
 
         # Validate GCS bucket is in EU (data sovereignty check)
         try:
@@ -395,8 +406,10 @@ async def startup_event():
             logger.info("Recap scheduler started")
         except Exception as e:
             logger.warning(f"Recap scheduler failed to start: {e}")
+
+        logger.info("Startup event completed (%s total)", _elapsed())
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
+        logger.error("Database initialization failed (%s): %s", _elapsed(), e)
 
 
 @app.on_event("shutdown")

@@ -863,6 +863,9 @@ def ensure_columns():
     ]
     try:
         with engine.connect() as conn:
+            # Prevent hanging on table locks during startup
+            conn.execute(text("SET lock_timeout = '5s'"))
+            conn.execute(text("SET statement_timeout = '30s'"))
             # Pre-fetch existing columns to avoid unnecessary ALTER TABLE locks
             existing = set()
             try:
