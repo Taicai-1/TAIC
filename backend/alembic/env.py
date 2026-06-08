@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 from alembic import context
 
 # Ensure the backend package is importable (alembic runs from backend/)
@@ -53,6 +53,8 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Prevent hanging on table locks during startup (e.g. ALTER TABLE on busy tables)
+        connection.execute(text("SET lock_timeout = '10s'"))
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

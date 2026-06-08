@@ -352,13 +352,16 @@ async def startup_event():
         # Add RLS bypass policies for service operations (email ingestion, etc.)
         ensure_rls_policies()
         # Run Alembic migrations to apply any pending schema changes
-        from alembic.config import Config as AlembicConfig
-        from alembic import command as alembic_command
+        try:
+            from alembic.config import Config as AlembicConfig
+            from alembic import command as alembic_command
 
-        alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-        alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
-        alembic_command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic migrations applied successfully")
+            alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+            alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
+            alembic_command.upgrade(alembic_cfg, "head")
+            logger.info("Alembic migrations applied successfully")
+        except Exception as e:
+            logger.warning(f"Alembic migrations skipped (will retry next startup): {e}")
         migrate_existing_company_memberships()
         migrate_existing_recaps()
         migrate_teams_to_members()
