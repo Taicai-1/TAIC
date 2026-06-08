@@ -5,7 +5,7 @@ import {
   ArrowLeft, Bot, MessageCircle, Check, Camera, Trash2, Plus,
   Upload, Loader2, FileText, Database, Link, Zap, Users, TrendingUp,
   LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive, Globe,
-  Pencil, Sparkles, AlertCircle, ImageIcon
+  Pencil, Sparkles, AlertCircle, ImageIcon, Calendar
 } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -62,7 +62,8 @@ export default function CompanionSettings() {
     name: "", contexte: "", biographie: "", profile_photo: null,
     type: 'conversationnel', enabled_plugins: [],
     email_tags: [], neo4j_enabled: false, neo4j_person_name: "",
-    neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "",
+    neo4j_depth: 1, date_awareness_enabled: false,
+    weekly_recap_enabled: false, weekly_recap_prompt: "",
     weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9
   });
   const [emailTagInput, setEmailTagInput] = useState("");
@@ -181,6 +182,7 @@ export default function CompanionSettings() {
         type: agent.type || 'conversationnel', enabled_plugins: parsedPlugins,
         email_tags: parsedEmailTags, neo4j_enabled: agent.neo4j_enabled || false,
         neo4j_person_name: agent.neo4j_person_name || "", neo4j_depth: agent.neo4j_depth || 1,
+        date_awareness_enabled: agent.date_awareness_enabled || false,
         weekly_recap_enabled: agent.weekly_recap_enabled || false,
         weekly_recap_prompt: agent.weekly_recap_prompt || "",
         weekly_recap_recipients: agent.weekly_recap_recipients ? JSON.parse(agent.weekly_recap_recipients) : [],
@@ -498,6 +500,7 @@ export default function CompanionSettings() {
       formData.append("neo4j_enabled", f.neo4j_enabled ? "true" : "false");
       if (f.neo4j_person_name) formData.append("neo4j_person_name", f.neo4j_person_name);
       formData.append("neo4j_depth", String(f.neo4j_depth || 1));
+      formData.append("date_awareness_enabled", f.date_awareness_enabled ? "true" : "false");
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -898,6 +901,11 @@ export default function CompanionSettings() {
                       <Database className="w-3 h-3 mr-1" /> Neo4j
                     </span>
                   )}
+                  {form.date_awareness_enabled && (
+                    <span className="inline-flex items-center px-3 py-1 bg-indigo-500 text-white text-xs font-semibold rounded-full shadow-sm">
+                      <Calendar className="w-3 h-3 mr-1" /> Date
+                    </span>
+                  )}
                   {form.weekly_recap_enabled && (
                     <span className="inline-flex items-center px-3 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full shadow-sm">
                       <Mail className="w-3 h-3 mr-1" /> Recap
@@ -1194,6 +1202,25 @@ export default function CompanionSettings() {
             )}
           </Section>
         )}
+
+        {/* Date Awareness */}
+        <Section
+          icon={Calendar}
+          title={t('agents:form.dateAwareness.label')}
+          subtitle={t('agents:form.dateAwareness.helpText')}
+          color="bg-indigo-500"
+        >
+          <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-button border border-indigo-200">
+            <span className="text-sm font-semibold text-gray-700">{t('agents:form.dateAwareness.label')}</span>
+            <button
+              type="button"
+              className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border-2 ${form.date_awareness_enabled ? 'bg-indigo-500 border-indigo-500' : 'bg-gray-200 border-gray-300'}`}
+              onClick={() => setForm(f => ({ ...f, date_awareness_enabled: !f.date_awareness_enabled }))}
+            >
+              <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.date_awareness_enabled ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
+            </button>
+          </div>
+        </Section>
 
         {/* RAG Documents */}
         <Section

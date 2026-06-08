@@ -323,6 +323,9 @@ class Agent(Base):
     recap_frequency = Column(String(20), default="weekly", nullable=False)
     recap_hour = Column(Integer, default=9, nullable=False)
 
+    # Date awareness: inject current date/time into system prompt
+    date_awareness_enabled = Column(Boolean, default=False, nullable=False)
+
     # Actionnable plugins
     enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
 

@@ -117,6 +117,10 @@
       },
       "hourLabel": "Heure d'envoi",
       "hourSuffix": "h"
+    },
+    "dateAwareness": {
+      "label": "Conscience de la date",
+      "helpText": "Le companion connaîtra la date et l'heure actuelles, utile pour les roadmaps et plannings."
     }
   },
   "slack": {

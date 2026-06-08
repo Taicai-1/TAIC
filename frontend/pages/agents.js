@@ -15,7 +15,8 @@ import {
   MessageSquarePlus,
   Send,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Calendar
 } from "lucide-react";
 import Layout from '../components/Layout';
 import AgentCard from '../components/AgentCard';
@@ -27,7 +28,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [] });
+  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, enabled_plugins: [] });
   const [emailTagInput, setEmailTagInput] = useState("");
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoPreviewError, setPhotoPreviewError] = useState(false);
@@ -535,6 +536,25 @@ export default function AgentsPage() {
                   )}
                 </div>
               )}
+              {/* Date Awareness Section */}
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-button border border-indigo-200">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700 flex items-center">
+                    <Calendar className="w-4 h-4 mr-2 text-indigo-600" />
+                    {t('agents:form.dateAwareness.label')}
+                  </label>
+                  <button
+                    type="button"
+                    className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border border-indigo-500 ${form.date_awareness_enabled ? 'bg-indigo-500' : 'bg-gray-200'}`}
+                    onClick={() => setForm(f => ({ ...f, date_awareness_enabled: !f.date_awareness_enabled }))}
+                  >
+                    <span
+                      className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.date_awareness_enabled ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`}
+                    />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">{t('agents:form.dateAwareness.helpText')}</p>
+              </div>
               {/* Weekly Recap Section */}
               <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-button border border-amber-200">
                 <div className="flex items-center justify-between mb-1">
@@ -622,6 +642,7 @@ export default function AgentsPage() {
                     formData.append("neo4j_enabled", form.neo4j_enabled ? "true" : "false");
                     if (form.neo4j_person_name) formData.append("neo4j_person_name", form.neo4j_person_name);
                     formData.append("neo4j_depth", String(form.neo4j_depth || 1));
+                    formData.append("date_awareness_enabled", form.date_awareness_enabled ? "true" : "false");
                     formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
                     if (form.weekly_recap_prompt) formData.append("weekly_recap_prompt", form.weekly_recap_prompt);
                     if (form.weekly_recap_recipients && form.weekly_recap_recipients.length > 0) {
@@ -642,6 +663,7 @@ export default function AgentsPage() {
                         neo4j_enabled: form.neo4j_enabled,
                         neo4j_person_name: form.neo4j_person_name || undefined,
                         neo4j_depth: form.neo4j_depth,
+                        date_awareness_enabled: form.date_awareness_enabled,
                         weekly_recap_enabled: form.weekly_recap_enabled,
                         weekly_recap_prompt: form.weekly_recap_prompt || undefined,
                         weekly_recap_recipients: form.weekly_recap_recipients?.length > 0 ? form.weekly_recap_recipients : undefined,

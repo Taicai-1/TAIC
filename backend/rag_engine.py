@@ -336,6 +336,16 @@ def get_answer(
             except Exception as e:
                 logger.warning(f"Neo4j context retrieval failed (continuing without): {e}")
 
+        # Date awareness: inject current date/time into agent context
+        if agent and getattr(agent, "date_awareness_enabled", False):
+            now = datetime.now()
+            _JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+            _MOIS = ["janvier", "février", "mars", "avril", "mai", "juin",
+                      "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+            date_str = f"{_JOURS[now.weekday()]} {now.day} {_MOIS[now.month - 1]} {now.year}, {now.strftime('%H:%M')}"
+            date_context = f"Date et heure actuelles : {date_str}\n\n"
+            contexte_agent = date_context + contexte_agent
+
         # Build list of available documents for context
         available_docs_list = ""
         if user_docs:
@@ -578,6 +588,16 @@ def get_answer_stream(
                             contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
             except Exception as e:
                 logger.warning(f"Neo4j context retrieval failed (continuing without): {e}")
+
+        # Date awareness: inject current date/time into agent context
+        if agent and getattr(agent, "date_awareness_enabled", False):
+            now = datetime.now()
+            _JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+            _MOIS = ["janvier", "février", "mars", "avril", "mai", "juin",
+                      "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+            date_str = f"{_JOURS[now.weekday()]} {now.day} {_MOIS[now.month - 1]} {now.year}, {now.strftime('%H:%M')}"
+            date_context = f"Date et heure actuelles : {date_str}\n\n"
+            contexte_agent = date_context + contexte_agent
 
         # Available docs list
         available_docs_list = ""

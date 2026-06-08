@@ -117,6 +117,10 @@
       },
       "hourLabel": "Send time",
       "hourSuffix": "h"
+    },
+    "dateAwareness": {
+      "label": "Date Awareness",
+      "helpText": "The companion will know the current date and time, useful for roadmaps and schedules."
     }
   },
   "slack": {
