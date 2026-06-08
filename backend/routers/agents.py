@@ -89,7 +89,7 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                 "profile_photo": a.profile_photo,
                 "llm_provider": a.llm_provider,
                 "neo4j_enabled": a.neo4j_enabled,
-                "date_awareness_enabled": a.date_awareness_enabled,
+                "date_awareness_enabled": getattr(a, "date_awareness_enabled", False),
                 "email_tags": a.email_tags,
                 "weekly_recap_enabled": a.weekly_recap_enabled,
                 "recap_frequency": a.recap_frequency,

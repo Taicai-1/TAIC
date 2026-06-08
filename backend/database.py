@@ -863,6 +863,8 @@ def ensure_columns():
         # Actionnable agents
         ("agents", "enabled_plugins", "TEXT"),
         ("action_executions", "loop_state", "TEXT"),
+        # Date awareness
+        ("agents", "date_awareness_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ]
     try:
         with engine.connect() as conn:
