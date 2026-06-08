@@ -15,10 +15,10 @@ def create_presentation(args: dict, credentials) -> ActionResult:
         pres = service.presentations().create(body={"title": title}).execute()
         pres_id = pres["presentationId"]
         # Add slides
-        for slide_data in slides_data:
+        for idx, slide_data in enumerate(slides_data):
             slide_id = str(uuid.uuid4()).replace("-", "")[:8]
             requests = [
-                {"createSlide": {"objectId": slide_id, "insertionIndex": "1",
+                {"createSlide": {"objectId": slide_id, "insertionIndex": str(idx + 1),
                                 "slideLayoutReference": {"predefinedLayout": "TITLE_AND_BODY"}}},
             ]
             service.presentations().batchUpdate(presentationId=pres_id, body={"requests": requests}).execute()
