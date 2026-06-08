@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'next-i18next';
 import toast from 'react-hot-toast';
-import { FileText, Table, Mail, Calendar, Presentation, HardDrive, Check, ExternalLink } from 'lucide-react';
+import { FileText, Table, Mail, Calendar, Presentation, HardDrive, Check, ExternalLink, AlertTriangle } from 'lucide-react';
 import api from '../lib/api';
 
 const PLUGIN_ICONS = {
@@ -53,6 +53,15 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
+  // Re-check Google status via localStorage event (cross-tab communication from OAuth popup)
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'google_oauth_done') refreshGoogleStatus();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   const togglePlugin = (pluginName) => {
     const current = enabledPlugins || [];
     const updated = current.includes(pluginName)
@@ -61,13 +70,38 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
     onChange(updated);
   };
 
-  const connectGoogle = async () => {
-    // Collect scopes from selected plugins, or ALL plugins if none selected yet
-    const selectedPlugins = (enabledPlugins || []).length > 0
-      ? plugins.filter(p => enabledPlugins.includes(p.name))
-      : plugins;
-    const allScopes = selectedPlugins.flatMap(p => p.required_scopes);
-    const uniqueScopes = [...new Set(allScopes)];
+  // Compute missing scopes for enabled plugins
+  const getMissingScopes = () => {
+    const granted = new Set(googleStatus.granted_scopes || []);
+    const needed = new Set();
+    (enabledPlugins || []).forEach(pluginName => {
+      const plugin = plugins.find(p => p.name === pluginName);
+      if (plugin) {
+        (plugin.required_scopes || []).forEach(s => {
+          if (!granted.has(s)) needed.add(s);
+        });
+      }
+    });
+    return [...needed];
+  };
+
+  const missingScopes = googleStatus.connected ? getMissingScopes() : [];
+
+  const connectGoogle = async (scopeOverrides) => {
+    // Collect scopes: use overrides if provided, otherwise all enabled/all plugins
+    let uniqueScopes;
+    if (scopeOverrides && scopeOverrides.length > 0) {
+      // When reconnecting for missing scopes, include all currently needed scopes
+      const selectedPlugins = plugins.filter(p => (enabledPlugins || []).includes(p.name));
+      const allScopes = selectedPlugins.flatMap(p => p.required_scopes);
+      uniqueScopes = [...new Set(allScopes)];
+    } else {
+      const selectedPlugins = (enabledPlugins || []).length > 0
+        ? plugins.filter(p => enabledPlugins.includes(p.name))
+        : plugins;
+      const allScopes = selectedPlugins.flatMap(p => p.required_scopes);
+      uniqueScopes = [...new Set(allScopes)];
+    }
 
     if (uniqueScopes.length === 0) return;
 
@@ -83,7 +117,7 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
       }
     } catch (e) {
       if (popup) popup.close();
-      const detail = e.response?.data?.detail || '';
+      const detail = e.response?.data?.detail || e.response?.data?.message || '';
       if (detail.includes('not configured')) {
         toast.error(t('agents:form.plugins.googleNotConfigured', 'Google OAuth is not configured on the server.'));
       } else {
@@ -103,15 +137,24 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
         <label className="text-sm font-medium text-gray-700">
           {t('agents:form.plugins.label')}
         </label>
-        {googleStatus.connected ? (
+        {googleStatus.connected && missingScopes.length === 0 ? (
           <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
             <Check className="w-3 h-3 mr-1" />
             {t('agents:form.plugins.googleConnected')}
           </span>
+        ) : googleStatus.connected && missingScopes.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => connectGoogle(missingScopes)}
+            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-amber-600 rounded-button hover:bg-amber-700 transition-colors"
+          >
+            <AlertTriangle className="w-3 h-3 mr-1" />
+            {t('agents:form.plugins.reconnectGoogle', 'Update permissions')}
+          </button>
         ) : (
           <button
             type="button"
-            onClick={connectGoogle}
+            onClick={() => connectGoogle()}
             className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-button hover:bg-blue-700 transition-colors"
           >
             <ExternalLink className="w-3 h-3 mr-1" />
@@ -126,6 +169,8 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
         {plugins.map(plugin => {
           const Icon = PLUGIN_ICONS[plugin.name] || FileText;
           const isEnabled = (enabledPlugins || []).includes(plugin.name);
+          const granted = new Set(googleStatus.granted_scopes || []);
+          const pluginMissing = isEnabled && (plugin.required_scopes || []).some(s => !granted.has(s));
 
           return (
             <button
@@ -133,7 +178,9 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
               type="button"
               onClick={() => togglePlugin(plugin.name)}
               className={`flex items-center p-3 rounded-card border-2 transition-all text-left ${
-                isEnabled
+                isEnabled && pluginMissing
+                  ? 'border-amber-400 bg-amber-50 shadow-sm'
+                  : isEnabled
                   ? 'border-primary-500 bg-primary-50 shadow-sm'
                   : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
@@ -144,9 +191,15 @@ export default function PluginSelector({ enabledPlugins, onChange }) {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-gray-900">{plugin.display_name}</div>
                 <div className="text-xs text-gray-500 truncate">{plugin.description}</div>
+                {pluginMissing && (
+                  <div className="text-xs text-amber-600 mt-0.5">{t('agents:form.plugins.scopesMissing', 'Permissions required')}</div>
+                )}
               </div>
-              {isEnabled && (
+              {isEnabled && !pluginMissing && (
                 <Check className="w-5 h-5 text-primary-600 flex-shrink-0 ml-2" />
+              )}
+              {pluginMissing && (
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 ml-2" />
               )}
             </button>
           );

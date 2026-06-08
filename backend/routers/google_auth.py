@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from sqlalchemy.orm import Session
 
@@ -84,6 +84,15 @@ async def google_callback(
         credentials = flow.credentials
 
         granted_scopes = list(credentials.scopes) if credentials.scopes else []
+        # Fallback: extract scopes from the token response if credentials.scopes is empty
+        if not granted_scopes and hasattr(flow, 'oauth2session'):
+            token_response = getattr(flow.oauth2session, 'token', {})
+            raw_scope = token_response.get('scope', '')
+            if isinstance(raw_scope, list):
+                granted_scopes = raw_scope
+            elif isinstance(raw_scope, str) and raw_scope:
+                granted_scopes = raw_scope.split()
+        print(f"[OAUTH] credentials.scopes={credentials.scopes}, granted_scopes={granted_scopes}")
 
         existing = db.query(UserGoogleToken).filter(UserGoogleToken.user_id == user_id).first()
         if existing:
@@ -107,7 +116,21 @@ async def google_callback(
         db.commit()
         logger.info(f"Stored Google OAuth token for user {user_id}, scopes={granted_scopes}")
 
-        return RedirectResponse(url=f"{FRONTEND_URL}/agents?google_connected=true")
+        # Close popup and notify main window via localStorage event
+        return HTMLResponse(content="""<!DOCTYPE html>
+<html><head><title>Connected</title><style>
+body{font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0fdf4}
+.box{text-align:center;padding:2rem;border-radius:12px;background:white;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+h2{color:#16a34a;margin:0 0 .5rem} p{color:#666;margin:0}
+</style></head><body><div class="box">
+<h2>&#10003; Connected</h2>
+<p>You can close this tab and return to the app.</p>
+</div>
+<script>
+try { localStorage.setItem('google_oauth_done', Date.now().toString()); } catch(e) {}
+try { window.close(); } catch(e) {}
+</script>
+</body></html>""")
     except Exception as e:
         logger.error(f"Google OAuth callback failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"OAuth callback error: {e}")

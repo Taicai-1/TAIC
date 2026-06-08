@@ -751,28 +751,50 @@ def ensure_pgvector():
             conn.commit()
             logger.info("pgvector extension enabled")
 
-            # Add embedding_vec column if missing
+            # Check if embedding_vec column already exists before ALTER TABLE
+            has_col = False
             try:
-                conn.execute(text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)"))
-                conn.commit()
-                logger.info("ensure_pgvector: embedding_vec column OK")
-            except Exception as e:
-                logger.warning(f"ensure_pgvector: embedding_vec column skipped: {e}")
+                row = conn.execute(text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name='document_chunks' AND column_name='embedding_vec'"
+                )).first()
+                has_col = row is not None
+            except Exception:
                 conn.rollback()
 
-            # Create HNSW index for cosine distance if it doesn't exist
+            if not has_col:
+                try:
+                    conn.execute(text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)"))
+                    conn.commit()
+                    logger.info("ensure_pgvector: embedding_vec column OK")
+                except Exception as e:
+                    logger.warning(f"ensure_pgvector: embedding_vec column skipped: {e}")
+                    conn.rollback()
+
+            # Check if HNSW index already exists before CREATE INDEX
+            has_idx = False
             try:
-                conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_chunks_embedding_vec_hnsw "
-                        "ON document_chunks USING hnsw (embedding_vec vector_cosine_ops)"
-                    )
-                )
-                conn.commit()
-                logger.info("ensure_pgvector: HNSW index OK")
-            except Exception as e:
-                logger.warning(f"ensure_pgvector: HNSW index skipped: {e}")
+                row = conn.execute(text(
+                    "SELECT 1 FROM pg_indexes "
+                    "WHERE indexname='idx_chunks_embedding_vec_hnsw'"
+                )).first()
+                has_idx = row is not None
+            except Exception:
                 conn.rollback()
+
+            if not has_idx:
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS idx_chunks_embedding_vec_hnsw "
+                            "ON document_chunks USING hnsw (embedding_vec vector_cosine_ops)"
+                        )
+                    )
+                    conn.commit()
+                    logger.info("ensure_pgvector: HNSW index OK")
+                except Exception as e:
+                    logger.warning(f"ensure_pgvector: HNSW index skipped: {e}")
+                    conn.rollback()
     except Exception as e:
         logger.error(f"ensure_pgvector failed: {e}")
 
@@ -863,14 +885,25 @@ def ensure_columns():
                 except Exception as e:
                     logger.warning(f"ensure_columns: {table}.{column} skipped: {e}")
                     conn.rollback()
-            # Make hashed_password nullable for OAuth users
+            # Make hashed_password nullable for OAuth users (skip if already nullable)
+            is_nullable = True
             try:
-                conn.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
-                conn.commit()
-                logger.info("ensure_columns: users.hashed_password DROP NOT NULL OK")
-            except Exception as e:
-                logger.warning(f"ensure_columns: hashed_password nullable skipped: {e}")
+                row = conn.execute(text(
+                    "SELECT is_nullable FROM information_schema.columns "
+                    "WHERE table_name='users' AND column_name='hashed_password'"
+                )).first()
+                is_nullable = row is not None and row[0] == 'YES'
+            except Exception:
                 conn.rollback()
+
+            if not is_nullable:
+                try:
+                    conn.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
+                    conn.commit()
+                    logger.info("ensure_columns: users.hashed_password DROP NOT NULL OK")
+                except Exception as e:
+                    logger.warning(f"ensure_columns: hashed_password nullable skipped: {e}")
+                    conn.rollback()
         logger.info("ensure_columns completed")
     except Exception as e:
         logger.error(f"ensure_columns failed: {e}")
