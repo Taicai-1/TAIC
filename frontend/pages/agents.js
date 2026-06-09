@@ -28,7 +28,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, enabled_plugins: [] });
+  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, enabled_plugins: [], welcome_message: "", closing_message: "" });
   const [emailTagInput, setEmailTagInput] = useState("");
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoPreviewError, setPhotoPreviewError] = useState(false);
@@ -258,7 +258,7 @@ export default function AgentsPage() {
         <div className="flex justify-end mb-6">
           <button
             onClick={() => {
-              setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [] });
+              setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [], welcome_message: "", closing_message: "" });
               setPhotoPreview(null);
               setSelectedTemplate(null);
               setCreationStep(templates.length > 0 ? 1 : 2);
@@ -373,6 +373,7 @@ export default function AgentsPage() {
                   <option value="recherche_live">{t('agents:types.recherche_live.name')} - {t('agents:types.recherche_live.description')}</option>
                   <option value="visuel">{t('agents:types.visuel.name')} - {t('agents:types.visuel.description')}</option>
                   <option value="actionnable">{t('agents:types.actionnable.name')} - {t('agents:types.actionnable.description')}</option>
+                  <option value="questionnaire">{t('agents:types.questionnaire.name')} - {t('agents:types.questionnaire.description')}</option>
                 </select>
               </div>
               {form.type === 'actionnable' && (
@@ -653,6 +654,10 @@ export default function AgentsPage() {
                     if (form.type === 'actionnable' && form.enabled_plugins?.length > 0) {
                       formData.append('enabled_plugins', JSON.stringify(form.enabled_plugins));
                     }
+                    if (form.type === 'questionnaire') {
+                      formData.append('welcome_message', form.welcome_message || '');
+                      formData.append('closing_message', form.closing_message || '');
+                    }
                     if (selectedTemplate) {
                       await api.post(`/api/templates/${selectedTemplate.id}/create-agent`, {
                         name: form.name,
@@ -680,7 +685,7 @@ export default function AgentsPage() {
                     toast.success(t('agents:toast.createSuccess'));
                     setShowForm(false);
                     setPhotoPreview(null);
-                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [] });
+                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [], welcome_message: "", closing_message: "" });
                     loadAgents();
                   } catch (err) {
                     toast.error(t('agents:toast.createError'));
@@ -735,7 +740,7 @@ export default function AgentsPage() {
                 <p className="text-gray-500 mb-6">{t('agents:empty.subtitle')}</p>
                 <button
                   onClick={() => {
-                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [] });
+                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [], welcome_message: "", closing_message: "" });
                     setPhotoPreview(null);
                     setSelectedTemplate(null);
                     setCreationStep(templates.length > 0 ? 1 : 2);

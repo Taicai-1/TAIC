@@ -18,6 +18,10 @@
     "actionnable": {
       "name": "Actionable",
       "description": "Execute tasks in Google Workspace"
+    },
+    "questionnaire": {
+      "name": "Questionnaire",
+      "description": "Data collection via conversational chat"
     }
   },
   "buttons": {
