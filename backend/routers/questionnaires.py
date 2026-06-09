@@ -473,3 +473,127 @@ async def export_response_pdf(
     except ImportError:
         logger.warning("weasyprint not installed, returning HTML instead of PDF")
         return FastAPIResponse(content=html, media_type="text/html")
+
+
+##### RAG Export #####
+
+
+def _build_response_markdown(agent_name: str, resp: QuestionnaireResponse, answers_data: list) -> str:
+    """Build a structured markdown document for a questionnaire response."""
+    respondent_display = f"{resp.respondent_name} ({resp.respondent_email})" if resp.respondent_name else resp.respondent_email
+    date_display = resp.completed_at.strftime("%d/%m/%Y") if resp.completed_at else "N/A"
+
+    md = f"""# Questionnaire : {agent_name}
+## Répondant : {respondent_display}
+## Date : {date_display}
+
+"""
+
+    for ans, q in answers_data:
+        answer_text = ans.answer_text or "(pas de réponse)"
+
+        # Format based on question type
+        if q.question_type == "rating":
+            answer_display = f"Note : {answer_text}"
+        elif q.question_type in ("single_choice", "multiple_choice"):
+            answer_display = answer_text
+        else:
+            answer_display = answer_text
+
+        md += f"""### {q.question_text}
+{answer_display}
+
+"""
+
+    return md
+
+
+@router.post("/api/agents/{agent_id}/responses/export")
+async def export_responses_to_rag(
+    agent_id: int, export: ExportRequest, user: dict = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Export completed questionnaire responses to a target agent's RAG knowledge base."""
+    from file_loader import chunk_text
+    from mistral_embeddings import get_embedding
+
+    agent = _get_questionnaire_agent(agent_id, user["user_id"], db)
+    company_id = agent.company_id
+
+    # Verify target agent exists and belongs to same company
+    target_agent = db.query(Agent).filter(Agent.id == export.target_agent_id).first()
+    if not target_agent:
+        raise HTTPException(status_code=404, detail="Target agent not found")
+
+    if target_agent.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Target agent does not belong to same company")
+
+    if target_agent.type not in ("conversationnel", "actionnable"):
+        raise HTTPException(status_code=400, detail="Target agent must be conversationnel or actionnable type")
+
+    # Get responses
+    responses = (
+        db.query(QuestionnaireResponse)
+        .filter(
+            QuestionnaireResponse.id.in_(export.response_ids),
+            QuestionnaireResponse.agent_id == agent_id,
+            QuestionnaireResponse.status == "completed",
+        )
+        .all()
+    )
+
+    if not responses:
+        raise HTTPException(status_code=404, detail="No completed responses found with given IDs")
+
+    exported_count = 0
+
+    for resp in responses:
+        # Get answers with questions
+        answers_data = (
+            db.query(QuestionnaireAnswer, QuestionnaireQuestion)
+            .join(QuestionnaireQuestion, QuestionnaireAnswer.question_id == QuestionnaireQuestion.id)
+            .filter(QuestionnaireAnswer.response_id == resp.id)
+            .order_by(QuestionnaireQuestion.position)
+            .all()
+        )
+
+        # Build markdown
+        markdown_content = _build_response_markdown(agent.name, resp, answers_data)
+
+        # Create document
+        doc = Document(
+            agent_id=export.target_agent_id,
+            company_id=company_id,
+            file_name=f"Questionnaire_{resp.id}_{resp.respondent_email}.md",
+            file_path=None,  # No physical file
+            document_type="rag",
+        )
+        db.add(doc)
+        db.flush()
+
+        # Chunk the markdown
+        chunks = chunk_text(markdown_content, chunk_size=512, overlap=50)
+
+        # Embed and store chunks
+        for i, chunk_text_str in enumerate(chunks):
+            try:
+                embedding = get_embedding(chunk_text_str)
+
+                chunk = DocumentChunk(
+                    document_id=doc.id,
+                    agent_id=export.target_agent_id,
+                    company_id=company_id,
+                    chunk_text=chunk_text_str,
+                    chunk_index=i,
+                    embedding=embedding,
+                )
+                db.add(chunk)
+            except Exception as e:
+                logger.error(f"Failed to embed chunk {i} for response {resp.id}: {e}")
+                # Continue with other chunks
+
+        exported_count += 1
+        logger.info(f"Exported response {resp.id} to agent {export.target_agent_id}")
+
+    db.commit()
+
+    return {"message": f"Exported {exported_count} responses to agent {export.target_agent_id}", "exported": exported_count}
