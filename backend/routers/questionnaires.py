@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response as FastAPIResponse
 from sqlalchemy.orm import Session
 from auth import verify_token
 from database import get_db, Agent, Document, DocumentChunk, QuestionnaireQuestion, QuestionnaireResponse, QuestionnaireAnswer, Company
@@ -272,3 +273,203 @@ async def invite_respondents(
         "invited": invited_count,
         "skipped": skipped_count,
     }
+
+
+##### Responses #####
+
+
+@router.get("/api/agents/{agent_id}/responses")
+async def list_responses(
+    agent_id: int,
+    status: Optional[str] = Query(None, regex="^(pending|in_progress|completed)$"),
+    user: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """List all responses for a questionnaire agent with optional status filter."""
+    _get_questionnaire_agent(agent_id, user["user_id"], db)
+
+    query = db.query(QuestionnaireResponse).filter(QuestionnaireResponse.agent_id == agent_id)
+
+    if status:
+        query = query.filter(QuestionnaireResponse.status == status)
+
+    responses = query.order_by(QuestionnaireResponse.invited_at.desc()).all()
+
+    # Calculate totals
+    total_invited = db.query(QuestionnaireResponse).filter(QuestionnaireResponse.agent_id == agent_id).count()
+    total_completed = (
+        db.query(QuestionnaireResponse)
+        .filter(QuestionnaireResponse.agent_id == agent_id, QuestionnaireResponse.status == "completed")
+        .count()
+    )
+
+    # Build response summaries
+    summaries = [
+        ResponseSummary(
+            id=r.id,
+            respondent_email=r.respondent_email,
+            respondent_name=r.respondent_name,
+            status=r.status,
+            invited_at=r.invited_at,
+            completed_at=r.completed_at,
+        )
+        for r in responses
+    ]
+
+    return {"total_invited": total_invited, "total_completed": total_completed, "responses": summaries}
+
+
+@router.get("/api/agents/{agent_id}/responses/{response_id}", response_model=ResponseDetail)
+async def get_response_detail(
+    agent_id: int, response_id: int, user: dict = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Get full details of a questionnaire response including all answers."""
+    _get_questionnaire_agent(agent_id, user["user_id"], db)
+
+    response = (
+        db.query(QuestionnaireResponse)
+        .filter(QuestionnaireResponse.id == response_id, QuestionnaireResponse.agent_id == agent_id)
+        .first()
+    )
+
+    if not response:
+        raise HTTPException(status_code=404, detail="Response not found")
+
+    # Get all answers with question details
+    answers = (
+        db.query(QuestionnaireAnswer, QuestionnaireQuestion)
+        .join(QuestionnaireQuestion, QuestionnaireAnswer.question_id == QuestionnaireQuestion.id)
+        .filter(QuestionnaireAnswer.response_id == response_id)
+        .order_by(QuestionnaireQuestion.position)
+        .all()
+    )
+
+    answer_list = [
+        AnswerOut(
+            id=ans.id,
+            question_id=ans.question_id,
+            question_text=q.question_text,
+            question_type=q.question_type,
+            answer_text=ans.answer_text,
+            answered_at=ans.answered_at,
+        )
+        for ans, q in answers
+    ]
+
+    return ResponseDetail(
+        id=response.id,
+        respondent_email=response.respondent_email,
+        respondent_name=response.respondent_name,
+        status=response.status,
+        invited_at=response.invited_at,
+        started_at=response.started_at,
+        completed_at=response.completed_at,
+        answers=answer_list,
+    )
+
+
+@router.get("/api/agents/{agent_id}/responses/{response_id}/pdf")
+async def export_response_pdf(
+    agent_id: int, response_id: int, user: dict = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Generate a PDF of a questionnaire response."""
+    agent = _get_questionnaire_agent(agent_id, user["user_id"], db)
+
+    response = (
+        db.query(QuestionnaireResponse)
+        .filter(QuestionnaireResponse.id == response_id, QuestionnaireResponse.agent_id == agent_id)
+        .first()
+    )
+
+    if not response:
+        raise HTTPException(status_code=404, detail="Response not found")
+
+    # Get all answers with question details
+    answers = (
+        db.query(QuestionnaireAnswer, QuestionnaireQuestion)
+        .join(QuestionnaireQuestion, QuestionnaireAnswer.question_id == QuestionnaireQuestion.id)
+        .filter(QuestionnaireAnswer.response_id == response_id)
+        .order_by(QuestionnaireQuestion.position)
+        .all()
+    )
+
+    # Build HTML
+    answers_html = ""
+    for ans, q in answers:
+        answer_display = ans.answer_text or "(pas de réponse)"
+        answers_html += f"""
+        <div style="margin-bottom: 24px; padding: 16px; background: #f9fafb; border-left: 4px solid #6366f1; border-radius: 4px;">
+            <div style="font-weight: 600; color: #1f2937; margin-bottom: 8px;">{q.question_text}</div>
+            <div style="color: #4b5563; font-size: 14px;">Type: {q.question_type}</div>
+            <div style="margin-top: 8px; color: #111827;">{answer_display}</div>
+        </div>
+        """
+
+    completed_date = response.completed_at.strftime("%d/%m/%Y %H:%M") if response.completed_at else "N/A"
+    respondent_name = response.respondent_name or response.respondent_email
+
+    html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Réponse Questionnaire - {agent.name}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 32px;
+            color: #1f2937;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            color: white;
+            padding: 32px;
+            border-radius: 8px;
+            margin-bottom: 32px;
+        }}
+        .header h1 {{
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+        }}
+        .info {{
+            margin-top: 16px;
+            font-size: 14px;
+            opacity: 0.95;
+        }}
+        .content {{
+            max-width: 800px;
+            margin: 0 auto;
+        }}
+    </style>
+</head>
+<body>
+    <div class="content">
+        <div class="header">
+            <h1>Questionnaire : {agent.name}</h1>
+            <div class="info">
+                <div><strong>Répondant :</strong> {respondent_name}</div>
+                <div><strong>Email :</strong> {response.respondent_email}</div>
+                <div><strong>Date de complétion :</strong> {completed_date}</div>
+            </div>
+        </div>
+        {answers_html}
+    </div>
+</body>
+</html>"""
+
+    # Try weasyprint, fallback to HTML if not available
+    try:
+        from weasyprint import HTML
+
+        pdf_bytes = HTML(string=html).write_pdf()
+        filename = f"questionnaire_{agent.name.replace(' ', '_')}_{response_id}.pdf"
+
+        return FastAPIResponse(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ImportError:
+        logger.warning("weasyprint not installed, returning HTML instead of PDF")
+        return FastAPIResponse(content=html, media_type="text/html")
