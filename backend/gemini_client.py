@@ -464,27 +464,47 @@ def _messages_to_gemini_contents(messages: list[dict]) -> list[dict]:
 
         # Handle tool result messages (after a function call)
         if role == "tool":
+            # Extract tool name from tool_call_id by looking at the preceding assistant message
+            tool_name = msg.get("name", "tool")
+            # Try to find the tool name from the preceding assistant message's tool_calls
+            if not tool_name or tool_name == "tool":
+                tc_id = msg.get("tool_call_id", "")
+                for prev in reversed(contents):
+                    if prev.get("role") == "model":
+                        for part in prev.get("parts", []):
+                            if "functionCall" in part:
+                                tool_name = part["functionCall"].get("name", "tool")
+                                break
+                        break
             contents.append({
                 "role": "user",
                 "parts": [{
                     "functionResponse": {
-                        "name": msg.get("name", "tool"),
+                        "name": tool_name,
                         "response": {"result": msg.get("content", "")},
                     }
                 }],
             })
             continue
 
-        # Handle assistant messages that contain a tool call
-        if role == "assistant" and msg.get("tool_call"):
-            tc = msg["tool_call"]
+        # Handle assistant messages that contain tool_calls (OpenAI format)
+        if role == "assistant" and msg.get("tool_calls"):
+            tc = msg["tool_calls"][0]  # take first tool call
+            func = tc.get("function", {})
             parts = []
             if msg.get("content"):
                 parts.append({"text": msg["content"]})
+            args = func.get("arguments", "{}")
+            if isinstance(args, str):
+                import json as _json
+                try:
+                    args = _json.loads(args)
+                except Exception:
+                    args = {}
             parts.append({
                 "functionCall": {
-                    "name": tc["name"],
-                    "args": tc["arguments"],
+                    "name": func.get("name", ""),
+                    "args": args,
                 }
             })
             contents.append({"role": "model", "parts": parts})

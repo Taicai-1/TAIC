@@ -668,6 +668,7 @@ class ToolCall:
     """A structured tool call returned by the LLM."""
     name: str
     arguments: dict
+    id: str = ""  # provider-assigned tool_call id (required by OpenAI for multi-turn)
 
 
 @dataclass
@@ -710,9 +711,11 @@ def get_chat_response_with_tools(
                 )
                 tc = None
                 if result.get("tool_call"):
+                    import uuid
                     tc = ToolCall(
                         name=result["tool_call"]["name"],
                         arguments=result["tool_call"]["arguments"],
+                        id=f"call_{uuid.uuid4().hex[:24]}",
                     )
                 return ToolCallResponse(content=result.get("content"), tool_call=tc)
             except Exception as e:
@@ -735,9 +738,14 @@ def get_chat_response_with_tools(
                 )
                 tc = None
                 if result.get("tool_call"):
+                    tc_id = result["tool_call"].get("id", "")
+                    if not tc_id:
+                        import uuid
+                        tc_id = f"call_{uuid.uuid4().hex[:24]}"
                     tc = ToolCall(
                         name=result["tool_call"]["name"],
                         arguments=result["tool_call"]["arguments"],
+                        id=tc_id,
                     )
                 return ToolCallResponse(content=result.get("content"), tool_call=tc)
             except Exception as e:
@@ -772,7 +780,7 @@ def get_chat_response_with_tools(
                         args = json.loads(args)
                     except Exception:
                         args = {}
-                tc = ToolCall(name=first_tc.function.name, arguments=args)
+                tc = ToolCall(name=first_tc.function.name, arguments=args, id=first_tc.id or "")
             return ToolCallResponse(content=text_content, tool_call=tc)
         except Exception as e:
             logger.error(f"Error in tool call chat (attempt {attempt + 1}/{max_retries}): {e}")

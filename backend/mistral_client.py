@@ -167,7 +167,7 @@ def generate_with_tools(
                 args = json.loads(args)
             except Exception:
                 args = {}
-        tool_call = {"name": tc.function.name, "arguments": args}
+        tool_call = {"name": tc.function.name, "arguments": args, "id": getattr(tc, "id", "") or ""}
 
     return {"content": text_content, "tool_call": tool_call}
 

@@ -308,17 +308,34 @@ def _process_iteration(
         "side_effect": tool_def.side_effect if tool_def else True,
     })
 
+    # Build OpenAI-compatible assistant + tool messages for multi-turn
+    assistant_msg = {
+        "role": "assistant",
+        "content": thought or None,
+        "tool_calls": [{
+            "id": tc.id,
+            "type": "function",
+            "function": {
+                "name": tc.name,
+                "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+            },
+        }],
+    }
+    tool_result_msg = {
+        "role": "tool",
+        "tool_call_id": tc.id,
+        "content": "",  # filled in below
+    }
+
     if tool_def and not tool_def.side_effect:
         # Read-only tool — execute immediately
         result = _execute_read_tool(tool_def.plugin_name, tc.name, tc.arguments, credentials)
         obs = _observation_from_result(result)
         steps.append({"type": "observation", "tool": tc.name, "result": obs})
 
-        # Append assistant message with the tool call, then tool result
-        assistant_msg = {"role": "assistant", "content": thought}
-        assistant_msg["tool_call"] = {"name": tc.name, "arguments": tc.arguments}
         messages.append(assistant_msg)
-        messages.append({"role": "tool", "name": tc.name, "content": obs})
+        tool_result_msg["content"] = obs
+        messages.append(tool_result_msg)
         return _IterationResult(kind="read_continue", step=step, llm_response=thought, observation=obs)
 
     # Write tool — suspend for user confirmation
@@ -337,8 +354,6 @@ def _process_iteration(
     db.add(ae)
 
     # Store assistant message with tool call for resume
-    assistant_msg = {"role": "assistant", "content": thought}
-    assistant_msg["tool_call"] = {"name": tc.name, "arguments": tc.arguments}
     messages.append(assistant_msg)
 
     state = AgentLoopState(
@@ -435,15 +450,15 @@ class AgentExecutor:
 
         messages = state.messages
         # After confirmation, add the tool result.
-        # New format: assistant msg has tool_call -> use role "tool".
-        # Old format (pre-migration): no tool_call in assistant msg -> use role "user" with Observation prefix.
-        last_tool_name = None
+        # New format: assistant msg has tool_calls array -> use role "tool" with tool_call_id.
+        # Old format (pre-migration): no tool_calls -> use role "user" with Observation prefix.
+        last_tool_call_id = None
         for msg in reversed(messages):
-            if msg.get("role") == "assistant" and msg.get("tool_call"):
-                last_tool_name = msg["tool_call"]["name"]
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                last_tool_call_id = msg["tool_calls"][0].get("id", "")
                 break
-        if last_tool_name:
-            messages.append({"role": "tool", "name": last_tool_name, "content": observation})
+        if last_tool_call_id:
+            messages.append({"role": "tool", "tool_call_id": last_tool_call_id, "content": observation})
         else:
             messages.append({"role": "user", "content": f"Observation: {observation}"})
 
