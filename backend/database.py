@@ -329,9 +329,61 @@ class Agent(Base):
     # Actionnable plugins
     enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
 
+    # Questionnaire-specific fields (only used when type='questionnaire')
+    welcome_message = Column(Text, nullable=True)
+    closing_message = Column(Text, nullable=True)
+
     # Relations
     owner = relationship("User", back_populates="agents")
     documents = relationship("Document", back_populates="agent", cascade="all, delete-orphan")
+
+
+class QuestionnaireQuestion(Base):
+    __tablename__ = "questionnaire_questions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    question_text = Column(Text, nullable=False)
+    question_type = Column(String(20), nullable=False, default="open")  # open, single_choice, multiple_choice, rating
+    options = Column(Text, nullable=True)  # JSON: ["Oui","Non"] or {"min":1,"max":5}
+    position = Column(Integer, nullable=False, default=0)
+    required = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    agent = relationship("Agent", foreign_keys=[agent_id])
+
+
+class QuestionnaireResponse(Base):
+    __tablename__ = "questionnaire_responses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    respondent_email = Column(String(255), nullable=False)
+    respondent_name = Column(String(255), nullable=True)
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="pending")  # pending, in_progress, completed
+    invited_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    agent = relationship("Agent", foreign_keys=[agent_id])
+    answers = relationship("QuestionnaireAnswer", back_populates="response", cascade="all, delete-orphan")
+
+
+class QuestionnaireAnswer(Base):
+    __tablename__ = "questionnaire_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    response_id = Column(Integer, ForeignKey("questionnaire_responses.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("questionnaire_questions.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    answer_text = Column(Text, nullable=True)  # Free text or JSON for choices
+    answered_at = Column(DateTime, default=datetime.utcnow)
+
+    response = relationship("QuestionnaireResponse", back_populates="answers")
+    question = relationship("QuestionnaireQuestion", foreign_keys=[question_id])
 
 
 class UserGoogleToken(Base):
@@ -865,6 +917,9 @@ def ensure_columns():
         ("action_executions", "loop_state", "TEXT"),
         # Date awareness
         ("agents", "date_awareness_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        # Questionnaire companion
+        ("agents", "welcome_message", "TEXT"),
+        ("agents", "closing_message", "TEXT"),
     ]
     try:
         with engine.connect() as conn:
@@ -938,6 +993,9 @@ def ensure_rls_policies():
         "weekly_recap_logs",
         "recaps",
         "recap_documents",
+        "questionnaire_questions",
+        "questionnaire_responses",
+        "questionnaire_answers",
     ]
     try:
         with engine.connect() as conn:
