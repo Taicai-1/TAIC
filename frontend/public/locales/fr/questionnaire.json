@@ -1,0 +1,68 @@
+{
+  "type": {
+    "name": "Questionnaire",
+    "description": "Collecte des réponses via un chat conversationnel"
+  },
+  "builder": {
+    "title": "Questions",
+    "addQuestion": "Ajouter une question",
+    "welcomeMessage": "Message d'accueil",
+    "welcomePlaceholder": "Ex: Enquête de satisfaction client Q2 2026",
+    "closingMessage": "Message de conclusion",
+    "closingPlaceholder": "Ex: Merci pour votre temps !",
+    "questionPlaceholder": "Tapez votre question...",
+    "questionType": "Type de question",
+    "types": {
+      "open": "Texte libre",
+      "single_choice": "Choix unique",
+      "multiple_choice": "Choix multiple",
+      "rating": "Note"
+    },
+    "optionPlaceholder": "Option {{n}}",
+    "addOption": "Ajouter une option",
+    "required": "Obligatoire",
+    "ratingMin": "Min",
+    "ratingMax": "Max",
+    "noQuestions": "Aucune question. Ajoutez votre première question."
+  },
+  "invitations": {
+    "title": "Invitations",
+    "emailPlaceholder": "email@exemple.com",
+    "namePlaceholder": "Nom (optionnel)",
+    "send": "Envoyer les invitations",
+    "addEmail": "Ajouter",
+    "sent": "{{count}} invitation(s) envoyée(s)",
+    "status": {
+      "pending": "En attente",
+      "in_progress": "En cours",
+      "completed": "Complété"
+    }
+  },
+  "responses": {
+    "title": "Réponses",
+    "counter": "{{completed}} réponses / {{total}} invitations",
+    "filterAll": "Toutes",
+    "filterCompleted": "Complétées",
+    "filterPending": "En attente",
+    "noResponses": "Aucune réponse pour le moment.",
+    "downloadPdf": "Télécharger PDF",
+    "exportToAgent": "Exporter vers un agent",
+    "selectAgent": "Choisir un agent",
+    "exportButton": "Exporter",
+    "exportSuccess": "{{count}} réponse(s) exportée(s) avec succès",
+    "backToList": "Retour à la liste"
+  },
+  "public": {
+    "startButton": "Commencer",
+    "nextButton": "Suivant",
+    "validateChoices": "Valider",
+    "completed": "Vous avez déjà répondu à ce questionnaire. Merci !",
+    "notFound": "Questionnaire introuvable.",
+    "inputPlaceholder": "Tapez votre réponse..."
+  },
+  "tabs": {
+    "questions": "Questions",
+    "invitations": "Invitations",
+    "responses": "Réponses"
+  }
+}
