@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from auth import verify_token
-from database import get_db, Agent, Document, DocumentChunk, QuestionnaireQuestion, QuestionnaireResponse, QuestionnaireAnswer
+from database import get_db, Agent, Document, DocumentChunk, QuestionnaireQuestion, QuestionnaireResponse, QuestionnaireAnswer, Company
 from helpers.tenant import _get_caller_company_id
 from schemas.questionnaires import (
     QuestionCreate,
@@ -190,3 +190,85 @@ async def reorder_questions(
 
     logger.info(f"Questions reordered for agent {agent_id}")
     return {"message": "Questions reordered"}
+
+
+##### Invitations #####
+
+
+@router.post("/api/agents/{agent_id}/invite")
+async def invite_respondents(
+    agent_id: int, invite: InviteRequest, user: dict = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Send questionnaire invitations to a list of emails."""
+    import os
+    from email_service import send_questionnaire_invitation_email
+
+    agent = _get_questionnaire_agent(agent_id, user["user_id"], db)
+
+    # Get company name
+    company = db.query(Company).filter(Company.id == agent.company_id).first()
+    company_name = company.name if company else "TAIC Companion"
+
+    # Get frontend URL from env
+    frontend_url = os.getenv("NEXT_PUBLIC_FRONTEND_URL") or os.getenv("FRONTEND_URL") or "http://localhost:3000"
+
+    invited_count = 0
+    skipped_count = 0
+
+    # Prepare names list
+    names = invite.names if invite.names else [None] * len(invite.emails)
+
+    for idx, email in enumerate(invite.emails):
+        respondent_name = names[idx] if idx < len(names) else None
+
+        # Check if already invited
+        existing = (
+            db.query(QuestionnaireResponse)
+            .filter(QuestionnaireResponse.agent_id == agent_id, QuestionnaireResponse.respondent_email == email)
+            .first()
+        )
+
+        if existing:
+            logger.info(f"Skipping already invited email: {email}")
+            skipped_count += 1
+            continue
+
+        # Generate token
+        token = secrets.token_urlsafe(48)
+
+        # Create response record
+        new_response = QuestionnaireResponse(
+            agent_id=agent_id,
+            company_id=agent.company_id,
+            respondent_email=email,
+            respondent_name=respondent_name,
+            token=token,
+            status="pending",
+        )
+
+        db.add(new_response)
+        db.flush()  # Get the ID
+
+        # Send email
+        questionnaire_url = f"{frontend_url}/questionnaire/{token}"
+        try:
+            send_questionnaire_invitation_email(
+                to_email=email,
+                questionnaire_name=agent.name,
+                company_name=company_name,
+                respondent_name=respondent_name or "",
+                questionnaire_url=questionnaire_url,
+            )
+            invited_count += 1
+            logger.info(f"Invitation sent to {email}")
+        except Exception as e:
+            logger.error(f"Failed to send invitation to {email}: {e}")
+            # Continue with other emails even if one fails
+
+    db.commit()
+
+    return {
+        "message": f"Invitations sent: {invited_count}, skipped: {skipped_count}",
+        "invited": invited_count,
+        "skipped": skipped_count,
+    }
