@@ -79,17 +79,17 @@ Entité racine autonome, plus aucun lien avec `agents`.
 ### Router admin : `backend/routers/automations.py`
 Auth : `user_id: str = Depends(verify_token)` (le pattern correct utilisé partout ailleurs — corrige le bug `user["user_id"]`). Scoping : toutes les requêtes filtrent par `company_id` de l'utilisateur (helper interne `_get_questionnaire(questionnaire_id, company_id, db)` → 404 sinon). Validation par schémas pydantic en signature d'endpoint (422 natifs, pas de `payload: dict`).
 
-- `POST /automations/questionnaires` — corps `{title, description?, questions: [{question_text, question_type, options?, position, required}]}`. Crée le questionnaire et ses questions.
-- `GET /automations/questionnaires` — liste avec compteurs agrégés (nb questions, nb invités, nb complétés) en requêtes groupées (pas de N+1).
-- `GET /automations/questionnaires/{id}` — détail avec questions ordonnées par position.
-- `PUT /automations/questionnaires/{id}` — met à jour titre/description/questions (stratégie replace : on supprime et recrée les questions ; refusé en 409 si des réponses complétées existent, pour ne pas désynchroniser réponses et questions).
-- `DELETE /automations/questionnaires/{id}` — cascade sur questions/réponses/answers.
-- `POST /automations/questionnaires/{id}/invite` — corps `{recipients: [{email, name?}]}`. Dédoublonnage en une seule requête `respondent_email.in_()`, création des tokens, envoi des emails via `BackgroundTasks` (l'endpoint répond immédiatement), `email_sent` mis à jour par la tâche de fond. Retourne invités/ignorés.
-- `POST /automations/questionnaires/{id}/responses/{response_id}/resend` — régénère l'envoi pour une invitation `pending` (corrige l'impossibilité actuelle de ré-inviter).
-- `GET /automations/questionnaires/{id}/responses?status=&limit=&offset=` — paginé (défaut 50), avec compteurs.
-- `GET /automations/questionnaires/{id}/responses/{response_id}` — détail avec answers jointes aux questions.
-- `DELETE /automations/questionnaires/{id}/responses/{response_id}` — supprime une invitation/réponse.
-- `POST /automations/questionnaires/{id}/export` — corps `{response_ids: [...], target_agent_id}`. Vérifie que l'agent cible appartient à la company et est de type `conversationnel` ou `actionnable`. Construit un markdown par réponse (titre, répondant, date, Q/R) puis appelle **`rag_engine.ingest_text_content()`** — le pipeline d'ingestion existant (Document/DocumentChunk corrects, `embedding_vec`). Corrige l'export actuellement cassé.
+- `POST /api/automations/questionnaires` — corps `{title, description?, questions: [{question_text, question_type, options?, position, required}]}`. Crée le questionnaire et ses questions.
+- `GET /api/automations/questionnaires` — liste avec compteurs agrégés (nb questions, nb invités, nb complétés) en requêtes groupées (pas de N+1).
+- `GET /api/automations/questionnaires/{id}` — détail avec questions ordonnées par position.
+- `PUT /api/automations/questionnaires/{id}` — met à jour titre/description/questions (stratégie replace : on supprime et recrée les questions ; refusé en 409 si des réponses complétées existent, pour ne pas désynchroniser réponses et questions).
+- `DELETE /api/automations/questionnaires/{id}` — cascade sur questions/réponses/answers.
+- `POST /api/automations/questionnaires/{id}/invite` — corps `{recipients: [{email, name?}]}`. Dédoublonnage en une seule requête `respondent_email.in_()`, création des tokens, envoi des emails via `BackgroundTasks` (l'endpoint répond immédiatement), `email_sent` mis à jour par la tâche de fond. Retourne invités/ignorés.
+- `POST /api/automations/questionnaires/{id}/responses/{response_id}/resend` — régénère l'envoi pour une invitation `pending` (corrige l'impossibilité actuelle de ré-inviter).
+- `GET /api/automations/questionnaires/{id}/responses?status=&limit=&offset=` — paginé (défaut 50), avec compteurs.
+- `GET /api/automations/questionnaires/{id}/responses/{response_id}` — détail avec answers jointes aux questions.
+- `DELETE /api/automations/questionnaires/{id}/responses/{response_id}` — supprime une invitation/réponse.
+- `POST /api/automations/questionnaires/{id}/export` — corps `{response_ids: [...], target_agent_id}`. Vérifie que l'agent cible appartient à la company et est de type `conversationnel` ou `actionnable`. Construit un markdown par réponse (titre, répondant, date, Q/R) puis appelle **`rag_engine.ingest_text_content()`** — le pipeline d'ingestion existant (Document/DocumentChunk corrects, `embedding_vec`). Corrige l'export actuellement cassé.
 
 Enregistrement dans `main.py` comme les autres routers.
 
