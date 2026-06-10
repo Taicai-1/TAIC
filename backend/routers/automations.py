@@ -24,6 +24,7 @@ from schemas.questionnaires import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Consumed by the export endpoint (responses can only be exported to these agent types)
 EXPORTABLE_AGENT_TYPES = ("conversationnel", "actionnable")
 
 
@@ -54,11 +55,12 @@ def _question_to_dict(question: QuestionnaireQuestion) -> dict:
     }
 
 
-def _completed_count(questionnaire_id: int, db: Session) -> int:
+def _completed_count(questionnaire_id: int, company_id: int, db: Session) -> int:
     return (
         db.query(func.count(QuestionnaireResponse.id))
         .filter(
             QuestionnaireResponse.questionnaire_id == questionnaire_id,
+            QuestionnaireResponse.company_id == company_id,
             QuestionnaireResponse.status == "completed",
         )
         .scalar()
@@ -69,7 +71,10 @@ def _completed_count(questionnaire_id: int, db: Session) -> int:
 def _questionnaire_detail(questionnaire: Questionnaire, db: Session) -> dict:
     invited = (
         db.query(func.count(QuestionnaireResponse.id))
-        .filter(QuestionnaireResponse.questionnaire_id == questionnaire.id)
+        .filter(
+            QuestionnaireResponse.questionnaire_id == questionnaire.id,
+            QuestionnaireResponse.company_id == questionnaire.company_id,
+        )
         .scalar()
         or 0
     )
@@ -81,7 +86,7 @@ def _questionnaire_detail(questionnaire: Questionnaire, db: Session) -> dict:
         "updated_at": questionnaire.updated_at.isoformat() if questionnaire.updated_at else None,
         "questions": [_question_to_dict(q) for q in questionnaire.questions],
         "invited_count": invited,
-        "completed_count": _completed_count(questionnaire.id, db),
+        "completed_count": _completed_count(questionnaire.id, questionnaire.company_id, db),
     }
 
 
@@ -109,6 +114,7 @@ def _insert_questions(questionnaire: Questionnaire, questions, db: Session) -> N
 async def list_questionnaires(
     user_id: int = Depends(verify_token), db: Session = Depends(get_db)
 ):
+    user_id = int(user_id)
     membership = require_role(user_id, db, "member")
 
     questionnaires = (
@@ -164,11 +170,12 @@ async def create_questionnaire(
     user_id: int = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
+    user_id = int(user_id)
     membership = require_role(user_id, db, "member")
 
     questionnaire = Questionnaire(
         company_id=membership.company_id,
-        user_id=int(user_id),
+        user_id=user_id,
         title=body.title.strip(),
         description=body.description,
     )
@@ -186,6 +193,7 @@ async def get_questionnaire(
     user_id: int = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
+    user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
     return {"questionnaire": _questionnaire_detail(questionnaire, db)}
@@ -198,10 +206,11 @@ async def update_questionnaire(
     user_id: int = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
+    user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
 
-    if _completed_count(questionnaire.id, db) > 0:
+    if _completed_count(questionnaire.id, questionnaire.company_id, db) > 0:
         raise HTTPException(
             status_code=409,
             detail="Des réponses ont déjà été reçues : le questionnaire n'est plus modifiable.",
@@ -212,7 +221,7 @@ async def update_questionnaire(
     questionnaire.updated_at = datetime.utcnow()
     db.query(QuestionnaireQuestion).filter(
         QuestionnaireQuestion.questionnaire_id == questionnaire.id
-    ).delete()
+    ).delete(synchronize_session=False)
     _insert_questions(questionnaire, body.questions, db)
     db.commit()
     db.refresh(questionnaire)
@@ -225,6 +234,7 @@ async def delete_questionnaire(
     user_id: int = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
+    user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
     db.delete(questionnaire)

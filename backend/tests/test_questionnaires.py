@@ -260,3 +260,10 @@ async def test_delete_questionnaire(client, member_cookies, test_questionnaire):
         f"/api/automations/questionnaires/{test_questionnaire.id}", cookies=member_cookies
     )
     assert again.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_requires_company_membership(client, auth_cookies):
+    # test_user has no CompanyMembership -> require_role returns 404
+    resp = await client.get("/api/automations/questionnaires", cookies=auth_cookies)
+    assert resp.status_code == 404
