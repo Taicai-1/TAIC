@@ -13,16 +13,12 @@ import Layout from '../components/Layout';
 import { useAuth } from '../hooks/useAuth';
 import api from '../lib/api';
 import PluginSelector from '../components/PluginSelector';
-import QuestionBuilder from '../components/questionnaire/QuestionBuilder';
-import InvitationsTab from '../components/questionnaire/InvitationsTab';
-import ResponsesTab from '../components/questionnaire/ResponsesTab';
 
 const AGENT_TYPES_CONFIG = {
   conversationnel: { key: 'conversationnel', icon: Users, color: 'bg-blue-500', gradient: 'from-blue-500 to-blue-600' },
   recherche_live: { key: 'recherche_live', icon: TrendingUp, color: 'bg-purple-500', gradient: 'from-purple-500 to-violet-600' },
   visuel: { key: 'visuel', icon: ImageIcon, color: 'bg-pink-500', gradient: 'from-pink-500 to-pink-600' },
   actionnable: { key: 'actionnable', icon: Zap, color: 'bg-amber-500', gradient: 'from-amber-500 to-amber-600' },
-  questionnaire: { key: 'questionnaire', icon: FileText, color: 'bg-indigo-500', gradient: 'from-indigo-500 to-indigo-600' }
 };
 
 // Collapsible section wrapper
@@ -52,7 +48,7 @@ function Section({ icon: Icon, title, subtitle, color, children, defaultOpen = f
 }
 
 export default function CompanionSettings() {
-  const { t } = useTranslation(['agents', 'common', 'errors', 'questionnaire']);
+  const { t } = useTranslation(['agents', 'common', 'errors']);
   const router = useRouter();
   const urlAgentId = router.query.agentId;
   const { user, loading: authLoading, authenticated, logout: authLogout } = useAuth();
@@ -69,7 +65,6 @@ export default function CompanionSettings() {
     neo4j_depth: 1, date_awareness_enabled: false,
     weekly_recap_enabled: false, weekly_recap_prompt: "",
     weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9,
-    welcome_message: "", closing_message: ""
   });
   const [emailTagInput, setEmailTagInput] = useState("");
 
@@ -151,7 +146,6 @@ export default function CompanionSettings() {
     recherche_live: { ...AGENT_TYPES_CONFIG.recherche_live, name: t('agents:types.recherche_live.name'), description: t('agents:types.recherche_live.description') },
     visuel: { ...AGENT_TYPES_CONFIG.visuel, name: t('agents:types.visuel.name'), description: t('agents:types.visuel.description') },
     actionnable: { ...AGENT_TYPES_CONFIG.actionnable, name: t('agents:types.actionnable.name'), description: t('agents:types.actionnable.description') },
-    questionnaire: { ...AGENT_TYPES_CONFIG.questionnaire, name: t('questionnaire:type.name'), description: t('questionnaire:type.description') }
   }), [t]);
 
   // --- Data loading ---
@@ -194,8 +188,6 @@ export default function CompanionSettings() {
         weekly_recap_recipients: agent.weekly_recap_recipients ? JSON.parse(agent.weekly_recap_recipients) : [],
         recap_frequency: agent.recap_frequency || "weekly",
         recap_hour: agent.recap_hour !== undefined ? agent.recap_hour : 9,
-        welcome_message: agent.welcome_message || "",
-        closing_message: agent.closing_message || "",
       });
     } catch (error) {
       toast.error(t('agents:toast.loadError'));
@@ -509,10 +501,6 @@ export default function CompanionSettings() {
       if (f.neo4j_person_name) formData.append("neo4j_person_name", f.neo4j_person_name);
       formData.append("neo4j_depth", String(f.neo4j_depth || 1));
       formData.append("date_awareness_enabled", f.date_awareness_enabled ? "true" : "false");
-      if (f.type === 'questionnaire') {
-        formData.append("welcome_message", f.welcome_message || '');
-        formData.append("closing_message", f.closing_message || '');
-      }
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -1233,45 +1221,6 @@ export default function CompanionSettings() {
             </button>
           </div>
         </Section>
-
-        {/* Questionnaire Management Sections */}
-        {form.type === 'questionnaire' && currentAgent?.id && (
-          <>
-            <Section
-              icon={FileText}
-              title={t('questionnaire:tabs.questions')}
-              subtitle={t('questionnaire:type.description')}
-              color="bg-indigo-500"
-              defaultOpen={true}
-            >
-              <QuestionBuilder
-                agentId={currentAgent.id}
-                welcomeMessage={form.welcome_message}
-                closingMessage={form.closing_message}
-                onWelcomeChange={(v) => setForm(f => ({ ...f, welcome_message: v }))}
-                onClosingChange={(v) => setForm(f => ({ ...f, closing_message: v }))}
-              />
-            </Section>
-
-            <Section
-              icon={Send}
-              title={t('questionnaire:tabs.invitations')}
-              subtitle={t('questionnaire:invitations.title')}
-              color="bg-green-500"
-            >
-              <InvitationsTab agentId={currentAgent.id} />
-            </Section>
-
-            <Section
-              icon={TrendingUp}
-              title={t('questionnaire:tabs.responses')}
-              subtitle={t('questionnaire:responses.title')}
-              color="bg-purple-500"
-            >
-              <ResponsesTab agentId={currentAgent.id} />
-            </Section>
-          </>
-        )}
 
         {/* RAG Documents */}
         <Section
@@ -2114,7 +2063,7 @@ export default function CompanionSettings() {
 export async function getServerSideProps({ locale }) {
   return {
     props: {
-      ...(await serverSideTranslations(locale, ['agents', 'common', 'errors', 'questionnaire'])),
+      ...(await serverSideTranslations(locale, ['agents', 'common', 'errors'])),
     },
   };
 }
