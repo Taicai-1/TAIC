@@ -267,3 +267,114 @@ async def test_list_requires_company_membership(client, auth_cookies):
     # test_user has no CompanyMembership -> require_role returns 404
     resp = await client.get("/api/automations/questionnaires", cookies=auth_cookies)
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoint tests — invitations
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch  # noqa: E402
+
+
+@pytest.mark.asyncio
+async def test_invite_dedupes_and_schedules_emails(client, member_cookies, db_session, test_questionnaire):
+    from database import QuestionnaireResponse
+
+    with patch("routers.automations._send_invitations") as mock_send:
+        resp = await client.post(
+            f"/api/automations/questionnaires/{test_questionnaire.id}/invite",
+            json={
+                "recipients": [
+                    {"email": "a@test.com"},
+                    {"email": "A@test.com"},  # duplicate after normalization
+                    {"email": "b@test.com", "name": "Bob"},
+                ]
+            },
+            cookies=member_cookies,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["invited"] == 2
+    assert resp.json()["skipped"] == 1
+
+    rows = (
+        db_session.query(QuestionnaireResponse)
+        .filter(QuestionnaireResponse.questionnaire_id == test_questionnaire.id)
+        .all()
+    )
+    assert len(rows) == 2
+    assert all(r.status == "pending" and r.email_sent is False and r.token for r in rows)
+    assert mock_send.called
+
+
+@pytest.mark.asyncio
+async def test_invite_skips_already_invited(client, member_cookies, db_session, test_questionnaire, test_company):
+    from tests.factories import QuestionnaireResponseFactory
+
+    existing = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id,
+        company_id=test_company.id,
+        respondent_email="deja@test.com",
+    )
+    db_session.add(existing)
+    db_session.flush()
+
+    with patch("routers.automations._send_invitations"):
+        resp = await client.post(
+            f"/api/automations/questionnaires/{test_questionnaire.id}/invite",
+            json={"recipients": [{"email": "deja@test.com"}]},
+            cookies=member_cookies,
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {"invited": 0, "skipped": 1}
+
+
+@pytest.mark.asyncio
+async def test_invite_requires_questions(client, member_cookies, db_session, test_member_user, test_company):
+    from tests.factories import QuestionnaireFactory
+
+    empty = QuestionnaireFactory.build(company_id=test_company.id, user_id=test_member_user.id)
+    db_session.add(empty)
+    db_session.flush()
+
+    resp = await client.post(
+        f"/api/automations/questionnaires/{empty.id}/invite",
+        json={"recipients": [{"email": "x@test.com"}]},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_resend_invitation(client, member_cookies, db_session, test_questionnaire, test_company):
+    from tests.factories import QuestionnaireResponseFactory
+
+    invitation = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id, company_id=test_company.id
+    )
+    db_session.add(invitation)
+    db_session.flush()
+
+    with patch("routers.automations._send_invitations") as mock_send:
+        resp = await client.post(
+            f"/api/automations/questionnaires/{test_questionnaire.id}/responses/{invitation.id}/resend",
+            cookies=member_cookies,
+        )
+    assert resp.status_code == 200
+    assert mock_send.called
+
+
+@pytest.mark.asyncio
+async def test_resend_rejected_for_completed(client, member_cookies, db_session, test_questionnaire, test_company):
+    from tests.factories import QuestionnaireResponseFactory
+
+    done = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id, company_id=test_company.id, status="completed"
+    )
+    db_session.add(done)
+    db_session.flush()
+
+    resp = await client.post(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses/{done.id}/resend",
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 409

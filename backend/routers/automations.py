@@ -2,21 +2,27 @@
 
 import json
 import logging
+import os
+import secrets
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from auth import verify_token
 from database import (
+    Company,
     Questionnaire,
     QuestionnaireQuestion,
     QuestionnaireResponse,
+    SessionLocal,
     get_db,
 )
+from email_service import send_questionnaire_invitation_email
 from permissions import require_role
 from schemas.questionnaires import (
+    InviteRequest,
     QuestionnaireCreate,
     QuestionnaireUpdate,
 )
@@ -239,4 +245,133 @@ async def delete_questionnaire(
     questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
     db.delete(questionnaire)
     db.commit()
+    return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Invitations
+# ---------------------------------------------------------------------------
+
+
+def _send_invitations(response_ids: list):
+    """Background task: send invitation emails and flag email_sent.
+
+    Failures are logged and leave email_sent=False so the invitation stays
+    visible and resendable in the UI — never blocking.
+    """
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+    db = SessionLocal()
+    try:
+        responses = (
+            db.query(QuestionnaireResponse)
+            .filter(QuestionnaireResponse.id.in_(response_ids))
+            .all()
+        )
+        for response in responses:
+            questionnaire = response.questionnaire
+            company = db.query(Company).filter(Company.id == questionnaire.company_id).first()
+            try:
+                send_questionnaire_invitation_email(
+                    to_email=response.respondent_email,
+                    questionnaire_name=questionnaire.title,
+                    company_name=company.name if company else "TAIC",
+                    respondent_name=response.respondent_name,
+                    questionnaire_url=f"{frontend_url}/questionnaire/{response.token}",
+                )
+                response.email_sent = True
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.error(
+                    "Failed to send questionnaire invitation to %s (response %s): %s",
+                    response.respondent_email,
+                    response.id,
+                    e,
+                )
+    finally:
+        db.close()
+
+
+@router.post("/api/automations/questionnaires/{questionnaire_id}/invite")
+async def invite_respondents(
+    questionnaire_id: int,
+    body: InviteRequest,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
+
+    if not questionnaire.questions:
+        raise HTTPException(status_code=400, detail="Le questionnaire n'a aucune question.")
+
+    emails = [r.email for r in body.recipients]
+    already_invited = {
+        row[0]
+        for row in db.query(QuestionnaireResponse.respondent_email)
+        .filter(
+            QuestionnaireResponse.questionnaire_id == questionnaire.id,
+            QuestionnaireResponse.respondent_email.in_(emails),
+        )
+        .all()
+    }
+
+    created = []
+    seen = set(already_invited)
+    for recipient in body.recipients:
+        if recipient.email in seen:
+            continue
+        seen.add(recipient.email)
+        response = QuestionnaireResponse(
+            questionnaire_id=questionnaire.id,
+            company_id=questionnaire.company_id,
+            respondent_email=recipient.email,
+            respondent_name=recipient.name,
+            token=secrets.token_urlsafe(32),
+            status="pending",
+            email_sent=False,
+        )
+        db.add(response)
+        created.append(response)
+
+    db.flush()
+    created_ids = [r.id for r in created]
+    db.commit()
+
+    if created_ids:
+        background_tasks.add_task(_send_invitations, created_ids)
+
+    return {"invited": len(created_ids), "skipped": len(body.recipients) - len(created_ids)}
+
+
+@router.post(
+    "/api/automations/questionnaires/{questionnaire_id}/responses/{response_id}/resend"
+)
+async def resend_invitation(
+    questionnaire_id: int,
+    response_id: int,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
+
+    response = (
+        db.query(QuestionnaireResponse)
+        .filter(
+            QuestionnaireResponse.id == response_id,
+            QuestionnaireResponse.questionnaire_id == questionnaire.id,
+        )
+        .first()
+    )
+    if not response:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    if response.status == "completed":
+        raise HTTPException(status_code=409, detail="Ce questionnaire a déjà été complété.")
+
+    background_tasks.add_task(_send_invitations, [response.id])
     return {"success": True}
