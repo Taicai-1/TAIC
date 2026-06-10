@@ -167,8 +167,6 @@ async def create_agent(
     recap_hour: str = Form("9"),
     date_awareness_enabled: str = Form("false"),
     enabled_plugins: str = Form(None),
-    welcome_message: str = Form(None),
-    closing_message: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -247,8 +245,6 @@ async def create_agent(
             recap_hour=max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9,
             date_awareness_enabled=date_awareness_enabled.lower() in ("true", "1", "yes"),
             enabled_plugins=parsed_plugins,
-            welcome_message=welcome_message if type == "questionnaire" and welcome_message else None,
-            closing_message=closing_message if type == "questionnaire" and closing_message else None,
             user_id=int(user_id),
             company_id=caller_company_id,
         )
@@ -697,8 +693,6 @@ async def update_agent(
     recap_hour: str = Form("9"),
     date_awareness_enabled: str = Form("false"),
     enabled_plugins: str = Form(None),
-    welcome_message: str = Form(None),
-    closing_message: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -713,11 +707,6 @@ async def update_agent(
         agent.statut = "privé"
         agent.type = type
         agent.llm_provider = resolve_llm_provider(type)
-        # Questionnaire fields
-        if type == "questionnaire":
-            agent.welcome_message = welcome_message or agent.welcome_message
-            agent.closing_message = closing_message or agent.closing_message
-            agent.llm_provider = "mistral"
 
         # Update enabled_plugins for actionnable agents
         if enabled_plugins is not None:
