@@ -50,3 +50,58 @@ def test_questionnaire_cascade_delete(db_session, test_questionnaire, test_compa
     assert db_session.query(QuestionnaireAnswer).filter(
         QuestionnaireAnswer.response_id == response_id
     ).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Schema unit tests (no DB required)
+# ---------------------------------------------------------------------------
+
+from pydantic import ValidationError  # noqa: E402
+
+from schemas.questionnaires import InviteRequest, QuestionInput  # noqa: E402
+
+
+class TestQuestionInputSchema:
+    def test_open_question_defaults(self):
+        q = QuestionInput(question_text="Votre avis ?")
+        assert q.question_type == "open"
+        assert q.options is None
+        assert q.required is True
+
+    def test_open_question_drops_options(self):
+        q = QuestionInput(question_text="Avis ?", question_type="open", options=["a"])
+        assert q.options is None
+
+    def test_choice_requires_options(self):
+        with pytest.raises(ValidationError):
+            QuestionInput(question_text="Choix ?", question_type="single_choice", options=None)
+
+    def test_choice_rejects_blank_options(self):
+        with pytest.raises(ValidationError):
+            QuestionInput(question_text="Choix ?", question_type="multiple_choice", options=["  "])
+
+    def test_rating_normalizes_missing_options(self):
+        q = QuestionInput(question_text="Note ?", question_type="rating", options=None)
+        assert q.options == {"min": 1, "max": 5}
+
+    def test_rating_rejects_inverted_bounds(self):
+        with pytest.raises(ValidationError):
+            QuestionInput(question_text="Note ?", question_type="rating", options={"min": 5, "max": 1})
+
+    def test_unknown_type_rejected(self):
+        with pytest.raises(ValidationError):
+            QuestionInput(question_text="?", question_type="dropdown")
+
+
+class TestInviteRequestSchema:
+    def test_invalid_email_rejected(self):
+        with pytest.raises(ValidationError):
+            InviteRequest(recipients=[{"email": "not-an-email"}])
+
+    def test_email_normalized(self):
+        req = InviteRequest(recipients=[{"email": "  Marie@Example.COM ", "name": "Marie"}])
+        assert req.recipients[0].email == "marie@example.com"
+
+    def test_empty_recipients_rejected(self):
+        with pytest.raises(ValidationError):
+            InviteRequest(recipients=[])
