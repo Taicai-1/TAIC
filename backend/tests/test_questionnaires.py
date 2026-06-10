@@ -92,6 +92,14 @@ class TestQuestionInputSchema:
         with pytest.raises(ValidationError):
             QuestionInput(question_text="?", question_type="dropdown")
 
+    def test_blank_question_text_rejected(self):
+        with pytest.raises(ValidationError):
+            QuestionInput(question_text="   ")
+
+    def test_rating_rejects_negative_bounds(self):
+        with pytest.raises(ValidationError):
+            QuestionInput(question_text="Note ?", question_type="rating", options={"min": -5, "max": -1})
+
 
 class TestInviteRequestSchema:
     def test_invalid_email_rejected(self):
@@ -105,3 +113,11 @@ class TestInviteRequestSchema:
     def test_empty_recipients_rejected(self):
         with pytest.raises(ValidationError):
             InviteRequest(recipients=[])
+
+
+class TestQuestionnaireUpdateSchema:
+    def test_blank_title_rejected(self):
+        from schemas.questionnaires import QuestionnaireUpdate
+
+        with pytest.raises(ValidationError):
+            QuestionnaireUpdate(title="", questions=[])

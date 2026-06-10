@@ -20,9 +20,21 @@ class QuestionInput(BaseModel):
     position: int = 0
     required: bool = True
 
+    @field_validator("question_text")
+    @classmethod
+    def validate_question_text(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("question_text cannot be blank")
+        return v
+
     @field_validator("options")
     @classmethod
     def validate_options(cls, v, info):
+        # NOTE: 'question_type' must be declared before 'options' in this model
+        # so that info.data contains a validated question_type when this runs.
+        # If question_type failed validation, info.data.get returns 'open' and
+        # this validator acts as a no-op (the type error is already reported).
         qtype = info.data.get("question_type", "open")
         if qtype in ("single_choice", "multiple_choice"):
             if (
@@ -39,6 +51,8 @@ class QuestionInput(BaseModel):
                 bounds = {"min": int(v.get("min", 1)), "max": int(v.get("max", 5))}
             except (TypeError, ValueError):
                 raise ValueError("rating bounds must be integers")
+            if bounds["min"] < 0:
+                raise ValueError("rating min cannot be negative")
             if bounds["min"] >= bounds["max"]:
                 raise ValueError("rating min must be lower than max")
             return bounds
