@@ -18,6 +18,10 @@ from database import (
     TeamMember,
     ActionExecution,
     UserGoogleToken,
+    Questionnaire,
+    QuestionnaireQuestion,
+    QuestionnaireResponse,
+    QuestionnaireAnswer,
 )
 from auth import hash_password
 
@@ -153,3 +157,39 @@ class UserGoogleTokenFactory(factory.Factory):
     _refresh_token = "test-refresh-token"
     token_expiry = factory.LazyFunction(lambda: __import__("datetime").datetime.utcnow() + __import__("datetime").timedelta(hours=1))
     granted_scopes = '["https://www.googleapis.com/auth/documents"]'
+
+
+class QuestionnaireFactory(factory.Factory):
+    class Meta:
+        model = Questionnaire
+
+    title = factory.Sequence(lambda n: f"questionnaire-{n}")
+    description = "Questionnaire de test"
+
+
+class QuestionnaireQuestionFactory(factory.Factory):
+    class Meta:
+        model = QuestionnaireQuestion
+
+    question_text = "Quelle est votre couleur préférée ?"
+    question_type = "open"
+    options = None
+    position = 0
+    required = True
+
+
+class QuestionnaireResponseFactory(factory.Factory):
+    class Meta:
+        model = QuestionnaireResponse
+
+    respondent_email = factory.Sequence(lambda n: f"respondent{n}@test.com")
+    token = factory.LazyFunction(lambda: __import__("secrets").token_urlsafe(32))
+    status = "pending"
+    email_sent = False
+
+
+class QuestionnaireAnswerFactory(factory.Factory):
+    class Meta:
+        model = QuestionnaireAnswer
+
+    answer_text = "Bleu"

@@ -247,6 +247,34 @@ def member_cookies(test_member_token):
 
 
 @pytest.fixture
+def test_questionnaire(db_session, test_member_user, test_company):
+    """Create a questionnaire with 2 questions (open + single_choice) in test_company."""
+    from tests.factories import QuestionnaireFactory, QuestionnaireQuestionFactory
+
+    questionnaire = QuestionnaireFactory.build(
+        company_id=test_company.id, user_id=test_member_user.id
+    )
+    db_session.add(questionnaire)
+    db_session.flush()
+
+    q1 = QuestionnaireQuestionFactory.build(
+        questionnaire_id=questionnaire.id, company_id=test_company.id, position=0
+    )
+    q2 = QuestionnaireQuestionFactory.build(
+        questionnaire_id=questionnaire.id,
+        company_id=test_company.id,
+        position=1,
+        question_text="Êtes-vous satisfait ?",
+        question_type="single_choice",
+        options='["Oui", "Non"]',
+    )
+    db_session.add(q1)
+    db_session.add(q2)
+    db_session.flush()
+    return questionnaire
+
+
+@pytest.fixture
 def test_team(db_session, test_user):
     """Create a test team owned by test_user with a leader agent."""
     from tests.factories import AgentFactory, TeamFactory, TeamMemberFactory

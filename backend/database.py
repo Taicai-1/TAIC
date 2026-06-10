@@ -334,6 +334,86 @@ class Agent(Base):
     documents = relationship("Document", back_populates="agent", cascade="all, delete-orphan")
 
 
+class Questionnaire(Base):
+    __tablename__ = "questionnaires"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # créateur
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    questions = relationship(
+        "QuestionnaireQuestion",
+        back_populates="questionnaire",
+        cascade="all, delete-orphan",
+        order_by="QuestionnaireQuestion.position",
+    )
+    responses = relationship(
+        "QuestionnaireResponse", back_populates="questionnaire", cascade="all, delete-orphan"
+    )
+
+
+class QuestionnaireQuestion(Base):
+    __tablename__ = "questionnaire_questions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    questionnaire_id = Column(
+        Integer, ForeignKey("questionnaires.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    question_text = Column(Text, nullable=False)
+    question_type = Column(String(20), nullable=False, default="open")  # open, single_choice, multiple_choice, rating
+    options = Column(Text, nullable=True)  # JSON: ["Oui","Non"] ou {"min":1,"max":5}
+    position = Column(Integer, nullable=False, default=0)
+    required = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    questionnaire = relationship("Questionnaire", back_populates="questions")
+
+
+class QuestionnaireResponse(Base):
+    __tablename__ = "questionnaire_responses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    questionnaire_id = Column(
+        Integer, ForeignKey("questionnaires.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    respondent_email = Column(String(255), nullable=False)
+    respondent_name = Column(String(255), nullable=True)
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="pending")  # pending, completed
+    email_sent = Column(Boolean, default=False, nullable=False)
+    invited_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    questionnaire = relationship("Questionnaire", back_populates="responses")
+    answers = relationship(
+        "QuestionnaireAnswer", back_populates="response", cascade="all, delete-orphan"
+    )
+
+
+class QuestionnaireAnswer(Base):
+    __tablename__ = "questionnaire_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    response_id = Column(
+        Integer, ForeignKey("questionnaire_responses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    question_id = Column(
+        Integer, ForeignKey("questionnaire_questions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    answer_text = Column(Text, nullable=True)  # texte libre, JSON array pour multiple_choice, note en texte pour rating
+    answered_at = Column(DateTime, default=datetime.utcnow)
+
+    response = relationship("QuestionnaireResponse", back_populates="answers")
+    question = relationship("QuestionnaireQuestion", foreign_keys=[question_id])
+
+
 class UserGoogleToken(Base):
     __tablename__ = "user_google_tokens"
 
@@ -938,6 +1018,7 @@ def ensure_rls_policies():
         "weekly_recap_logs",
         "recaps",
         "recap_documents",
+        "questionnaires",
         "questionnaire_questions",
         "questionnaire_responses",
         "questionnaire_answers",
