@@ -1018,6 +1018,8 @@ def ensure_rls_policies():
         "weekly_recap_logs",
         "recaps",
         "recap_documents",
+        # Questionnaire tables: policies are created but RLS is intentionally NOT
+        # enabled on them — public token endpoints run without a tenant session var.
         "questionnaires",
         "questionnaire_questions",
         "questionnaire_responses",
