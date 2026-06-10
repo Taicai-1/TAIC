@@ -121,3 +121,142 @@ class TestQuestionnaireUpdateSchema:
 
         with pytest.raises(ValidationError):
             QuestionnaireUpdate(title="", questions=[])
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoint tests — CRUD
+# ---------------------------------------------------------------------------
+
+CREATE_PAYLOAD = {
+    "title": "Enquête satisfaction",
+    "description": "Donnez-nous votre avis",
+    "questions": [
+        {"question_text": "Votre avis général ?", "question_type": "open", "position": 0, "required": True},
+        {
+            "question_text": "Recommanderiez-vous ?",
+            "question_type": "single_choice",
+            "options": ["Oui", "Non"],
+            "position": 1,
+            "required": True,
+        },
+        {
+            "question_text": "Note globale ?",
+            "question_type": "rating",
+            "options": {"min": 1, "max": 5},
+            "position": 2,
+            "required": False,
+        },
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_create_and_get_questionnaire(client, member_cookies):
+    resp = await client.post(
+        "/api/automations/questionnaires", json=CREATE_PAYLOAD, cookies=member_cookies
+    )
+    assert resp.status_code == 200
+    data = resp.json()["questionnaire"]
+    assert data["title"] == "Enquête satisfaction"
+    assert len(data["questions"]) == 3
+    assert data["questions"][1]["options"] == ["Oui", "Non"]
+    assert data["questions"][2]["options"] == {"min": 1, "max": 5}
+
+    detail = await client.get(
+        f"/api/automations/questionnaires/{data['id']}", cookies=member_cookies
+    )
+    assert detail.status_code == 200
+    assert len(detail.json()["questionnaire"]["questions"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_create_questionnaire_validation_422(client, member_cookies):
+    resp = await client.post(
+        "/api/automations/questionnaires",
+        json={"title": "", "questions": []},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_list_questionnaires_with_counts(client, member_cookies, test_questionnaire):
+    resp = await client.get("/api/automations/questionnaires", cookies=member_cookies)
+    assert resp.status_code == 200
+    items = resp.json()["questionnaires"]
+    assert len(items) == 1
+    assert items[0]["question_count"] == 2
+    assert items[0]["invited_count"] == 0
+    assert items[0]["completed_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_questionnaire_cross_company_404(client, member_cookies, db_session):
+    from tests.factories import CompanyFactory, QuestionnaireFactory, UserFactory
+
+    other_company = CompanyFactory.build()
+    db_session.add(other_company)
+    db_session.flush()
+    other_user = UserFactory.build(company_id=other_company.id)
+    db_session.add(other_user)
+    db_session.flush()
+    foreign = QuestionnaireFactory.build(company_id=other_company.id, user_id=other_user.id)
+    db_session.add(foreign)
+    db_session.flush()
+
+    resp = await client.get(
+        f"/api/automations/questionnaires/{foreign.id}", cookies=member_cookies
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_replaces_questions(client, member_cookies, test_questionnaire):
+    payload = {
+        "title": "Titre modifié",
+        "description": None,
+        "questions": [
+            {"question_text": "Nouvelle question unique ?", "question_type": "open", "position": 0, "required": True}
+        ],
+    }
+    resp = await client.put(
+        f"/api/automations/questionnaires/{test_questionnaire.id}",
+        json=payload,
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 200
+    data = resp.json()["questionnaire"]
+    assert data["title"] == "Titre modifié"
+    assert len(data["questions"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_blocked_when_completed_responses(
+    client, member_cookies, db_session, test_questionnaire, test_company
+):
+    from tests.factories import QuestionnaireResponseFactory
+
+    done = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id, company_id=test_company.id, status="completed"
+    )
+    db_session.add(done)
+    db_session.flush()
+
+    resp = await client.put(
+        f"/api/automations/questionnaires/{test_questionnaire.id}",
+        json={"title": "X", "questions": []},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_questionnaire(client, member_cookies, test_questionnaire):
+    resp = await client.delete(
+        f"/api/automations/questionnaires/{test_questionnaire.id}", cookies=member_cookies
+    )
+    assert resp.status_code == 200
+    again = await client.get(
+        f"/api/automations/questionnaires/{test_questionnaire.id}", cookies=member_cookies
+    )
+    assert again.status_code == 404
