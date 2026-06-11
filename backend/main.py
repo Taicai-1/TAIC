@@ -372,7 +372,9 @@ async def startup_event():
             alembic_command.upgrade(alembic_cfg, "head")
             logger.info("Alembic migrations done (%s)", _elapsed())
         except Exception as e:
-            logger.warning("Alembic migrations skipped (%s): %s", _elapsed(), e)
+            # A failed migration blocks every later revision: the schema silently
+            # drifts from the models. Log loudly so it never goes unnoticed again.
+            logger.error("ALEMBIC MIGRATION FAILED (%s) — schema may be outdated: %s", _elapsed(), e, exc_info=True)
         migrate_existing_company_memberships()
         migrate_existing_recaps()
         migrate_teams_to_members()

@@ -17,22 +17,34 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # create_all()/ensure_columns() run before Alembic at startup, so every
+    # object here may already exist — guard each one to keep the chain unblocked.
+    inspector = sa.inspect(op.get_bind())
+
     # Add enabled_plugins to agents
-    op.add_column("agents", sa.Column("enabled_plugins", sa.Text(), nullable=True))
+    agent_columns = {c["name"] for c in inspector.get_columns("agents")}
+    if "enabled_plugins" not in agent_columns:
+        op.add_column("agents", sa.Column("enabled_plugins", sa.Text(), nullable=True))
 
     # Create user_google_tokens table
-    op.create_table(
-        "user_google_tokens",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True),
-        sa.Column("access_token", sa.Text(), nullable=False),
-        sa.Column("refresh_token", sa.Text(), nullable=False),
-        sa.Column("token_expiry", sa.DateTime(), nullable=False),
-        sa.Column("granted_scopes", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now()),
-    )
-    op.create_index("ix_user_google_tokens_user_id", "user_google_tokens", ["user_id"], unique=True)
+    if not inspector.has_table("user_google_tokens"):
+        op.create_table(
+            "user_google_tokens",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column(
+                "user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
+            ),
+            sa.Column("access_token", sa.Text(), nullable=False),
+            sa.Column("refresh_token", sa.Text(), nullable=False),
+            sa.Column("token_expiry", sa.DateTime(), nullable=False),
+            sa.Column("granted_scopes", sa.Text(), nullable=False),
+            sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
+            sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now()),
+        )
+        op.create_index("ix_user_google_tokens_user_id", "user_google_tokens", ["user_id"], unique=True)
+
+    if inspector.has_table("action_executions"):
+        return
 
     # Create action_executions table
     op.create_table(
