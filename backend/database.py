@@ -376,6 +376,9 @@ class QuestionnaireQuestion(Base):
 
 class QuestionnaireResponse(Base):
     __tablename__ = "questionnaire_responses"
+    __table_args__ = (
+        UniqueConstraint("questionnaire_id", "respondent_email", name="uq_response_questionnaire_email"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     questionnaire_id = Column(

@@ -82,6 +82,7 @@ def upgrade() -> None:
             sa.Column("email_sent", sa.Boolean(), nullable=False, server_default=sa.text("false")),
             sa.Column("invited_at", sa.DateTime(), nullable=True),
             sa.Column("completed_at", sa.DateTime(), nullable=True),
+            sa.UniqueConstraint("questionnaire_id", "respondent_email", name="uq_response_questionnaire_email"),
         )
 
     if not inspector.has_table("questionnaire_answers"):
@@ -106,6 +107,19 @@ def upgrade() -> None:
             sa.Column("answer_text", sa.Text(), nullable=True),
             sa.Column("answered_at", sa.DateTime(), nullable=True),
         )
+
+    # Ensure the dedupe constraint exists even when create_all() built the table
+    # from an older model definition.
+    conn.execute(
+        sa.text(
+            "DO $$ BEGIN "
+            "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_response_questionnaire_email') THEN "
+            "ALTER TABLE questionnaire_responses ADD CONSTRAINT uq_response_questionnaire_email "
+            "UNIQUE (questionnaire_id, respondent_email); "
+            "END IF; "
+            "END $$"
+        )
+    )
 
 
 def downgrade() -> None:

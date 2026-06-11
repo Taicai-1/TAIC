@@ -304,6 +304,7 @@ async def test_invite_dedupes_and_schedules_emails(client, member_cookies, db_se
     assert len(rows) == 2
     assert all(r.status == "pending" and r.email_sent is False and r.token for r in rows)
     assert mock_send.called
+    assert sorted(mock_send.call_args[0][0]) == sorted([r.id for r in rows])
 
 
 @pytest.mark.asyncio
@@ -318,7 +319,7 @@ async def test_invite_skips_already_invited(client, member_cookies, db_session, 
     db_session.add(existing)
     db_session.flush()
 
-    with patch("routers.automations._send_invitations"):
+    with patch("routers.automations._send_invitations") as mock_send:
         resp = await client.post(
             f"/api/automations/questionnaires/{test_questionnaire.id}/invite",
             json={"recipients": [{"email": "deja@test.com"}]},
@@ -326,6 +327,7 @@ async def test_invite_skips_already_invited(client, member_cookies, db_session, 
         )
     assert resp.status_code == 200
     assert resp.json() == {"invited": 0, "skipped": 1}
+    assert not mock_send.called
 
 
 @pytest.mark.asyncio
@@ -361,6 +363,7 @@ async def test_resend_invitation(client, member_cookies, db_session, test_questi
         )
     assert resp.status_code == 200
     assert mock_send.called
+    assert mock_send.call_args[0][0] == [invitation.id]
 
 
 @pytest.mark.asyncio
@@ -378,3 +381,25 @@ async def test_resend_rejected_for_completed(client, member_cookies, db_session,
         cookies=member_cookies,
     )
     assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_resend_404_for_foreign_questionnaire_response(
+    client, member_cookies, db_session, test_questionnaire, test_member_user, test_company
+):
+    from tests.factories import QuestionnaireFactory, QuestionnaireResponseFactory
+
+    other = QuestionnaireFactory.build(company_id=test_company.id, user_id=test_member_user.id)
+    db_session.add(other)
+    db_session.flush()
+    response = QuestionnaireResponseFactory.build(
+        questionnaire_id=other.id, company_id=test_company.id
+    )
+    db_session.add(response)
+    db_session.flush()
+
+    resp = await client.post(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses/{response.id}/resend",
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 404

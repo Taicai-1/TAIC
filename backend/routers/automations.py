@@ -8,7 +8,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
 
 from auth import verify_token
 from database import (
@@ -258,23 +259,32 @@ def _send_invitations(response_ids: list):
 
     Failures are logged and leave email_sent=False so the invitation stays
     visible and resendable in the UI — never blocking.
+
+    Runs in a worker thread with the scheduling request's context; the
+    questionnaire tables have no RLS so app.company_id is inert here.
     """
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
     db = SessionLocal()
     try:
         responses = (
             db.query(QuestionnaireResponse)
+            .options(joinedload(QuestionnaireResponse.questionnaire))
             .filter(QuestionnaireResponse.id.in_(response_ids))
             .all()
         )
+        if not responses:
+            return
+        # All response_ids in one call always belong to one questionnaire
+        # (invite and resend both guarantee it) — fetch company once.
+        questionnaire = responses[0].questionnaire
+        company = db.query(Company).filter(Company.id == questionnaire.company_id).first()
+        company_name = company.name if company else "TAIC"
         for response in responses:
-            questionnaire = response.questionnaire
-            company = db.query(Company).filter(Company.id == questionnaire.company_id).first()
             try:
                 send_questionnaire_invitation_email(
                     to_email=response.respondent_email,
-                    questionnaire_name=questionnaire.title,
-                    company_name=company.name if company else "TAIC",
+                    questionnaire_name=response.questionnaire.title,
+                    company_name=company_name,
                     respondent_name=response.respondent_name,
                     questionnaire_url=f"{frontend_url}/questionnaire/{response.token}",
                 )
@@ -338,7 +348,14 @@ async def invite_respondents(
 
     db.flush()
     created_ids = [r.id for r in created]
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Invitation déjà envoyée pour une de ces adresses (requête concurrente).",
+        )
 
     if created_ids:
         background_tasks.add_task(_send_invitations, created_ids)
