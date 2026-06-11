@@ -653,3 +653,113 @@ async def test_export_reports_partial_failure(
     assert resp.json()["exported"] == 1
     assert len(resp.json()["failed_response_ids"]) == 1
     assert mock_ingest.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Public endpoint tests (token-based, no auth)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def test_invitation(db_session, test_questionnaire, test_company):
+    from tests.factories import QuestionnaireResponseFactory
+
+    invitation = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id, company_id=test_company.id
+    )
+    db_session.add(invitation)
+    db_session.flush()
+    return invitation
+
+
+@pytest.fixture(autouse=True)
+def _no_rate_limit():
+    with patch("routers.public._check_rate_limit", return_value=True):
+        yield
+
+
+@pytest.mark.asyncio
+async def test_public_get_questionnaire(client, test_invitation, test_questionnaire):
+    resp = await client.get(f"/questionnaire/{test_invitation.token}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["completed"] is False
+    assert data["title"] == test_questionnaire.title
+    assert len(data["questions"]) == 2
+    assert data["questions"][1]["options"] == ["Oui", "Non"]
+    # no internal data leaks
+    assert "company_id" not in data
+    assert "respondent_email" not in data
+
+
+@pytest.mark.asyncio
+async def test_public_get_unknown_token_404(client):
+    resp = await client.get("/questionnaire/does-not-exist")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_public_submit_success_then_conflict(client, db_session, test_invitation, test_questionnaire):
+    q_open, q_choice = test_questionnaire.questions
+    payload = {
+        "respondent_name": "Marie",
+        "answers": [
+            {"question_id": q_open.id, "value": "Très bien"},
+            {"question_id": q_choice.id, "value": "Oui"},
+        ],
+    }
+    resp = await client.post(f"/questionnaire/{test_invitation.token}/submit", json=payload)
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    db_session.refresh(test_invitation)
+    assert test_invitation.status == "completed"
+    assert test_invitation.respondent_name == "Marie"
+    assert len(test_invitation.answers) == 2
+
+    again = await client.get(f"/questionnaire/{test_invitation.token}")
+    assert again.json()["completed"] is True
+
+    resubmit = await client.post(f"/questionnaire/{test_invitation.token}/submit", json=payload)
+    assert resubmit.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_public_submit_missing_required_422(client, test_invitation, test_questionnaire):
+    q_open = test_questionnaire.questions[0]
+    resp = await client.post(
+        f"/questionnaire/{test_invitation.token}/submit",
+        json={"answers": [{"question_id": q_open.id, "value": "Seule réponse"}]},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_public_submit_invalid_choice_422(client, test_invitation, test_questionnaire):
+    q_open, q_choice = test_questionnaire.questions
+    resp = await client.post(
+        f"/questionnaire/{test_invitation.token}/submit",
+        json={
+            "answers": [
+                {"question_id": q_open.id, "value": "ok"},
+                {"question_id": q_choice.id, "value": "Peut-être"},
+            ]
+        },
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_public_submit_unknown_question_422(client, test_invitation, test_questionnaire):
+    q_open, q_choice = test_questionnaire.questions
+    resp = await client.post(
+        f"/questionnaire/{test_invitation.token}/submit",
+        json={
+            "answers": [
+                {"question_id": q_open.id, "value": "ok"},
+                {"question_id": q_choice.id, "value": "Oui"},
+                {"question_id": 999999, "value": "x"},
+            ]
+        },
+    )
+    assert resp.status_code == 422
