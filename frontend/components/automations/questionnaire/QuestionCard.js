@@ -90,8 +90,9 @@ export default function QuestionCard({ question, index, onChange, onDelete, disa
             </select>
 
             <button
+              disabled={disabled}
               onClick={() => !disabled && updateField('required', !question.required)}
-              className="ml-auto flex items-center gap-1.5 text-sm text-gray-600"
+              className="ml-auto flex items-center gap-1.5 text-sm text-gray-600 disabled:opacity-50"
             >
               {question.required ? (
                 <ToggleRight className="w-5 h-5 text-primary-600" />
