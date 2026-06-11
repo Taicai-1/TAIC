@@ -422,10 +422,15 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
         role = None
         if db_user.company_id:
             from database import CompanyMembership
-            membership = db.query(CompanyMembership).filter(
-                CompanyMembership.user_id == db_user.id,
-                CompanyMembership.company_id == db_user.company_id,
-            ).first()
+
+            membership = (
+                db.query(CompanyMembership)
+                .filter(
+                    CompanyMembership.user_id == db_user.id,
+                    CompanyMembership.company_id == db_user.company_id,
+                )
+                .first()
+            )
             if membership:
                 role = membership.role
 

@@ -351,18 +351,14 @@ class Questionnaire(Base):
         cascade="all, delete-orphan",
         order_by="QuestionnaireQuestion.position",
     )
-    responses = relationship(
-        "QuestionnaireResponse", back_populates="questionnaire", cascade="all, delete-orphan"
-    )
+    responses = relationship("QuestionnaireResponse", back_populates="questionnaire", cascade="all, delete-orphan")
 
 
 class QuestionnaireQuestion(Base):
     __tablename__ = "questionnaire_questions"
 
     id = Column(Integer, primary_key=True, index=True)
-    questionnaire_id = Column(
-        Integer, ForeignKey("questionnaires.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    questionnaire_id = Column(Integer, ForeignKey("questionnaires.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
     question_text = Column(Text, nullable=False)
     question_type = Column(String(20), nullable=False, default="open")  # open, single_choice, multiple_choice, rating
@@ -376,14 +372,10 @@ class QuestionnaireQuestion(Base):
 
 class QuestionnaireResponse(Base):
     __tablename__ = "questionnaire_responses"
-    __table_args__ = (
-        UniqueConstraint("questionnaire_id", "respondent_email", name="uq_response_questionnaire_email"),
-    )
+    __table_args__ = (UniqueConstraint("questionnaire_id", "respondent_email", name="uq_response_questionnaire_email"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    questionnaire_id = Column(
-        Integer, ForeignKey("questionnaires.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    questionnaire_id = Column(Integer, ForeignKey("questionnaires.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
     respondent_email = Column(String(255), nullable=False)
     respondent_name = Column(String(255), nullable=True)
@@ -394,9 +386,7 @@ class QuestionnaireResponse(Base):
     completed_at = Column(DateTime, nullable=True)
 
     questionnaire = relationship("Questionnaire", back_populates="responses")
-    answers = relationship(
-        "QuestionnaireAnswer", back_populates="response", cascade="all, delete-orphan"
-    )
+    answers = relationship("QuestionnaireAnswer", back_populates="response", cascade="all, delete-orphan")
 
 
 class QuestionnaireAnswer(Base):
@@ -434,21 +424,25 @@ class UserGoogleToken(Base):
     @property
     def access_token(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._access_token)
 
     @access_token.setter
     def access_token(self, value):
         from encryption import encrypt_value
+
         self._access_token = encrypt_value(value)
 
     @property
     def refresh_token(self):
         from encryption import decrypt_value
+
         return decrypt_value(self._refresh_token)
 
     @refresh_token.setter
     def refresh_token(self, value):
         from encryption import encrypt_value
+
         self._refresh_token = encrypt_value(value)
 
 
@@ -840,17 +834,21 @@ def ensure_pgvector():
             # Check if embedding_vec column already exists before ALTER TABLE
             has_col = False
             try:
-                row = conn.execute(text(
-                    "SELECT 1 FROM information_schema.columns "
-                    "WHERE table_name='document_chunks' AND column_name='embedding_vec'"
-                )).first()
+                row = conn.execute(
+                    text(
+                        "SELECT 1 FROM information_schema.columns "
+                        "WHERE table_name='document_chunks' AND column_name='embedding_vec'"
+                    )
+                ).first()
                 has_col = row is not None
             except Exception:
                 conn.rollback()
 
             if not has_col:
                 try:
-                    conn.execute(text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)"))
+                    conn.execute(
+                        text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)")
+                    )
                     conn.commit()
                     logger.info("ensure_pgvector: embedding_vec column OK")
                 except Exception as e:
@@ -860,10 +858,9 @@ def ensure_pgvector():
             # Check if HNSW index already exists before CREATE INDEX
             has_idx = False
             try:
-                row = conn.execute(text(
-                    "SELECT 1 FROM pg_indexes "
-                    "WHERE indexname='idx_chunks_embedding_vec_hnsw'"
-                )).first()
+                row = conn.execute(
+                    text("SELECT 1 FROM pg_indexes WHERE indexname='idx_chunks_embedding_vec_hnsw'")
+                ).first()
                 has_idx = row is not None
             except Exception:
                 conn.rollback()
@@ -957,10 +954,9 @@ def ensure_columns():
             # Pre-fetch existing columns to avoid unnecessary ALTER TABLE locks
             existing = set()
             try:
-                rows = conn.execute(text(
-                    "SELECT table_name, column_name FROM information_schema.columns "
-                    "WHERE table_schema = 'public'"
-                )).fetchall()
+                rows = conn.execute(
+                    text("SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'")
+                ).fetchall()
                 existing = {(r[0], r[1]) for r in rows}
             except Exception:
                 pass  # Fall back to ALTER TABLE IF NOT EXISTS
@@ -979,11 +975,13 @@ def ensure_columns():
             # Make hashed_password nullable for OAuth users (skip if already nullable)
             is_nullable = True
             try:
-                row = conn.execute(text(
-                    "SELECT is_nullable FROM information_schema.columns "
-                    "WHERE table_name='users' AND column_name='hashed_password'"
-                )).first()
-                is_nullable = row is not None and row[0] == 'YES'
+                row = conn.execute(
+                    text(
+                        "SELECT is_nullable FROM information_schema.columns "
+                        "WHERE table_name='users' AND column_name='hashed_password'"
+                    )
+                ).first()
+                is_nullable = row is not None and row[0] == "YES"
             except Exception:
                 conn.rollback()
 
@@ -1021,12 +1019,12 @@ def ensure_rls_policies():
         "weekly_recap_logs",
         "recaps",
         "recap_documents",
-        # Questionnaire tables: policies are created but RLS is intentionally NOT
-        # enabled on them — public token endpoints run without a tenant session var.
-        "questionnaires",
-        "questionnaire_questions",
-        "questionnaire_responses",
-        "questionnaire_answers",
+        # Questionnaire tables (questionnaires, questionnaire_questions/responses/
+        # answers) are intentionally ABSENT: RLS is never enabled on them because
+        # the public token endpoints (/questionnaire/{token}) run without a tenant
+        # session var. Tenant isolation is app-level (company_id filters in
+        # routers/automations.py). Do not add them here without reworking the
+        # public endpoints first.
     ]
     try:
         with engine.connect() as conn:
@@ -1192,6 +1190,7 @@ def migrate_teams_to_members():
     """Migrate existing teams from JSON action_agent_ids to team_members table.
     Idempotent: skips if team_members already has entries."""
     import json as _json
+
     try:
         db = SessionLocal()
         existing_count = db.query(TeamMember).count()
@@ -1222,7 +1221,11 @@ def migrate_teams_to_members():
             action_ids = []
             if team.action_agent_ids:
                 try:
-                    action_ids = _json.loads(team.action_agent_ids) if isinstance(team.action_agent_ids, str) else team.action_agent_ids
+                    action_ids = (
+                        _json.loads(team.action_agent_ids)
+                        if isinstance(team.action_agent_ids, str)
+                        else team.action_agent_ids
+                    )
                 except (ValueError, TypeError):
                     action_ids = []
 

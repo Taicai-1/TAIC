@@ -26,7 +26,11 @@ UPDATE_SHEET = {
     "properties": {
         "spreadsheet_id": {"type": "string", "description": "The spreadsheet ID"},
         "range": {"type": "string", "description": "A1 notation range (e.g., Sheet1!A1:C3)"},
-        "values": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "2D array of values"},
+        "values": {
+            "type": "array",
+            "items": {"type": "array", "items": {"type": "string"}},
+            "description": "2D array of values",
+        },
     },
     "required": ["spreadsheet_id", "range", "values"],
 }

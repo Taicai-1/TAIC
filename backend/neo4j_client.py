@@ -102,12 +102,14 @@ def _build_structured_data(records: list, person_desc: dict = None) -> dict:
             nodes[tgt] = {"name": tgt, "type": rec.get("target_label", "") or "", "role": ""}
         # Add relationship
         props = {k: v for k, v in (rec.get("rel_props") or {}).items() if k != "company_id"}
-        relationships.append({
-            "source": src,
-            "target": tgt,
-            "type": rec.get("rel_type", ""),
-            "properties": props,
-        })
+        relationships.append(
+            {
+                "source": src,
+                "target": tgt,
+                "type": rec.get("rel_type", ""),
+                "properties": props,
+            }
+        )
 
     return {
         "nodes": list(nodes.values()),

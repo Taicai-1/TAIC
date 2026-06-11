@@ -43,11 +43,7 @@ class ToolDefinition:
             params_desc.append(f"    - {pname}: {desc}{req_mark}")
         params_text = "\n".join(params_desc) if params_desc else "    (aucun parametre)"
         side_label = "action (necessite confirmation)" if self.side_effect else "lecture seule"
-        return (
-            f"- {self.name}: {self.description}\n"
-            f"  Type: {side_label}\n"
-            f"  Parametres:\n{params_text}"
-        )
+        return f"- {self.name}: {self.description}\n  Type: {side_label}\n  Parametres:\n{params_text}"
 
 
 def tools_to_openai_format(tools: list["ToolDefinition"]) -> list[dict]:
@@ -55,9 +51,7 @@ def tools_to_openai_format(tools: list["ToolDefinition"]) -> list[dict]:
     return [t.to_openai_tool() for t in tools]
 
 
-def build_tools_from_plugins(
-    plugin_names: list[str], manager: "PluginManager"
-) -> list[ToolDefinition]:
+def build_tools_from_plugins(plugin_names: list[str], manager: "PluginManager") -> list[ToolDefinition]:
     """Build ToolDefinition list from enabled plugin names."""
     tools: list[ToolDefinition] = []
     for pname in plugin_names:

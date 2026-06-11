@@ -161,6 +161,7 @@ def generate_with_tools(
     if message.tool_calls and len(message.tool_calls) > 0:
         tc = message.tool_calls[0]
         import json
+
         args = tc.function.arguments
         if isinstance(args, str):
             try:

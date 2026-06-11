@@ -10,19 +10,23 @@ async def test_create_team_v2(client, test_user, auth_cookies, db_session):
     """POST /teams with members array format."""
     from tests.factories import AgentFactory
 
-    leader = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, 'company_id', None))
-    member = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, 'company_id', None))
+    leader = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, "company_id", None))
+    member = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, "company_id", None))
     db_session.add_all([leader, member])
     db_session.flush()
 
-    res = await client.post("/teams", json={
-        "name": "Test Team V2",
-        "contexte": "Team context",
-        "members": [
-            {"agent_id": leader.id, "role": "leader", "specialization": "Coordination"},
-            {"agent_id": member.id, "role": "member", "specialization": "Expert finance"},
-        ]
-    }, cookies=auth_cookies)
+    res = await client.post(
+        "/teams",
+        json={
+            "name": "Test Team V2",
+            "contexte": "Team context",
+            "members": [
+                {"agent_id": leader.id, "role": "leader", "specialization": "Coordination"},
+                {"agent_id": member.id, "role": "member", "specialization": "Expert finance"},
+            ],
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 200
     data = res.json()["team"]
     assert data["name"] == "Test Team V2"
@@ -39,16 +43,20 @@ async def test_create_team_legacy_format(client, test_user, auth_cookies, db_ses
     """POST /teams with old leader_agent_id format still works."""
     from tests.factories import AgentFactory
 
-    leader = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, 'company_id', None))
-    member = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, 'company_id', None))
+    leader = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, "company_id", None))
+    member = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, "company_id", None))
     db_session.add_all([leader, member])
     db_session.flush()
 
-    res = await client.post("/teams", json={
-        "name": "Legacy Team",
-        "leader_agent_id": leader.id,
-        "action_agent_ids": [member.id],
-    }, cookies=auth_cookies)
+    res = await client.post(
+        "/teams",
+        json={
+            "name": "Legacy Team",
+            "leader_agent_id": leader.id,
+            "action_agent_ids": [member.id],
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 200
     data = res.json()["team"]
     assert data["name"] == "Legacy Team"
@@ -60,16 +68,20 @@ async def test_create_team_no_leader_fails(client, test_user, auth_cookies, db_s
     """POST /teams without a leader should fail validation."""
     from tests.factories import AgentFactory
 
-    member = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, 'company_id', None))
+    member = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, "company_id", None))
     db_session.add(member)
     db_session.flush()
 
-    res = await client.post("/teams", json={
-        "name": "Bad Team",
-        "members": [
-            {"agent_id": member.id, "role": "member", "specialization": "test"},
-        ]
-    }, cookies=auth_cookies)
+    res = await client.post(
+        "/teams",
+        json={
+            "name": "Bad Team",
+            "members": [
+                {"agent_id": member.id, "role": "member", "specialization": "test"},
+            ],
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 422
 
 
@@ -78,17 +90,21 @@ async def test_create_team_duplicate_agents_fails(client, test_user, auth_cookie
     """POST /teams with duplicate agent IDs should fail."""
     from tests.factories import AgentFactory
 
-    agent = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, 'company_id', None))
+    agent = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, "company_id", None))
     db_session.add(agent)
     db_session.flush()
 
-    res = await client.post("/teams", json={
-        "name": "Dup Team",
-        "members": [
-            {"agent_id": agent.id, "role": "leader"},
-            {"agent_id": agent.id, "role": "member"},
-        ]
-    }, cookies=auth_cookies)
+    res = await client.post(
+        "/teams",
+        json={
+            "name": "Dup Team",
+            "members": [
+                {"agent_id": agent.id, "role": "leader"},
+                {"agent_id": agent.id, "role": "member"},
+            ],
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 422
 
 
@@ -136,9 +152,13 @@ async def test_get_team_not_found(client, test_user, auth_cookies):
 async def test_suggest_specialization(client, test_user, auth_cookies, test_agent):
     """POST /teams/suggest-specialization returns a specialization string."""
     with patch("orchestrator.suggest_specialization", return_value="Expert en tests unitaires"):
-        res = await client.post("/teams/suggest-specialization", json={
-            "agent_id": test_agent.id,
-        }, cookies=auth_cookies)
+        res = await client.post(
+            "/teams/suggest-specialization",
+            json={
+                "agent_id": test_agent.id,
+            },
+            cookies=auth_cookies,
+        )
     assert res.status_code == 200
     assert "specialization" in res.json()
     assert len(res.json()["specialization"]) > 0
@@ -147,9 +167,13 @@ async def test_suggest_specialization(client, test_user, auth_cookies, test_agen
 @pytest.mark.asyncio
 async def test_suggest_specialization_agent_not_found(client, test_user, auth_cookies):
     """POST /teams/suggest-specialization with unknown agent returns 404."""
-    res = await client.post("/teams/suggest-specialization", json={
-        "agent_id": 999999,
-    }, cookies=auth_cookies)
+    res = await client.post(
+        "/teams/suggest-specialization",
+        json={
+            "agent_id": 999999,
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 404
 
 
@@ -161,16 +185,20 @@ async def test_update_team_members(client, test_user, auth_cookies, test_team_wi
     team_id = test_team_with_members["team"].id
     leader = test_team_with_members["leader"]
 
-    new_member = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, 'company_id', None))
+    new_member = AgentFactory.build(user_id=test_user.id, company_id=getattr(test_user, "company_id", None))
     db_session.add(new_member)
     db_session.flush()
 
-    res = await client.put(f"/teams/{team_id}/members", json={
-        "members": [
-            {"agent_id": leader.id, "role": "leader", "specialization": "Chef"},
-            {"agent_id": new_member.id, "role": "member", "specialization": "Nouveau"},
-        ]
-    }, cookies=auth_cookies)
+    res = await client.put(
+        f"/teams/{team_id}/members",
+        json={
+            "members": [
+                {"agent_id": leader.id, "role": "leader", "specialization": "Chef"},
+                {"agent_id": new_member.id, "role": "member", "specialization": "Nouveau"},
+            ]
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
 
@@ -188,11 +216,15 @@ async def test_update_team_members_no_leader_fails(client, test_user, auth_cooki
     team_id = test_team_with_members["team"].id
     member = test_team_with_members["members"][0]
 
-    res = await client.put(f"/teams/{team_id}/members", json={
-        "members": [
-            {"agent_id": member.id, "role": "member"},
-        ]
-    }, cookies=auth_cookies)
+    res = await client.put(
+        f"/teams/{team_id}/members",
+        json={
+            "members": [
+                {"agent_id": member.id, "role": "member"},
+            ]
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 400
 
 
@@ -202,9 +234,13 @@ async def test_patch_team_member(client, test_user, auth_cookies, test_team_with
     team_id = test_team_with_members["team"].id
     member = test_team_with_members["members"][0]
 
-    res = await client.patch(f"/teams/{team_id}/members/{member.id}", json={
-        "specialization": "Expert mise a jour",
-    }, cookies=auth_cookies)
+    res = await client.patch(
+        f"/teams/{team_id}/members/{member.id}",
+        json={
+            "specialization": "Expert mise a jour",
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
 
@@ -219,7 +255,11 @@ async def test_patch_team_member_not_found(client, test_user, auth_cookies, test
     """PATCH /teams/{id}/members/{agent_id} with unknown member returns 404."""
     team_id = test_team_with_members["team"].id
 
-    res = await client.patch(f"/teams/{team_id}/members/999999", json={
-        "specialization": "whatever",
-    }, cookies=auth_cookies)
+    res = await client.patch(
+        f"/teams/{team_id}/members/999999",
+        json={
+            "specialization": "whatever",
+        },
+        cookies=auth_cookies,
+    )
     assert res.status_code == 404

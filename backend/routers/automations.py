@@ -122,9 +122,7 @@ def _insert_questions(questionnaire: Questionnaire, questions, db: Session) -> N
 
 
 @router.get("/api/automations/questionnaires")
-async def list_questionnaires(
-    user_id: int = Depends(verify_token), db: Session = Depends(get_db)
-):
+async def list_questionnaires(user_id: int = Depends(verify_token), db: Session = Depends(get_db)):
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
 
@@ -230,9 +228,9 @@ async def update_questionnaire(
     questionnaire.title = body.title.strip()
     questionnaire.description = body.description
     questionnaire.updated_at = datetime.utcnow()
-    db.query(QuestionnaireQuestion).filter(
-        QuestionnaireQuestion.questionnaire_id == questionnaire.id
-    ).delete(synchronize_session=False)
+    db.query(QuestionnaireQuestion).filter(QuestionnaireQuestion.questionnaire_id == questionnaire.id).delete(
+        synchronize_session=False
+    )
     _insert_questions(questionnaire, body.questions, db)
     db.commit()
     db.refresh(questionnaire)
@@ -367,9 +365,7 @@ async def invite_respondents(
     return {"invited": len(created_ids), "skipped": len(body.recipients) - len(created_ids)}
 
 
-@router.post(
-    "/api/automations/questionnaires/{questionnaire_id}/responses/{response_id}/resend"
-)
+@router.post("/api/automations/questionnaires/{questionnaire_id}/responses/{response_id}/resend")
 async def resend_invitation(
     questionnaire_id: int,
     response_id: int,
@@ -415,9 +411,7 @@ def _response_to_dict(response: QuestionnaireResponse) -> dict:
     }
 
 
-def _get_response_or_404(
-    response_id: int, questionnaire: Questionnaire, db: Session
-) -> QuestionnaireResponse:
+def _get_response_or_404(response_id: int, questionnaire: Questionnaire, db: Session) -> QuestionnaireResponse:
     response = (
         db.query(QuestionnaireResponse)
         .filter(
@@ -444,9 +438,7 @@ async def list_responses(
     membership = require_role(user_id, db, "member")
     questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
 
-    base = db.query(QuestionnaireResponse).filter(
-        QuestionnaireResponse.questionnaire_id == questionnaire.id
-    )
+    base = db.query(QuestionnaireResponse).filter(QuestionnaireResponse.questionnaire_id == questionnaire.id)
     total = base.count()
     completed_count = _completed_count(questionnaire.id, questionnaire.company_id, db)
 
@@ -454,12 +446,7 @@ async def list_responses(
     if status:
         query = query.filter(QuestionnaireResponse.status == status)
     filtered_total = query.count() if status else total
-    rows = (
-        query.order_by(QuestionnaireResponse.invited_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    rows = query.order_by(QuestionnaireResponse.invited_at.desc()).offset(offset).limit(limit).all()
     return {
         "responses": [_response_to_dict(r) for r in rows],
         "total": total,
@@ -523,9 +510,7 @@ async def delete_response(
 # ---------------------------------------------------------------------------
 
 
-def _build_response_markdown(
-    questionnaire: Questionnaire, response: QuestionnaireResponse, db: Session
-) -> str:
+def _build_response_markdown(questionnaire: Questionnaire, response: QuestionnaireResponse, db: Session) -> str:
     lines = [
         f"# {questionnaire.title} — Réponse de {response.respondent_name or response.respondent_email}",
         "",
@@ -564,11 +549,7 @@ async def export_responses_to_rag(
     membership = require_role(user_id, db, "member")
     questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
 
-    agent = (
-        db.query(Agent)
-        .filter(Agent.id == body.target_agent_id, Agent.company_id == membership.company_id)
-        .first()
-    )
+    agent = db.query(Agent).filter(Agent.id == body.target_agent_id, Agent.company_id == membership.company_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Target agent not found")
     if agent.type not in EXPORTABLE_AGENT_TYPES:

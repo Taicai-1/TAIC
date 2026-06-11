@@ -425,12 +425,7 @@ def _resolve_model(model_name: str) -> str:
         "gemini-2.5-flash": "gemini-2.0-flash-001",
     }
     resolved = ALIAS_MAP.get(model_short, model_short)
-    if (
-        resolved
-        and resolved.lower().startswith("gemini")
-        and "@" not in resolved
-        and "-" not in resolved
-    ):
+    if resolved and resolved.lower().startswith("gemini") and "@" not in resolved and "-" not in resolved:
         resolved = f"{resolved}@001"
     return resolved
 
@@ -476,15 +471,19 @@ def _messages_to_gemini_contents(messages: list[dict]) -> list[dict]:
                                 tool_name = part["functionCall"].get("name", "tool")
                                 break
                         break
-            contents.append({
-                "role": "user",
-                "parts": [{
-                    "functionResponse": {
-                        "name": tool_name,
-                        "response": {"result": msg.get("content", "")},
-                    }
-                }],
-            })
+            contents.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "functionResponse": {
+                                "name": tool_name,
+                                "response": {"result": msg.get("content", "")},
+                            }
+                        }
+                    ],
+                }
+            )
             continue
 
         # Handle assistant messages that contain tool_calls (OpenAI format)
@@ -497,25 +496,30 @@ def _messages_to_gemini_contents(messages: list[dict]) -> list[dict]:
             args = func.get("arguments", "{}")
             if isinstance(args, str):
                 import json as _json
+
                 try:
                     args = _json.loads(args)
                 except Exception:
                     args = {}
-            parts.append({
-                "functionCall": {
-                    "name": func.get("name", ""),
-                    "args": args,
+            parts.append(
+                {
+                    "functionCall": {
+                        "name": func.get("name", ""),
+                        "args": args,
+                    }
                 }
-            })
+            )
             contents.append({"role": "model", "parts": parts})
             continue
 
         # Regular text messages
         gemini_role = "model" if role == "assistant" else "user"
-        contents.append({
-            "role": gemini_role,
-            "parts": [{"text": msg.get("content", "")}],
-        })
+        contents.append(
+            {
+                "role": gemini_role,
+                "parts": [{"text": msg.get("content", "")}],
+            }
+        )
     return contents
 
 
@@ -555,11 +559,13 @@ def generate_with_tools(
     function_declarations = []
     for tool in tools:
         func = tool.get("function", {})
-        function_declarations.append({
-            "name": func.get("name", ""),
-            "description": func.get("description", ""),
-            "parameters": func.get("parameters", {}),
-        })
+        function_declarations.append(
+            {
+                "name": func.get("name", ""),
+                "description": func.get("description", ""),
+                "parameters": func.get("parameters", {}),
+            }
+        )
 
     body = {
         "contents": contents,

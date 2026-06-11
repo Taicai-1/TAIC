@@ -22,7 +22,11 @@ def _execute_action(plugin_name: str, action_name: str, params: dict, credential
     plugin = plugin_manager.get_plugin(plugin_name)
     if not plugin:
         return ActionResult(
-            success=False, data={}, display_message="", resource_url=None, error_message=f"Plugin '{plugin_name}' not found"
+            success=False,
+            data={},
+            display_message="",
+            resource_url=None,
+            error_message=f"Plugin '{plugin_name}' not found",
         )
     return plugin.execute(action_name, params, credentials)
 
@@ -45,10 +49,14 @@ async def confirm_action(
 
 async def _do_confirm(execution_id: int, user_id: str, db: Session):
     print(f"[CONFIRM] Starting confirm for execution_id={execution_id}, user_id={user_id}")
-    ae = db.query(ActionExecution).filter(
-        ActionExecution.id == execution_id,
-        ActionExecution.user_id == int(user_id),
-    ).first()
+    ae = (
+        db.query(ActionExecution)
+        .filter(
+            ActionExecution.id == execution_id,
+            ActionExecution.user_id == int(user_id),
+        )
+        .first()
+    )
     if not ae:
         print(f"[CONFIRM] Action execution {execution_id} not found for user {user_id}")
         raise HTTPException(status_code=404, detail="Action execution not found")
@@ -76,6 +84,7 @@ async def _do_confirm(execution_id: int, user_id: str, db: Session):
     if plugin:
         from google_credentials import check_scopes_covered
         from database import UserGoogleToken
+
         token = db.query(UserGoogleToken).filter(UserGoogleToken.user_id == int(user_id)).first()
         if token:
             granted = json.loads(token.granted_scopes) if token.granted_scopes else []
@@ -88,7 +97,7 @@ async def _do_confirm(execution_id: int, user_id: str, db: Session):
                 ae.error_message = f"Missing Google scopes: {', '.join(missing)}. Please reconnect your Google account with the required permissions."
                 db.commit()
                 raise HTTPException(status_code=400, detail=ae.error_message)
-            print(f"[CONFIRM] Scope check passed")
+            print("[CONFIRM] Scope check passed")
 
     # Execute
     ae.status = "executing"
@@ -115,6 +124,7 @@ async def _do_confirm(execution_id: int, user_id: str, db: Session):
     if ae.loop_state and result.success:
         try:
             from agent_executor import AgentExecutor, _observation_from_result
+
             obs = _observation_from_result(result)
             executor = AgentExecutor()
             continuation = executor.resume(ae.loop_state, obs, db, credentials)
@@ -123,6 +133,7 @@ async def _do_confirm(execution_id: int, user_id: str, db: Session):
     elif ae.loop_state and not result.success:
         try:
             from agent_executor import AgentExecutor
+
             obs = f"Echec: {result.error_message}"
             executor = AgentExecutor()
             continuation = executor.resume(ae.loop_state, obs, db, credentials)
@@ -152,10 +163,14 @@ async def cancel_action(
     db: Session = Depends(get_db),
 ):
     """Cancel a pending action and resume the agent loop."""
-    ae = db.query(ActionExecution).filter(
-        ActionExecution.id == execution_id,
-        ActionExecution.user_id == int(user_id),
-    ).first()
+    ae = (
+        db.query(ActionExecution)
+        .filter(
+            ActionExecution.id == execution_id,
+            ActionExecution.user_id == int(user_id),
+        )
+        .first()
+    )
     if not ae:
         raise HTTPException(status_code=404, detail="Action execution not found")
     if ae.status != "pending_confirmation":
@@ -169,6 +184,7 @@ async def cancel_action(
     if ae.loop_state:
         try:
             from agent_executor import AgentExecutor
+
             credentials = get_google_credentials(int(user_id), db)
             executor = AgentExecutor()
             continuation = executor.resume(
@@ -197,10 +213,14 @@ async def get_action_status(
     db: Session = Depends(get_db),
 ):
     """Get the status and result of an action execution."""
-    ae = db.query(ActionExecution).filter(
-        ActionExecution.id == execution_id,
-        ActionExecution.user_id == int(user_id),
-    ).first()
+    ae = (
+        db.query(ActionExecution)
+        .filter(
+            ActionExecution.id == execution_id,
+            ActionExecution.user_id == int(user_id),
+        )
+        .first()
+    )
     if not ae:
         raise HTTPException(status_code=404, detail="Action execution not found")
 

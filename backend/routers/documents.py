@@ -610,7 +610,12 @@ def _process_document_background(
                 )
 
         doc_id = process_document_for_user(
-            filename, content, user_id, db, agent_id, company_id=company_id,
+            filename,
+            content,
+            user_id,
+            db,
+            agent_id,
+            company_id=company_id,
             progress_callback=_report_progress,
         )
 

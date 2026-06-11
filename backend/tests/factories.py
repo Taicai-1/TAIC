@@ -155,7 +155,9 @@ class UserGoogleTokenFactory(factory.Factory):
 
     _access_token = "test-access-token"
     _refresh_token = "test-refresh-token"
-    token_expiry = factory.LazyFunction(lambda: __import__("datetime").datetime.utcnow() + __import__("datetime").timedelta(hours=1))
+    token_expiry = factory.LazyFunction(
+        lambda: __import__("datetime").datetime.utcnow() + __import__("datetime").timedelta(hours=1)
+    )
     granted_scopes = '["https://www.googleapis.com/auth/documents"]'
 
 

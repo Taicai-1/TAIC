@@ -37,11 +37,7 @@ class QuestionInput(BaseModel):
         # this validator acts as a no-op (the type error is already reported).
         qtype = info.data.get("question_type", "open")
         if qtype in ("single_choice", "multiple_choice"):
-            if (
-                not isinstance(v, list)
-                or not v
-                or not all(isinstance(o, str) and o.strip() for o in v)
-            ):
+            if not isinstance(v, list) or not v or not all(isinstance(o, str) and o.strip() for o in v):
                 raise ValueError("choice questions need a non-empty list of option strings")
             return [o.strip() for o in v]
         if qtype == "rating":

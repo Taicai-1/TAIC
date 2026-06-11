@@ -51,7 +51,9 @@ def _template_to_response(template: AgentTemplate) -> dict:
         "default_neo4j_depth": template.default_neo4j_depth,
         "default_weekly_recap_enabled": template.default_weekly_recap_enabled,
         "default_weekly_recap_prompt": template.default_weekly_recap_prompt,
-        "default_weekly_recap_recipients": json.loads(template.default_weekly_recap_recipients) if template.default_weekly_recap_recipients else None,
+        "default_weekly_recap_recipients": json.loads(template.default_weekly_recap_recipients)
+        if template.default_weekly_recap_recipients
+        else None,
         "default_recap_frequency": template.default_recap_frequency,
         "default_recap_hour": template.default_recap_hour,
     }
@@ -71,9 +73,7 @@ def _template_to_detail(template: AgentTemplate) -> dict:
 def _get_template_or_404(template_id: int, company_id: int, db: Session) -> AgentTemplate:
     """Fetch a template by id scoped to company, or raise 404."""
     template = (
-        db.query(AgentTemplate)
-        .filter(AgentTemplate.id == template_id, AgentTemplate.company_id == company_id)
-        .first()
+        db.query(AgentTemplate).filter(AgentTemplate.id == template_id, AgentTemplate.company_id == company_id).first()
     )
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -123,7 +123,9 @@ async def create_template(
         default_neo4j_depth=body.default_neo4j_depth or 1,
         default_weekly_recap_enabled=body.default_weekly_recap_enabled or False,
         default_weekly_recap_prompt=body.default_weekly_recap_prompt,
-        default_weekly_recap_recipients=json.dumps(body.default_weekly_recap_recipients) if body.default_weekly_recap_recipients else None,
+        default_weekly_recap_recipients=json.dumps(body.default_weekly_recap_recipients)
+        if body.default_weekly_recap_recipients
+        else None,
         default_recap_frequency=body.default_recap_frequency or "weekly",
         default_recap_hour=body.default_recap_hour if body.default_recap_hour is not None else 9,
         company_id=company_id,
@@ -187,16 +189,16 @@ async def update_template(
     if body.default_weekly_recap_prompt is not None:
         template.default_weekly_recap_prompt = body.default_weekly_recap_prompt
     if body.default_weekly_recap_recipients is not None:
-        template.default_weekly_recap_recipients = json.dumps(body.default_weekly_recap_recipients) if body.default_weekly_recap_recipients else None
+        template.default_weekly_recap_recipients = (
+            json.dumps(body.default_weekly_recap_recipients) if body.default_weekly_recap_recipients else None
+        )
     if body.default_recap_frequency is not None:
         template.default_recap_frequency = body.default_recap_frequency
     if body.default_recap_hour is not None:
         template.default_recap_hour = body.default_recap_hour
 
     if document_ids is not None:
-        db.query(AgentTemplateDocument).filter(
-            AgentTemplateDocument.template_id == template.id
-        ).delete()
+        db.query(AgentTemplateDocument).filter(AgentTemplateDocument.template_id == template.id).delete()
         _link_documents(template, document_ids, membership.company_id, db)
 
     db.commit()
@@ -283,11 +285,19 @@ async def create_agent_from_template(
         statut="privé",
         email_tags=json.dumps(body.email_tags) if body.email_tags is not None else template.default_email_tags,
         neo4j_enabled=body.neo4j_enabled if body.neo4j_enabled is not None else template.default_neo4j_enabled,
-        neo4j_person_name=body.neo4j_person_name if body.neo4j_person_name is not None else template.default_neo4j_person_name,
+        neo4j_person_name=body.neo4j_person_name
+        if body.neo4j_person_name is not None
+        else template.default_neo4j_person_name,
         neo4j_depth=body.neo4j_depth if body.neo4j_depth is not None else template.default_neo4j_depth,
-        weekly_recap_enabled=body.weekly_recap_enabled if body.weekly_recap_enabled is not None else template.default_weekly_recap_enabled,
-        weekly_recap_prompt=body.weekly_recap_prompt if body.weekly_recap_prompt is not None else template.default_weekly_recap_prompt,
-        weekly_recap_recipients=json.dumps(body.weekly_recap_recipients) if body.weekly_recap_recipients is not None else template.default_weekly_recap_recipients,
+        weekly_recap_enabled=body.weekly_recap_enabled
+        if body.weekly_recap_enabled is not None
+        else template.default_weekly_recap_enabled,
+        weekly_recap_prompt=body.weekly_recap_prompt
+        if body.weekly_recap_prompt is not None
+        else template.default_weekly_recap_prompt,
+        weekly_recap_recipients=json.dumps(body.weekly_recap_recipients)
+        if body.weekly_recap_recipients is not None
+        else template.default_weekly_recap_recipients,
         recap_frequency=body.recap_frequency if body.recap_frequency is not None else template.default_recap_frequency,
         recap_hour=body.recap_hour if body.recap_hour is not None else template.default_recap_hour,
     )

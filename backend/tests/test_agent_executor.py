@@ -1,4 +1,5 @@
 """Tests for agent_executor module."""
+
 import json
 import pytest
 from unittest.mock import patch, MagicMock, call
@@ -9,6 +10,7 @@ class TestToolConversion:
 
     def test_to_openai_tool_format(self):
         from agent_tools import ToolDefinition
+
         tool = ToolDefinition(
             name="send_email",
             description="Send an email",
@@ -28,9 +30,14 @@ class TestToolConversion:
 
     def test_tools_to_openai_format(self):
         from agent_tools import ToolDefinition, tools_to_openai_format
+
         tools = [
-            ToolDefinition(name="t1", description="d1", parameters_schema={"type": "object"}, plugin_name="p", side_effect=False),
-            ToolDefinition(name="t2", description="d2", parameters_schema={"type": "object"}, plugin_name="p", side_effect=True),
+            ToolDefinition(
+                name="t1", description="d1", parameters_schema={"type": "object"}, plugin_name="p", side_effect=False
+            ),
+            ToolDefinition(
+                name="t2", description="d2", parameters_schema={"type": "object"}, plugin_name="p", side_effect=True
+            ),
         ]
         result = tools_to_openai_format(tools)
         assert len(result) == 2
@@ -41,6 +48,7 @@ class TestToolConversion:
 class TestBuildReactPrompt:
     def test_includes_agent_personality(self):
         from agent_executor import build_react_prompt
+
         prompt = build_react_prompt(
             agent_name="TestBot",
             agent_contexte="Tu es un assistant RH.",
@@ -54,17 +62,20 @@ class TestBuildReactPrompt:
 
     def test_includes_rag_context_when_provided(self):
         from agent_executor import build_react_prompt
+
         prompt = build_react_prompt("Bot", "", "", [], "Document X says: blah blah")
         assert "Document X says" in prompt
 
     def test_omits_rag_context_when_empty(self):
         from agent_executor import build_react_prompt
+
         prompt = build_react_prompt("Bot", "", "", [], "")
         assert "Contexte documentaire" not in prompt
 
     def test_no_format_obligatoire(self):
         """The old FORMAT OBLIGATOIRE block should no longer be in the prompt."""
         from agent_executor import build_react_prompt
+
         prompt = build_react_prompt("Bot", "", "", [], "")
         assert "FORMAT OBLIGATOIRE" not in prompt
         assert "Thought:" not in prompt
@@ -72,6 +83,7 @@ class TestBuildReactPrompt:
 
     def test_includes_rules(self):
         from agent_executor import build_react_prompt
+
         prompt = build_react_prompt("Bot", "", "", [], "")
         assert "REGLES" in prompt
         assert "fabrique JAMAIS" in prompt
@@ -80,6 +92,7 @@ class TestBuildReactPrompt:
 class TestAgentLoopState:
     def test_serialization_roundtrip(self):
         from agent_executor import AgentLoopState
+
         state = AgentLoopState(
             messages=[{"role": "system", "content": "test"}],
             iteration=2,
@@ -101,7 +114,9 @@ class TestAgentLoopState:
 class TestAgentExecutorRun:
     """Integration tests for the ReAct loop with mocked LLM."""
 
-    def _make_agent(self, name="TestBot", contexte="", biographie="", enabled_plugins='["gmail"]', agent_type="actionnable"):
+    def _make_agent(
+        self, name="TestBot", contexte="", biographie="", enabled_plugins='["gmail"]', agent_type="actionnable"
+    ):
         agent = MagicMock()
         agent.id = 1
         agent.name = name
@@ -176,8 +191,11 @@ class TestAgentExecutorRun:
             ),
         ]
         mock_exec.return_value = ActionResult(
-            success=True, data={"emails": [{"subject": "Test"}], "total": 1},
-            display_message="Found 1 email", resource_url=None, error_message=None,
+            success=True,
+            data={"emails": [{"subject": "Test"}], "total": 1},
+            display_message="Found 1 email",
+            resource_url=None,
+            error_message=None,
         )
 
         executor = AgentExecutor()
@@ -252,10 +270,19 @@ class TestAgentExecutorRun:
             messages=[
                 {"role": "system", "content": "prompt"},
                 {"role": "user", "content": "Envoie un mail"},
-                {"role": "assistant", "content": "Je vais envoyer.", "tool_call": {"name": "send_email", "arguments": {"to": "alice@test.com"}}},
+                {
+                    "role": "assistant",
+                    "content": "Je vais envoyer.",
+                    "tool_call": {"name": "send_email", "arguments": {"to": "alice@test.com"}},
+                },
             ],
-            iteration=1, steps=[], agent_id=1, user_id=42,
-            question="Envoie un mail a alice", model_id="gemini:gemini-2.0-flash", sources=[],
+            iteration=1,
+            steps=[],
+            agent_id=1,
+            user_id=42,
+            question="Envoie un mail a alice",
+            model_id="gemini:gemini-2.0-flash",
+            sources=[],
         )
 
         executor = AgentExecutor()
@@ -300,7 +327,11 @@ class TestAgentExecutorRun:
             tool_call=ToolCall(name="search_emails", arguments={"query": "test"}),
         )
         mock_exec.return_value = ActionResult(
-            success=True, data={"emails": []}, display_message="", resource_url=None, error_message=None,
+            success=True,
+            data={"emails": []},
+            display_message="",
+            resource_url=None,
+            error_message=None,
         )
         # Forced plain text response at the end
         mock_llm_plain.return_value = "Voici ce que je sais."
@@ -309,7 +340,10 @@ class TestAgentExecutorRun:
         result = executor.run(
             question="infinite loop test",
             agent=self._make_agent(),
-            history=[], db=MagicMock(), user_id=42, credentials=MagicMock(),
+            history=[],
+            db=MagicMock(),
+            user_id=42,
+            credentials=MagicMock(),
         )
         assert result["answer"] is not None
         assert result["answer"] == "Voici ce que je sais."
@@ -328,7 +362,10 @@ class TestAgentExecutorRun:
         result = executor.run(
             question="Test",
             agent=self._make_agent(),
-            history=[], db=MagicMock(), user_id=42, credentials=MagicMock(),
+            history=[],
+            db=MagicMock(),
+            user_id=42,
+            credentials=MagicMock(),
         )
         assert "Désolé" in result["answer"]
 
@@ -352,12 +389,19 @@ class TestAgentExecutorRun:
         executor = AgentExecutor()
         with patch("agent_executor._execute_read_tool") as mock_exec:
             mock_exec.return_value = ActionResult(
-                success=True, data={}, display_message="ok", resource_url=None, error_message=None,
+                success=True,
+                data={},
+                display_message="ok",
+                resource_url=None,
+                error_message=None,
             )
             result = executor.run(
                 question="Search",
                 agent=self._make_agent(),
-                history=[], db=MagicMock(), user_id=42, credentials=MagicMock(),
+                history=[],
+                db=MagicMock(),
+                user_id=42,
+                credentials=MagicMock(),
             )
         # Check that thought was captured in steps
         action_steps = [s for s in result["steps"] if s["type"] == "action"]

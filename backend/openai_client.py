@@ -71,6 +71,7 @@ def _is_strict_provider(gemini_only: bool) -> bool:
 
 class _SimpleMsg:
     """Lightweight message object returned by structured calls for non-OpenAI providers."""
+
     def __init__(self, content, function_call=None):
         self.content = content
         self.function_call = function_call
@@ -663,9 +664,11 @@ def get_chat_response_json(
 # Native function-calling support
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ToolCall:
     """A structured tool call returned by the LLM."""
+
     name: str
     arguments: dict
     id: str = ""  # provider-assigned tool_call id (required by OpenAI for multi-turn)
@@ -674,6 +677,7 @@ class ToolCall:
 @dataclass
 class ToolCallResponse:
     """Normalized response from an LLM that may contain a tool call."""
+
     content: str | None  # text content (thought / final answer)
     tool_call: ToolCall | None  # structured tool call if present
 
@@ -706,12 +710,16 @@ def get_chat_response_with_tools(
         if gemini_generate_with_tools:
             try:
                 result = gemini_generate_with_tools(
-                    messages=messages, tools=tools, model_name=model_short,
-                    temperature=0.7, max_tokens=DEFAULT_MAX_TOKENS,
+                    messages=messages,
+                    tools=tools,
+                    model_name=model_short,
+                    temperature=0.7,
+                    max_tokens=DEFAULT_MAX_TOKENS,
                 )
                 tc = None
                 if result.get("tool_call"):
                     import uuid
+
                     tc = ToolCall(
                         name=result["tool_call"]["name"],
                         arguments=result["tool_call"]["arguments"],
@@ -733,14 +741,18 @@ def get_chat_response_with_tools(
         if mistral_generate_with_tools:
             try:
                 result = mistral_generate_with_tools(
-                    messages=messages, tools=tools, model_name=model_short,
-                    temperature=0.7, max_tokens=DEFAULT_MAX_TOKENS,
+                    messages=messages,
+                    tools=tools,
+                    model_name=model_short,
+                    temperature=0.7,
+                    max_tokens=DEFAULT_MAX_TOKENS,
                 )
                 tc = None
                 if result.get("tool_call"):
                     tc_id = result["tool_call"].get("id", "")
                     if not tc_id:
                         import uuid
+
                         tc_id = f"call_{uuid.uuid4().hex[:24]}"
                     tc = ToolCall(
                         name=result["tool_call"]["name"],
@@ -785,6 +797,6 @@ def get_chat_response_with_tools(
         except Exception as e:
             logger.error(f"Error in tool call chat (attempt {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
             else:
                 raise

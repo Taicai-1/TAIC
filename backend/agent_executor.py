@@ -21,16 +21,20 @@ logger = logging.getLogger(__name__)
 # Step types returned by the loop
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ActionStep:
     """LLM wants to call a tool."""
+
     thought: str
     tool_name: str
     tool_args: dict
 
+
 @dataclass
 class FinishStep:
     """LLM has a final answer."""
+
     answer: str
 
 
@@ -75,9 +79,11 @@ def build_react_prompt(
 # Loop state (serializable for suspend/resume)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AgentLoopState:
     """Serializable state of a suspended ReAct loop."""
+
     messages: list[dict]
     iteration: int
     steps: list[dict]
@@ -104,7 +110,10 @@ from helpers.agent_helpers import resolve_model_id
 # RAG context retrieval (delegates to rag_engine)
 # ---------------------------------------------------------------------------
 
-def get_rag_context(agent, user_id: int, db, question: str, selected_doc_ids=None, use_rag=True, use_graph=True, company_id=None) -> tuple[str, list]:
+
+def get_rag_context(
+    agent, user_id: int, db, question: str, selected_doc_ids=None, use_rag=True, use_graph=True, company_id=None
+) -> tuple[str, list]:
     """Retrieve RAG document context for the agent.
 
     Returns (context_text, sources). Delegates to rag_engine internals
@@ -130,13 +139,22 @@ def get_rag_context(agent, user_id: int, db, question: str, selected_doc_ids=Non
 
         query_embedding = get_embedding(question)
         results = search_similar_texts_for_user(
-            query_embedding, user_id, db, top_k=8,
-            selected_doc_ids=selected_doc_ids, agent_id=agent.id, company_id=company_id,
+            query_embedding,
+            user_id,
+            db,
+            top_k=8,
+            selected_doc_ids=selected_doc_ids,
+            agent_id=agent.id,
+            company_id=company_id,
         )
 
         sources = [
-            {"text": r["text"], "document_name": r["document_name"],
-             "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
+            {
+                "text": r["text"],
+                "document_name": r["document_name"],
+                "score": round(r["similarity"] * 100, 1),
+                "document_id": r["document_id"],
+            }
             for r in results
         ]
 
@@ -161,6 +179,7 @@ def get_rag_context(agent, user_id: int, db, question: str, selected_doc_ids=Non
 # Tool execution helpers
 # ---------------------------------------------------------------------------
 
+
 def _execute_read_tool(plugin_name: str, action_name: str, args: dict, credentials) -> "ActionResult":
     """Execute a read-only tool immediately."""
     from plugins import plugin_manager
@@ -168,8 +187,13 @@ def _execute_read_tool(plugin_name: str, action_name: str, args: dict, credentia
 
     plugin = plugin_manager.get_plugin(plugin_name)
     if not plugin:
-        return ActionResult(success=False, data={}, display_message="", resource_url=None,
-                           error_message=f"Plugin '{plugin_name}' not found")
+        return ActionResult(
+            success=False,
+            data={},
+            display_message="",
+            resource_url=None,
+            error_message=f"Plugin '{plugin_name}' not found",
+        )
     return plugin.execute(action_name, args, credentials)
 
 
@@ -187,6 +211,7 @@ def _observation_from_result(result: "ActionResult") -> str:
 # ---------------------------------------------------------------------------
 # Shared helpers for run() and run_stream()
 # ---------------------------------------------------------------------------
+
 
 def _load_agent_tools(agent):
     """Load tools from agent's enabled plugins.
@@ -240,9 +265,11 @@ def _build_initial_messages(agent, question: str, history: list[dict], tools: li
 # Iteration result — structured outcome of a single ReAct iteration
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _IterationResult:
     """Result of a single ReAct loop iteration."""
+
     kind: str  # "finish", "read_continue", "write_suspend", "empty"
     step: ActionStep | FinishStep | None = None
     llm_response: str = ""
@@ -300,26 +327,30 @@ def _process_iteration(
 
     tool_def = tool_map.get(tc.name)
     step = ActionStep(thought=thought, tool_name=tc.name, tool_args=tc.arguments)
-    steps.append({
-        "type": "action",
-        "thought": thought,
-        "tool": tc.name,
-        "args": tc.arguments,
-        "side_effect": tool_def.side_effect if tool_def else True,
-    })
+    steps.append(
+        {
+            "type": "action",
+            "thought": thought,
+            "tool": tc.name,
+            "args": tc.arguments,
+            "side_effect": tool_def.side_effect if tool_def else True,
+        }
+    )
 
     # Build OpenAI-compatible assistant + tool messages for multi-turn
     assistant_msg = {
         "role": "assistant",
         "content": thought or None,
-        "tool_calls": [{
-            "id": tc.id,
-            "type": "function",
-            "function": {
-                "name": tc.name,
-                "arguments": json.dumps(tc.arguments, ensure_ascii=False),
-            },
-        }],
+        "tool_calls": [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {
+                    "name": tc.name,
+                    "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+                },
+            }
+        ],
     }
     tool_result_msg = {
         "role": "tool",
@@ -397,6 +428,7 @@ def _process_iteration(
 # AgentExecutor — the ReAct loop
 # ---------------------------------------------------------------------------
 
+
 class AgentExecutor:
     MAX_ITERATIONS = 6
     TOOL_TIMEOUT_SECONDS = 30
@@ -427,17 +459,34 @@ class AgentExecutor:
         tools, tool_names, tool_map, openai_tools = _load_agent_tools(agent)
 
         rag_context, sources = get_rag_context(
-            agent, user_id, db, question,
+            agent,
+            user_id,
+            db,
+            question,
             selected_doc_ids=selected_doc_ids,
-            use_rag=use_rag, use_graph=use_graph,
+            use_rag=use_rag,
+            use_graph=use_graph,
             company_id=agent.company_id,
         )
 
         model_id, messages = _build_initial_messages(agent, question, history, tools, rag_context)
 
         steps = []
-        return self._loop(messages, steps, tool_names, tool_map, openai_tools, model_id, sources,
-                         agent, user_id, question, db, credentials, iteration=0)
+        return self._loop(
+            messages,
+            steps,
+            tool_names,
+            tool_map,
+            openai_tools,
+            model_id,
+            sources,
+            agent,
+            user_id,
+            question,
+            db,
+            credentials,
+            iteration=0,
+        )
 
     def resume(self, loop_state: str, observation: str, db, credentials) -> dict:
         """Resume a suspended loop after user confirmation/cancellation."""
@@ -462,29 +511,72 @@ class AgentExecutor:
         else:
             messages.append({"role": "user", "content": f"Observation: {observation}"})
 
-        return self._loop(messages, state.steps, tool_names, tool_map, openai_tools,
-                         state.model_id, state.sources, agent, state.user_id,
-                         state.question, db, credentials, iteration=state.iteration)
+        return self._loop(
+            messages,
+            state.steps,
+            tool_names,
+            tool_map,
+            openai_tools,
+            state.model_id,
+            state.sources,
+            agent,
+            state.user_id,
+            state.question,
+            db,
+            credentials,
+            iteration=state.iteration,
+        )
 
-    def _loop(self, messages, steps, tool_names, tool_map, openai_tools, model_id, sources,
-              agent, user_id, question, db, credentials, iteration):
+    def _loop(
+        self,
+        messages,
+        steps,
+        tool_names,
+        tool_map,
+        openai_tools,
+        model_id,
+        sources,
+        agent,
+        user_id,
+        question,
+        db,
+        credentials,
+        iteration,
+    ):
         """Core ReAct loop shared by run() and resume()."""
         for i in range(iteration, self.MAX_ITERATIONS):
             result = _process_iteration(
-                messages, steps, tool_names, tool_map, openai_tools, model_id, sources,
-                agent, user_id, question, db, credentials, i,
+                messages,
+                steps,
+                tool_names,
+                tool_map,
+                openai_tools,
+                model_id,
+                sources,
+                agent,
+                user_id,
+                question,
+                db,
+                credentials,
+                i,
             )
 
             if result.kind == "empty":
                 return {
                     "answer": "Désolé, je n'ai pas pu générer de réponse.",
-                    "steps": steps, "action_proposal": None, "loop_state": None, "sources": sources,
+                    "steps": steps,
+                    "action_proposal": None,
+                    "loop_state": None,
+                    "sources": sources,
                 }
 
             if result.kind == "finish":
                 return {
                     "answer": result.step.answer,
-                    "steps": steps, "action_proposal": None, "loop_state": None, "sources": sources,
+                    "steps": steps,
+                    "action_proposal": None,
+                    "loop_state": None,
+                    "sources": sources,
                 }
 
             if result.kind == "read_continue":
@@ -500,7 +592,12 @@ class AgentExecutor:
                 }
 
         # Max iterations reached — force a text-only response (no tools)
-        messages.append({"role": "user", "content": "Tu as atteint le nombre maximum d'etapes. Donne ta reponse finale maintenant avec ce que tu sais."})
+        messages.append(
+            {
+                "role": "user",
+                "content": "Tu as atteint le nombre maximum d'etapes. Donne ta reponse finale maintenant avec ce que tu sais.",
+            }
+        )
         forced = get_chat_response(messages, model_id=model_id)
         answer = forced if forced else "Désolé, je n'ai pas pu finaliser ma réponse."
         steps.append({"type": "forced_finish", "answer": answer})
@@ -533,9 +630,13 @@ class AgentExecutor:
         tools, tool_names, tool_map, openai_tools = _load_agent_tools(agent)
 
         rag_context, sources = get_rag_context(
-            agent, user_id, db, question,
+            agent,
+            user_id,
+            db,
+            question,
             selected_doc_ids=selected_doc_ids,
-            use_rag=use_rag, use_graph=use_graph,
+            use_rag=use_rag,
+            use_graph=use_graph,
             company_id=agent.company_id,
         )
 
@@ -544,8 +645,19 @@ class AgentExecutor:
         steps = []
         for i in range(self.MAX_ITERATIONS):
             result = _process_iteration(
-                messages, steps, tool_names, tool_map, openai_tools, model_id, sources,
-                agent, user_id, question, db, credentials, i,
+                messages,
+                steps,
+                tool_names,
+                tool_map,
+                openai_tools,
+                model_id,
+                sources,
+                agent,
+                user_id,
+                question,
+                db,
+                credentials,
+                i,
             )
 
             if result.kind == "empty":
@@ -555,40 +667,70 @@ class AgentExecutor:
             if result.kind == "finish":
                 for char in result.step.answer:
                     yield sse_event("token", {"t": char})
-                yield sse_event("done", {
-                    "full_text": result.step.answer, "steps": steps, "sources": sources,
-                    "graph_data": None, "action_proposal": None,
-                })
+                yield sse_event(
+                    "done",
+                    {
+                        "full_text": result.step.answer,
+                        "steps": steps,
+                        "sources": sources,
+                        "graph_data": None,
+                        "action_proposal": None,
+                    },
+                )
                 return
 
             if result.kind == "read_continue":
                 yield sse_event("thought", {"content": result.step.thought})
-                yield sse_event("action", {
-                    "tool": result.step.tool_name, "args": result.step.tool_args, "type": "read",
-                })
+                yield sse_event(
+                    "action",
+                    {
+                        "tool": result.step.tool_name,
+                        "args": result.step.tool_args,
+                        "type": "read",
+                    },
+                )
                 yield sse_event("observation", {"tool": result.step.tool_name, "result": result.observation})
                 continue
 
             if result.kind == "write_suspend":
                 yield sse_event("thought", {"content": result.step.thought})
-                yield sse_event("action", {
-                    "tool": result.step.tool_name, "args": result.step.tool_args, "type": "write",
-                })
+                yield sse_event(
+                    "action",
+                    {
+                        "tool": result.step.tool_name,
+                        "args": result.step.tool_args,
+                        "type": "write",
+                    },
+                )
                 yield sse_event("action_proposal", result.proposal)
-                yield sse_event("done", {
-                    "full_text": result.step.thought or "", "steps": steps, "sources": sources,
-                    "graph_data": None, "action_proposal": result.proposal,
-                })
+                yield sse_event(
+                    "done",
+                    {
+                        "full_text": result.step.thought or "",
+                        "steps": steps,
+                        "sources": sources,
+                        "graph_data": None,
+                        "action_proposal": result.proposal,
+                    },
+                )
                 return
 
         # Max iterations
-        messages.append({"role": "user", "content": "Tu as atteint le nombre maximum d'etapes. Donne ta reponse finale maintenant."})
+        messages.append(
+            {"role": "user", "content": "Tu as atteint le nombre maximum d'etapes. Donne ta reponse finale maintenant."}
+        )
         forced = get_chat_response(messages, model_id=model_id)
         answer = forced if forced else "Désolé, je n'ai pas pu finaliser ma réponse."
         steps.append({"type": "forced_finish", "answer": answer})
         for char in answer:
             yield sse_event("token", {"t": char})
-        yield sse_event("done", {
-            "full_text": answer, "steps": steps, "sources": sources,
-            "graph_data": None, "action_proposal": None,
-        })
+        yield sse_event(
+            "done",
+            {
+                "full_text": answer,
+                "steps": steps,
+                "sources": sources,
+                "graph_data": None,
+                "action_proposal": None,
+            },
+        )

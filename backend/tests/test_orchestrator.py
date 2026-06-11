@@ -24,7 +24,9 @@ class TestSelectAgentsForQuestion:
         ]
         with patch("orchestrator._call_llm_for_routing") as mock_llm:
             mock_llm.return_value = {"agent_ids": [5], "reasoning": "Question financiere"}
-            result = select_agents_for_question("Quel est le chiffre d'affaires?", mock_members, model_id="mistral:mistral-small-latest")
+            result = select_agents_for_question(
+                "Quel est le chiffre d'affaires?", mock_members, model_id="mistral:mistral-small-latest"
+            )
         assert result["agent_ids"] == [5]
         assert result["reasoning"] == "Question financiere"
 
@@ -34,7 +36,9 @@ class TestSelectAgentsForQuestion:
         ]
         with patch("orchestrator._call_llm_for_routing") as mock_llm:
             mock_llm.return_value = {"agent_ids": [], "reasoning": "Hors perimetre"}
-            result = select_agents_for_question("Quelle heure est-il?", mock_members, model_id="mistral:mistral-small-latest")
+            result = select_agents_for_question(
+                "Quelle heure est-il?", mock_members, model_id="mistral:mistral-small-latest"
+            )
         assert result["agent_ids"] == []
 
     def test_fallback_on_malformed_json(self):
@@ -49,12 +53,13 @@ class TestSelectAgentsForQuestion:
 
     def test_caps_at_3_agents(self):
         mock_members = [
-            {"agent_id": i, "name": f"Agent{i}", "role": "member", "specialization": f"spec{i}"}
-            for i in range(10)
+            {"agent_id": i, "name": f"Agent{i}", "role": "member", "specialization": f"spec{i}"} for i in range(10)
         ]
         with patch("orchestrator._call_llm_for_routing") as mock_llm:
             mock_llm.return_value = {"agent_ids": [1, 2, 3, 4, 5], "reasoning": "Many agents"}
-            result = select_agents_for_question("Complex question", mock_members, model_id="mistral:mistral-small-latest")
+            result = select_agents_for_question(
+                "Complex question", mock_members, model_id="mistral:mistral-small-latest"
+            )
         assert len(result["agent_ids"]) <= 3
 
 

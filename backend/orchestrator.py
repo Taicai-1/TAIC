@@ -121,7 +121,9 @@ def execute_agent(
     prompt = f"Sachant le contexte et la discussion en cours, reponds a cette question : {question}"
     try:
         result = get_answer(
-            prompt, user_id, db,
+            prompt,
+            user_id,
+            db,
             selected_doc_ids=selected_doc_ids,
             agent_id=agent_id,
             history=history,
@@ -218,6 +220,7 @@ def execute_agents_parallel(
 
     # Capture current tenant context to propagate to threads
     from database import _current_company_id
+
     tenant_company_id = _current_company_id.get()
 
     contributions = [None] * len(agent_configs)
@@ -272,24 +275,24 @@ def synthesize_contributions(
         return ""
 
     contributions_text = "\n\n".join(
-        f'[Agent "{c["agent_name"]}" -- {c.get("specialization", "general")}]:\n{c["content"]}'
-        for c in successful
+        f'[Agent "{c["agent_name"]}" -- {c.get("specialization", "general")}]:\n{c["content"]}' for c in successful
     )
 
-    prompt = DEFAULT_SYNTHESIS_PROMPT.format(
-        team_name=team_name,
-        team_contexte=team_contexte or "",
-        contributions_text=contributions_text,
-    ) + f"\n\nQuestion originale: {question}"
+    prompt = (
+        DEFAULT_SYNTHESIS_PROMPT.format(
+            team_name=team_name,
+            team_contexte=team_contexte or "",
+            contributions_text=contributions_text,
+        )
+        + f"\n\nQuestion originale: {question}"
+    )
 
     try:
         return generate_text(prompt, model_name=leader_model_id, temperature=0.3, max_tokens=4000).strip()
     except Exception as e:
         logger.error(f"Synthesis failed: {e}")
         # Fallback: concatenate contributions
-        return "\n\n---\n\n".join(
-            f"**{c['agent_name']}**: {c['content']}" for c in successful
-        )
+        return "\n\n---\n\n".join(f"**{c['agent_name']}**: {c['content']}" for c in successful)
 
 
 def suggest_specialization(
@@ -378,9 +381,7 @@ def orchestrate_team_question(
         }
 
     # Phase 2: Parallel execution
-    agent_configs = [
-        m for m in members_with_agents if m["agent_id"] in selected_ids
-    ]
+    agent_configs = [m for m in members_with_agents if m["agent_id"] in selected_ids]
     contributions = execute_agents_parallel(
         agent_configs=agent_configs,
         question=question,

@@ -136,15 +136,17 @@ async def ask_question(
                 a = agent_lookup.get(m.agent_id)
                 if not a:
                     continue
-                members_with_agents.append({
-                    "agent_id": m.agent_id,
-                    "name": a.name,
-                    "role": m.role,
-                    "specialization": m.specialization or m.auto_specialization or "",
-                    "model_id": a.finetuned_model_id or resolve_model_id(a),
-                    "company_id": a.company_id,
-                    "agent": a,
-                })
+                members_with_agents.append(
+                    {
+                        "agent_id": m.agent_id,
+                        "name": a.name,
+                        "role": m.role,
+                        "specialization": m.specialization or m.auto_specialization or "",
+                        "model_id": a.finetuned_model_id or resolve_model_id(a),
+                        "company_id": a.company_id,
+                        "agent": a,
+                    }
+                )
 
             result = orchestrate_team_question(
                 question=request.question,
@@ -257,7 +259,9 @@ async def ask_question_stream(
                     yield sse_event("error", {"message": "Access denied", "code": "forbidden"})
                     return
 
-                members_db = db.query(TeamMember).filter(TeamMember.team_id == team.id).order_by(TeamMember.position).all()
+                members_db = (
+                    db.query(TeamMember).filter(TeamMember.team_id == team.id).order_by(TeamMember.position).all()
+                )
                 agent_ids = [m.agent_id for m in members_db]
                 agents_db = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
                 agent_lookup = {a.id: a for a in agents_db}
@@ -267,14 +271,16 @@ async def ask_question_stream(
                     a = agent_lookup.get(m.agent_id)
                     if not a:
                         continue
-                    members_with_agents.append({
-                        "agent_id": m.agent_id,
-                        "name": a.name,
-                        "role": m.role,
-                        "specialization": m.specialization or m.auto_specialization or "",
-                        "model_id": a.finetuned_model_id or resolve_model_id(a),
-                        "company_id": a.company_id,
-                    })
+                    members_with_agents.append(
+                        {
+                            "agent_id": m.agent_id,
+                            "name": a.name,
+                            "role": m.role,
+                            "specialization": m.specialization or m.auto_specialization or "",
+                            "model_id": a.finetuned_model_id or resolve_model_id(a),
+                            "company_id": a.company_id,
+                        }
+                    )
 
                 leader_info = next((m for m in members_with_agents if m["role"] == "leader"), None)
                 if not leader_info:
@@ -292,9 +298,13 @@ async def ask_question_stream(
 
                 if not selected_ids:
                     # Leader responds alone, stream directly
-                    prompt = f"Sachant le contexte et la discussion en cours, reponds a cette question : {request.question}"
+                    prompt = (
+                        f"Sachant le contexte et la discussion en cours, reponds a cette question : {request.question}"
+                    )
                     yield from get_answer_stream(
-                        prompt, int(user_id), db,
+                        prompt,
+                        int(user_id),
+                        db,
                         selected_doc_ids=request.selected_documents,
                         agent_id=leader_info["agent_id"],
                         history=history,
@@ -308,7 +318,8 @@ async def ask_question_stream(
                 # Emit routing event
                 routed_agents = [
                     {"id": m["agent_id"], "name": m["name"], "specialization": m.get("specialization", "")}
-                    for m in members_with_agents if m["agent_id"] in selected_ids
+                    for m in members_with_agents
+                    if m["agent_id"] in selected_ids
                 ]
                 yield sse_event("routing", {"agents": routed_agents})
 
@@ -327,21 +338,28 @@ async def ask_question_stream(
 
                 # Emit contribution events
                 for c in contributions:
-                    yield sse_event("contribution", {
-                        "agent_id": c["agent_id"],
-                        "agent_name": c.get("agent_name", ""),
-                        "specialization": c.get("specialization", ""),
-                        "content": c["content"],
-                        "status": c["status"],
-                    })
+                    yield sse_event(
+                        "contribution",
+                        {
+                            "agent_id": c["agent_id"],
+                            "agent_name": c.get("agent_name", ""),
+                            "specialization": c.get("specialization", ""),
+                            "content": c["content"],
+                            "status": c["status"],
+                        },
+                    )
 
                 # Phase 3: Synthesis (streamed)
                 successful = [c for c in contributions if c["status"] == "ok" and c["content"]]
                 if not successful:
                     # All failed, leader responds alone
-                    prompt = f"Sachant le contexte et la discussion en cours, reponds a cette question : {request.question}"
+                    prompt = (
+                        f"Sachant le contexte et la discussion en cours, reponds a cette question : {request.question}"
+                    )
                     yield from get_answer_stream(
-                        prompt, int(user_id), db,
+                        prompt,
+                        int(user_id),
+                        db,
                         selected_doc_ids=request.selected_documents,
                         agent_id=leader_info["agent_id"],
                         history=history,
@@ -353,14 +371,16 @@ async def ask_question_stream(
                     return
 
                 contributions_text = "\n\n".join(
-                    f'[Agent "{c["agent_name"]}" -- {c.get("specialization", "")}]:\n{c["content"]}'
-                    for c in successful
+                    f'[Agent "{c["agent_name"]}" -- {c.get("specialization", "")}]:\n{c["content"]}' for c in successful
                 )
-                synthesis_prompt = DEFAULT_SYNTHESIS_PROMPT.format(
-                    team_name=team.name,
-                    team_contexte=team.contexte or "",
-                    contributions_text=contributions_text,
-                ) + f"\n\nQuestion originale: {request.question}"
+                synthesis_prompt = (
+                    DEFAULT_SYNTHESIS_PROMPT.format(
+                        team_name=team.name,
+                        team_contexte=team.contexte or "",
+                        contributions_text=contributions_text,
+                    )
+                    + f"\n\nQuestion originale: {request.question}"
+                )
 
                 messages = [{"role": "user", "content": synthesis_prompt}]
                 full_text = ""
@@ -368,15 +388,23 @@ async def ask_question_stream(
                     full_text += chunk
                     yield sse_event("token", {"t": chunk})
 
-                yield sse_event("done", {
-                    "full_text": full_text,
-                    "contributions": [
-                        {"agent_id": c["agent_id"], "agent_name": c.get("agent_name", ""), "specialization": c.get("specialization", ""), "content": c["content"]}
-                        for c in contributions
-                    ],
-                    "sources": [],
-                    "graph_data": None,
-                })
+                yield sse_event(
+                    "done",
+                    {
+                        "full_text": full_text,
+                        "contributions": [
+                            {
+                                "agent_id": c["agent_id"],
+                                "agent_name": c.get("agent_name", ""),
+                                "specialization": c.get("specialization", ""),
+                                "content": c["content"],
+                            }
+                            for c in contributions
+                        ],
+                        "sources": [],
+                        "graph_data": None,
+                    },
+                )
             else:
                 yield sse_event("error", {"message": "Aucun agent ou équipe valide fourni.", "code": "bad_request"})
 

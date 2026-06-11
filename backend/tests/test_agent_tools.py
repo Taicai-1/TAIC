@@ -1,4 +1,5 @@
 """Tests for agent_tools module."""
+
 from unittest.mock import MagicMock
 from plugins.base import ActionDefinition
 
@@ -12,14 +13,24 @@ class TestBuildToolsFromPlugins:
         mock_plugin.name = "gmail"
         mock_plugin.get_actions.return_value = {
             "send_email": ActionDefinition(
-                name="send_email", description="Send an email",
+                name="send_email",
+                description="Send an email",
                 parameters_schema={"type": "object", "properties": {"to": {"type": "string"}}, "required": ["to"]},
-                display_name="Send Email", icon="send", side_effect=True,
+                display_name="Send Email",
+                icon="send",
+                side_effect=True,
             ),
             "search_emails": ActionDefinition(
-                name="search_emails", description="Search emails",
-                parameters_schema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
-                display_name="Search Emails", icon="search", side_effect=False,
+                name="search_emails",
+                description="Search emails",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+                display_name="Search Emails",
+                icon="search",
+                side_effect=False,
             ),
         }
         mock_manager.get_plugin.return_value = mock_plugin
@@ -43,9 +54,11 @@ class TestBuildToolsFromPlugins:
         from agent_tools import ToolDefinition
 
         tool = ToolDefinition(
-            name="send_email", description="Send an email",
+            name="send_email",
+            description="Send an email",
             parameters_schema={"type": "object", "properties": {"to": {"type": "string"}}, "required": ["to"]},
-            plugin_name="gmail", side_effect=True,
+            plugin_name="gmail",
+            side_effect=True,
         )
         text = tool.to_prompt_str()
         assert "send_email" in text
@@ -57,9 +70,11 @@ class TestBuildToolsFromPlugins:
         from agent_tools import ToolDefinition
 
         tool = ToolDefinition(
-            name="search_emails", description="Search emails",
+            name="search_emails",
+            description="Search emails",
             parameters_schema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
-            plugin_name="gmail", side_effect=False,
+            plugin_name="gmail",
+            side_effect=False,
         )
         text = tool.to_prompt_str()
         assert "lecture seule" in text.lower()

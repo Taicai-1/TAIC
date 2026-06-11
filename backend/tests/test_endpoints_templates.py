@@ -45,9 +45,7 @@ async def test_create_template_member_forbidden(client, member_cookies, test_com
 @pytest.mark.asyncio
 async def test_get_template_detail(client, db_session, admin_cookies, test_company, test_admin_user):
     """GET template detail returns documents."""
-    template = AgentTemplateFactory.build(
-        company_id=test_company.id, created_by_user_id=test_admin_user.id
-    )
+    template = AgentTemplateFactory.build(company_id=test_company.id, created_by_user_id=test_admin_user.id)
     db_session.add(template)
     db_session.flush()
 
@@ -61,9 +59,7 @@ async def test_get_template_detail(client, db_session, admin_cookies, test_compa
 @pytest.mark.asyncio
 async def test_update_template(client, db_session, admin_cookies, test_company, test_admin_user):
     """Admin can update a template."""
-    template = AgentTemplateFactory.build(
-        company_id=test_company.id, created_by_user_id=test_admin_user.id
-    )
+    template = AgentTemplateFactory.build(company_id=test_company.id, created_by_user_id=test_admin_user.id)
     db_session.add(template)
     db_session.flush()
 
@@ -80,9 +76,7 @@ async def test_update_template(client, db_session, admin_cookies, test_company, 
 @pytest.mark.asyncio
 async def test_delete_template(client, db_session, admin_cookies, test_company, test_admin_user):
     """Admin can delete a template."""
-    template = AgentTemplateFactory.build(
-        company_id=test_company.id, created_by_user_id=test_admin_user.id
-    )
+    template = AgentTemplateFactory.build(company_id=test_company.id, created_by_user_id=test_admin_user.id)
     db_session.add(template)
     db_session.flush()
     tid = template.id
@@ -97,9 +91,7 @@ async def test_delete_template(client, db_session, admin_cookies, test_company, 
 @pytest.mark.asyncio
 async def test_member_can_list_templates(client, db_session, member_cookies, test_company, test_admin_user):
     """Member can list org templates."""
-    template = AgentTemplateFactory.build(
-        company_id=test_company.id, created_by_user_id=test_admin_user.id
-    )
+    template = AgentTemplateFactory.build(company_id=test_company.id, created_by_user_id=test_admin_user.id)
     db_session.add(template)
     db_session.flush()
 

@@ -118,14 +118,8 @@ def _validate_answer_value(question, value):
         return value
 
     if question.question_type == "multiple_choice":
-        if (
-            not isinstance(value, list)
-            or not value
-            or not all(isinstance(v, str) for v in value)
-        ):
-            raise HTTPException(
-                status_code=422, detail=f"Question {question.id}: liste de choix attendue"
-            )
+        if not isinstance(value, list) or not value or not all(isinstance(v, str) for v in value):
+            raise HTTPException(status_code=422, detail=f"Question {question.id}: liste de choix attendue")
         if isinstance(options, list) and any(v not in options for v in value):
             raise HTTPException(status_code=422, detail=f"Question {question.id}: choix invalide")
         value = list(dict.fromkeys(value))
@@ -140,9 +134,7 @@ def _validate_answer_value(question, value):
             raise HTTPException(status_code=422, detail=f"Question {question.id}: note attendue")
         bounds = options if isinstance(options, dict) else {"min": 1, "max": 5}
         if not (bounds.get("min", 1) <= rating <= bounds.get("max", 5)):
-            raise HTTPException(
-                status_code=422, detail=f"Question {question.id}: note hors limites"
-            )
+            raise HTTPException(status_code=422, detail=f"Question {question.id}: note hors limites")
         return str(rating)
 
     return None
@@ -155,9 +147,7 @@ async def public_get_questionnaire(token: str, request: Request, db: Session = D
     if not _check_rate_limit(ip):
         raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
 
-    response = (
-        db.query(QuestionnaireResponse).filter(QuestionnaireResponse.token == token).first()
-    )
+    response = db.query(QuestionnaireResponse).filter(QuestionnaireResponse.token == token).first()
     if not response:
         raise HTTPException(status_code=404, detail="Questionnaire not found")
 
@@ -192,12 +182,7 @@ async def public_submit_questionnaire(
     if not _check_rate_limit(ip):
         raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
 
-    response = (
-        db.query(QuestionnaireResponse)
-        .filter(QuestionnaireResponse.token == token)
-        .with_for_update()
-        .first()
-    )
+    response = db.query(QuestionnaireResponse).filter(QuestionnaireResponse.token == token).with_for_update().first()
     if not response:
         raise HTTPException(status_code=404, detail="Questionnaire not found")
     if response.status == "completed":
@@ -208,16 +193,10 @@ async def public_submit_questionnaire(
     provided = {}
     for item in body.answers:
         if item.question_id not in questions:
-            raise HTTPException(
-                status_code=422, detail=f"Question inconnue : {item.question_id}"
-            )
+            raise HTTPException(status_code=422, detail=f"Question inconnue : {item.question_id}")
         provided[item.question_id] = item.value
 
-    missing = [
-        q.id
-        for q in questions.values()
-        if q.required and provided.get(q.id) in (None, "", [])
-    ]
+    missing = [q.id for q in questions.values() if q.required and provided.get(q.id) in (None, "", [])]
     if missing:
         raise HTTPException(
             status_code=422,

@@ -340,8 +340,20 @@ def get_answer(
         if agent and getattr(agent, "date_awareness_enabled", False):
             now = datetime.now()
             _JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
-            _MOIS = ["janvier", "février", "mars", "avril", "mai", "juin",
-                      "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+            _MOIS = [
+                "janvier",
+                "février",
+                "mars",
+                "avril",
+                "mai",
+                "juin",
+                "juillet",
+                "août",
+                "septembre",
+                "octobre",
+                "novembre",
+                "décembre",
+            ]
             date_str = f"{_JOURS[now.weekday()]} {now.day} {_MOIS[now.month - 1]} {now.year}, {now.strftime('%H:%M')}"
             date_context = f"Date et heure actuelles : {date_str}\n\n"
             contexte_agent = date_context + contexte_agent
@@ -357,7 +369,11 @@ def get_answer(
         # Si pas de documents, fallback sur le contexte + mémoire
         if not user_docs:
             if selected_doc_ids:
-                return {"answer": "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection.", "sources": [], "graph_data": graph_data}
+                return {
+                    "answer": "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection.",
+                    "sources": [],
+                    "graph_data": graph_data,
+                }
             else:
                 logger.info("No documents found, using context + question + memory only")
                 # Prépare la liste messages pour OpenAI avec l'historique complet
@@ -409,8 +425,12 @@ def get_answer(
 
         # Build sources metadata for the frontend
         sources = [
-            {"text": r["text"], "document_name": r["document_name"],
-             "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
+            {
+                "text": r["text"],
+                "document_name": r["document_name"],
+                "score": round(r["similarity"] * 100, 1),
+                "document_id": r["document_id"],
+            }
             for r in context_results
         ]
 
@@ -593,8 +613,20 @@ def get_answer_stream(
         if agent and getattr(agent, "date_awareness_enabled", False):
             now = datetime.now()
             _JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
-            _MOIS = ["janvier", "février", "mars", "avril", "mai", "juin",
-                      "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+            _MOIS = [
+                "janvier",
+                "février",
+                "mars",
+                "avril",
+                "mai",
+                "juin",
+                "juillet",
+                "août",
+                "septembre",
+                "octobre",
+                "novembre",
+                "décembre",
+            ]
             date_str = f"{_JOURS[now.weekday()]} {now.day} {_MOIS[now.month - 1]} {now.year}, {now.strftime('%H:%M')}"
             date_context = f"Date et heure actuelles : {date_str}\n\n"
             contexte_agent = date_context + contexte_agent
@@ -646,8 +678,12 @@ def get_answer_stream(
 
             # Build sources metadata for the frontend
             sources = [
-                {"text": r["text"], "document_name": r["document_name"],
-                 "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
+                {
+                    "text": r["text"],
+                    "document_name": r["document_name"],
+                    "score": round(r["similarity"] * 100, 1),
+                    "document_id": r["document_id"],
+                }
                 for r in context_results
             ]
 
@@ -1027,7 +1063,12 @@ def ingest_text_content(
 
 
 def process_document_for_user(
-    filename: str, content: bytes, user_id: int, db: Session, agent_id: int = None, company_id: int = None,
+    filename: str,
+    content: bytes,
+    user_id: int,
+    db: Session,
+    agent_id: int = None,
+    company_id: int = None,
     progress_callback=None,
 ) -> int:
     import tempfile
@@ -1083,7 +1124,13 @@ def process_document_for_user(
             progress_callback("extracted", 28)
 
         return ingest_text_content(
-            text_content, filename, user_id, agent_id, db, gcs_url=gcs_url, company_id=company_id,
+            text_content,
+            filename,
+            user_id,
+            agent_id,
+            db,
+            gcs_url=gcs_url,
+            company_id=company_id,
             progress_callback=progress_callback,
         )
     except Exception as e:

@@ -85,9 +85,9 @@ async def google_callback(
 
         granted_scopes = list(credentials.scopes) if credentials.scopes else []
         # Fallback: extract scopes from the token response if credentials.scopes is empty
-        if not granted_scopes and hasattr(flow, 'oauth2session'):
-            token_response = getattr(flow.oauth2session, 'token', {})
-            raw_scope = token_response.get('scope', '')
+        if not granted_scopes and hasattr(flow, "oauth2session"):
+            token_response = getattr(flow.oauth2session, "token", {})
+            raw_scope = token_response.get("scope", "")
             if isinstance(raw_scope, list):
                 granted_scopes = raw_scope
             elif isinstance(raw_scope, str) and raw_scope:
@@ -117,7 +117,8 @@ async def google_callback(
         logger.info(f"Stored Google OAuth token for user {user_id}, scopes={granted_scopes}")
 
         # Close popup and notify main window via localStorage event
-        return HTMLResponse(content="""<!DOCTYPE html>
+        return HTMLResponse(
+            content="""<!DOCTYPE html>
 <html><head><title>Connected</title><style>
 body{font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0fdf4}
 .box{text-align:center;padding:2rem;border-radius:12px;background:white;box-shadow:0 1px 3px rgba(0,0,0,.1)}
@@ -130,7 +131,8 @@ h2{color:#16a34a;margin:0 0 .5rem} p{color:#666;margin:0}
 try { localStorage.setItem('google_oauth_done', Date.now().toString()); } catch(e) {}
 try { window.close(); } catch(e) {}
 </script>
-</body></html>""")
+</body></html>"""
+        )
     except Exception as e:
         logger.error(f"Google OAuth callback failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"OAuth callback error: {e}")

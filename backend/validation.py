@@ -471,6 +471,7 @@ class TeamCreateValidated(BaseModel):
 
 class TeamMemberSchema(BaseModel):
     """Schema for a team member in create/update requests."""
+
     agent_id: int = Field(..., gt=0)
     role: str = Field(..., pattern="^(leader|member)$")
     specialization: Optional[str] = Field(None, max_length=MAX_TEAM_CONTEXTE_LENGTH)
@@ -485,6 +486,7 @@ class TeamMemberSchema(BaseModel):
 
 class TeamCreateV2Validated(BaseModel):
     """Team creation V2 with members array."""
+
     name: str = Field(..., min_length=1, max_length=MAX_TEAM_NAME_LENGTH)
     contexte: Optional[str] = Field(None, max_length=MAX_TEAM_CONTEXTE_LENGTH)
     orchestration_prompt: Optional[str] = Field(None, max_length=MAX_TEAM_CONTEXTE_LENGTH)
@@ -524,6 +526,7 @@ class TeamCreateV2Validated(BaseModel):
 
 class SuggestSpecializationRequest(BaseModel):
     """Request to suggest specialization for an agent."""
+
     agent_id: int = Field(..., gt=0)
 
 

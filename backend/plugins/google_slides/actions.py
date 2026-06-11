@@ -1,4 +1,5 @@
 """Google Slides action implementations."""
+
 from __future__ import annotations
 import logging
 import uuid
@@ -6,6 +7,7 @@ from googleapiclient.discovery import build
 from plugins.base import ActionResult
 
 logger = logging.getLogger(__name__)
+
 
 def create_presentation(args: dict, credentials) -> ActionResult:
     title = args.get("title", "Untitled Presentation")
@@ -18,8 +20,13 @@ def create_presentation(args: dict, credentials) -> ActionResult:
         for idx, slide_data in enumerate(slides_data):
             slide_id = str(uuid.uuid4()).replace("-", "")[:8]
             requests = [
-                {"createSlide": {"objectId": slide_id, "insertionIndex": str(idx + 1),
-                                "slideLayoutReference": {"predefinedLayout": "TITLE_AND_BODY"}}},
+                {
+                    "createSlide": {
+                        "objectId": slide_id,
+                        "insertionIndex": str(idx + 1),
+                        "slideLayoutReference": {"predefinedLayout": "TITLE_AND_BODY"},
+                    }
+                },
             ]
             service.presentations().batchUpdate(presentationId=pres_id, body={"requests": requests}).execute()
             # Insert text into title and body placeholders
@@ -32,17 +39,33 @@ def create_presentation(args: dict, credentials) -> ActionResult:
                         shape = element.get("shape", {})
                         ph = shape.get("placeholder", {})
                         if ph.get("type") == "TITLE" and slide_data.get("title"):
-                            text_requests.append({"insertText": {"objectId": element["objectId"], "text": slide_data["title"]}})
+                            text_requests.append(
+                                {"insertText": {"objectId": element["objectId"], "text": slide_data["title"]}}
+                            )
                         elif ph.get("type") == "BODY" and slide_data.get("body"):
-                            text_requests.append({"insertText": {"objectId": element["objectId"], "text": slide_data["body"]}})
+                            text_requests.append(
+                                {"insertText": {"objectId": element["objectId"], "text": slide_data["body"]}}
+                            )
             if text_requests:
                 service.presentations().batchUpdate(presentationId=pres_id, body={"requests": text_requests}).execute()
         url = f"https://docs.google.com/presentation/d/{pres_id}/edit"
-        return ActionResult(success=True, data={"presentation_id": pres_id, "url": url},
-                          display_message=f"Created presentation '{title}'", resource_url=url, error_message=None)
+        return ActionResult(
+            success=True,
+            data={"presentation_id": pres_id, "url": url},
+            display_message=f"Created presentation '{title}'",
+            resource_url=url,
+            error_message=None,
+        )
     except Exception as e:
         logger.exception(f"Failed to create presentation: {e}")
-        return ActionResult(success=False, data={}, display_message="", resource_url=None, error_message=f"Failed to create presentation: {e}")
+        return ActionResult(
+            success=False,
+            data={},
+            display_message="",
+            resource_url=None,
+            error_message=f"Failed to create presentation: {e}",
+        )
+
 
 def add_slide(args: dict, credentials) -> ActionResult:
     pres_id = args.get("presentation_id")
@@ -70,8 +93,15 @@ def add_slide(args: dict, credentials) -> ActionResult:
         if text_requests:
             service.presentations().batchUpdate(presentationId=pres_id, body={"requests": text_requests}).execute()
         url = f"https://docs.google.com/presentation/d/{pres_id}/edit"
-        return ActionResult(success=True, data={"presentation_id": pres_id, "slide_id": slide_id},
-                          display_message=f"Added slide to presentation", resource_url=url, error_message=None)
+        return ActionResult(
+            success=True,
+            data={"presentation_id": pres_id, "slide_id": slide_id},
+            display_message="Added slide to presentation",
+            resource_url=url,
+            error_message=None,
+        )
     except Exception as e:
         logger.exception(f"Failed to add slide: {e}")
-        return ActionResult(success=False, data={}, display_message="", resource_url=None, error_message=f"Failed to add slide: {e}")
+        return ActionResult(
+            success=False, data={}, display_message="", resource_url=None, error_message=f"Failed to add slide: {e}"
+        )

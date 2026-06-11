@@ -1,5 +1,5 @@
 -r requirements.txt
-ruff
+ruff==0.15.10
 pytest
 pytest-asyncio
 httpx

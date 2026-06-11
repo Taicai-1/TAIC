@@ -35,7 +35,11 @@ def create_doc(args: dict, credentials) -> ActionResult:
     except Exception as e:
         logger.exception(f"Failed to create Google Doc: {e}")
         return ActionResult(
-            success=False, data={}, display_message="", resource_url=None, error_message=f"Failed to create document: {e}"
+            success=False,
+            data={},
+            display_message="",
+            resource_url=None,
+            error_message=f"Failed to create document: {e}",
         )
 
 
@@ -56,14 +60,18 @@ def update_doc(args: dict, credentials) -> ActionResult:
         return ActionResult(
             success=True,
             data={"document_id": doc_id, "url": url},
-            display_message=f"Updated Google Doc",
+            display_message="Updated Google Doc",
             resource_url=url,
             error_message=None,
         )
     except Exception as e:
         logger.exception(f"Failed to update Google Doc: {e}")
         return ActionResult(
-            success=False, data={}, display_message="", resource_url=None, error_message=f"Failed to update document: {e}"
+            success=False,
+            data={},
+            display_message="",
+            resource_url=None,
+            error_message=f"Failed to update document: {e}",
         )
 
 
@@ -92,5 +100,9 @@ def share_doc(args: dict, credentials) -> ActionResult:
     except Exception as e:
         logger.exception(f"Failed to share Google Doc: {e}")
         return ActionResult(
-            success=False, data={}, display_message="", resource_url=None, error_message=f"Failed to share document: {e}"
+            success=False,
+            data={},
+            display_message="",
+            resource_url=None,
+            error_message=f"Failed to share document: {e}",
         )

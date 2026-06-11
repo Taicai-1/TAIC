@@ -36,7 +36,11 @@ class FakePlugin(BasePlugin):
                 error_message=None,
             )
         return ActionResult(
-            success=False, data={}, display_message="", resource_url=None, error_message=f"Unknown action: {action_name}"
+            success=False,
+            data={},
+            display_message="",
+            resource_url=None,
+            error_message=f"Unknown action: {action_name}",
         )
 
 
@@ -54,7 +58,9 @@ class TestActionDefinition:
 
 class TestActionResult:
     def test_success_result(self):
-        r = ActionResult(success=True, data={"key": "val"}, display_message="ok", resource_url="http://x", error_message=None)
+        r = ActionResult(
+            success=True, data={"key": "val"}, display_message="ok", resource_url="http://x", error_message=None
+        )
         assert r.success is True
         assert r.resource_url == "http://x"
 

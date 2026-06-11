@@ -23,9 +23,7 @@ def test_questionnaire_cascade_delete(db_session, test_questionnaire, test_compa
     from database import QuestionnaireAnswer, QuestionnaireQuestion, QuestionnaireResponse
     from tests.factories import QuestionnaireAnswerFactory, QuestionnaireResponseFactory
 
-    response = QuestionnaireResponseFactory.build(
-        questionnaire_id=test_questionnaire.id, company_id=test_company.id
-    )
+    response = QuestionnaireResponseFactory.build(questionnaire_id=test_questionnaire.id, company_id=test_company.id)
     db_session.add(response)
     db_session.flush()
     answer = QuestionnaireAnswerFactory.build(
@@ -41,15 +39,19 @@ def test_questionnaire_cascade_delete(db_session, test_questionnaire, test_compa
     db_session.delete(test_questionnaire)
     db_session.flush()
 
-    assert db_session.query(QuestionnaireQuestion).filter(
-        QuestionnaireQuestion.questionnaire_id == questionnaire_id
-    ).count() == 0
-    assert db_session.query(QuestionnaireResponse).filter(
-        QuestionnaireResponse.questionnaire_id == questionnaire_id
-    ).count() == 0
-    assert db_session.query(QuestionnaireAnswer).filter(
-        QuestionnaireAnswer.response_id == response_id
-    ).count() == 0
+    assert (
+        db_session.query(QuestionnaireQuestion)
+        .filter(QuestionnaireQuestion.questionnaire_id == questionnaire_id)
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(QuestionnaireResponse)
+        .filter(QuestionnaireResponse.questionnaire_id == questionnaire_id)
+        .count()
+        == 0
+    )
+    assert db_session.query(QuestionnaireAnswer).filter(QuestionnaireAnswer.response_id == response_id).count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +154,7 @@ CREATE_PAYLOAD = {
 
 @pytest.mark.asyncio
 async def test_create_and_get_questionnaire(client, member_cookies):
-    resp = await client.post(
-        "/api/automations/questionnaires", json=CREATE_PAYLOAD, cookies=member_cookies
-    )
+    resp = await client.post("/api/automations/questionnaires", json=CREATE_PAYLOAD, cookies=member_cookies)
     assert resp.status_code == 200
     data = resp.json()["questionnaire"]
     assert data["title"] == "Enquête satisfaction"
@@ -162,9 +162,7 @@ async def test_create_and_get_questionnaire(client, member_cookies):
     assert data["questions"][1]["options"] == ["Oui", "Non"]
     assert data["questions"][2]["options"] == {"min": 1, "max": 5}
 
-    detail = await client.get(
-        f"/api/automations/questionnaires/{data['id']}", cookies=member_cookies
-    )
+    detail = await client.get(f"/api/automations/questionnaires/{data['id']}", cookies=member_cookies)
     assert detail.status_code == 200
     assert len(detail.json()["questionnaire"]["questions"]) == 3
 
@@ -204,9 +202,7 @@ async def test_questionnaire_cross_company_404(client, member_cookies, db_sessio
     db_session.add(foreign)
     db_session.flush()
 
-    resp = await client.get(
-        f"/api/automations/questionnaires/{foreign.id}", cookies=member_cookies
-    )
+    resp = await client.get(f"/api/automations/questionnaires/{foreign.id}", cookies=member_cookies)
     assert resp.status_code == 404
 
 
@@ -252,13 +248,9 @@ async def test_update_blocked_when_completed_responses(
 
 @pytest.mark.asyncio
 async def test_delete_questionnaire(client, member_cookies, test_questionnaire):
-    resp = await client.delete(
-        f"/api/automations/questionnaires/{test_questionnaire.id}", cookies=member_cookies
-    )
+    resp = await client.delete(f"/api/automations/questionnaires/{test_questionnaire.id}", cookies=member_cookies)
     assert resp.status_code == 200
-    again = await client.get(
-        f"/api/automations/questionnaires/{test_questionnaire.id}", cookies=member_cookies
-    )
+    again = await client.get(f"/api/automations/questionnaires/{test_questionnaire.id}", cookies=member_cookies)
     assert again.status_code == 404
 
 
@@ -350,9 +342,7 @@ async def test_invite_requires_questions(client, member_cookies, db_session, tes
 async def test_resend_invitation(client, member_cookies, db_session, test_questionnaire, test_company):
     from tests.factories import QuestionnaireResponseFactory
 
-    invitation = QuestionnaireResponseFactory.build(
-        questionnaire_id=test_questionnaire.id, company_id=test_company.id
-    )
+    invitation = QuestionnaireResponseFactory.build(questionnaire_id=test_questionnaire.id, company_id=test_company.id)
     db_session.add(invitation)
     db_session.flush()
 
@@ -392,9 +382,7 @@ async def test_resend_404_for_foreign_questionnaire_response(
     other = QuestionnaireFactory.build(company_id=test_company.id, user_id=test_member_user.id)
     db_session.add(other)
     db_session.flush()
-    response = QuestionnaireResponseFactory.build(
-        questionnaire_id=other.id, company_id=test_company.id
-    )
+    response = QuestionnaireResponseFactory.build(questionnaire_id=other.id, company_id=test_company.id)
     db_session.add(response)
     db_session.flush()
 
@@ -441,9 +429,7 @@ async def test_list_responses_with_filter_and_pagination(
 ):
     from tests.factories import QuestionnaireResponseFactory
 
-    pending = QuestionnaireResponseFactory.build(
-        questionnaire_id=test_questionnaire.id, company_id=test_company.id
-    )
+    pending = QuestionnaireResponseFactory.build(questionnaire_id=test_questionnaire.id, company_id=test_company.id)
     db_session.add(pending)
     db_session.flush()
 
@@ -474,9 +460,7 @@ async def test_list_responses_with_filter_and_pagination(
 
 
 @pytest.mark.asyncio
-async def test_response_detail_with_answers(
-    client, member_cookies, test_questionnaire, test_completed_response
-):
+async def test_response_detail_with_answers(client, member_cookies, test_questionnaire, test_completed_response):
     resp = await client.get(
         f"/api/automations/questionnaires/{test_questionnaire.id}/responses/{test_completed_response.id}",
         cookies=member_cookies,
@@ -519,14 +503,17 @@ async def test_list_responses_invalid_status_422(client, member_cookies, test_qu
 
 @pytest.mark.asyncio
 async def test_export_to_rag(
-    client, member_cookies, db_session, test_questionnaire, test_company,
-    test_member_user, test_completed_response,
+    client,
+    member_cookies,
+    db_session,
+    test_questionnaire,
+    test_company,
+    test_member_user,
+    test_completed_response,
 ):
     from tests.factories import AgentFactory
 
-    agent = AgentFactory.build(
-        user_id=test_member_user.id, company_id=test_company.id, type="conversationnel"
-    )
+    agent = AgentFactory.build(user_id=test_member_user.id, company_id=test_company.id, type="conversationnel")
     db_session.add(agent)
     db_session.flush()
 
@@ -579,12 +566,8 @@ async def test_export_requires_completed_responses(
 ):
     from tests.factories import AgentFactory, QuestionnaireResponseFactory
 
-    agent = AgentFactory.build(
-        user_id=test_member_user.id, company_id=test_company.id, type="conversationnel"
-    )
-    pending = QuestionnaireResponseFactory.build(
-        questionnaire_id=test_questionnaire.id, company_id=test_company.id
-    )
+    agent = AgentFactory.build(user_id=test_member_user.id, company_id=test_company.id, type="conversationnel")
+    pending = QuestionnaireResponseFactory.build(questionnaire_id=test_questionnaire.id, company_id=test_company.id)
     db_session.add(agent)
     db_session.add(pending)
     db_session.flush()
@@ -599,14 +582,17 @@ async def test_export_requires_completed_responses(
 
 @pytest.mark.asyncio
 async def test_export_rejects_wrong_agent_type(
-    client, member_cookies, db_session, test_questionnaire, test_company,
-    test_member_user, test_completed_response,
+    client,
+    member_cookies,
+    db_session,
+    test_questionnaire,
+    test_company,
+    test_member_user,
+    test_completed_response,
 ):
     from tests.factories import AgentFactory
 
-    visuel = AgentFactory.build(
-        user_id=test_member_user.id, company_id=test_company.id, type="visuel"
-    )
+    visuel = AgentFactory.build(user_id=test_member_user.id, company_id=test_company.id, type="visuel")
     db_session.add(visuel)
     db_session.flush()
 
@@ -620,16 +606,19 @@ async def test_export_rejects_wrong_agent_type(
 
 @pytest.mark.asyncio
 async def test_export_reports_partial_failure(
-    client, member_cookies, db_session, test_questionnaire, test_company,
-    test_member_user, test_completed_response,
+    client,
+    member_cookies,
+    db_session,
+    test_questionnaire,
+    test_company,
+    test_member_user,
+    test_completed_response,
 ):
     from datetime import datetime
 
     from tests.factories import AgentFactory, QuestionnaireResponseFactory
 
-    agent = AgentFactory.build(
-        user_id=test_member_user.id, company_id=test_company.id, type="conversationnel"
-    )
+    agent = AgentFactory.build(user_id=test_member_user.id, company_id=test_company.id, type="conversationnel")
     second = QuestionnaireResponseFactory.build(
         questionnaire_id=test_questionnaire.id,
         company_id=test_company.id,
@@ -664,9 +653,7 @@ async def test_export_reports_partial_failure(
 def test_invitation(db_session, test_questionnaire, test_company):
     from tests.factories import QuestionnaireResponseFactory
 
-    invitation = QuestionnaireResponseFactory.build(
-        questionnaire_id=test_questionnaire.id, company_id=test_company.id
-    )
+    invitation = QuestionnaireResponseFactory.build(questionnaire_id=test_questionnaire.id, company_id=test_company.id)
     db_session.add(invitation)
     db_session.flush()
     return invitation
@@ -788,8 +775,7 @@ async def test_public_submit_dedupes_multiple_choice(client, db_session, test_in
     assert resp.status_code == 200
     stored = (
         db_session.query(QuestionnaireAnswer)
-        .filter(QuestionnaireAnswer.response_id == test_invitation.id,
-                QuestionnaireAnswer.question_id == q_choice.id)
+        .filter(QuestionnaireAnswer.response_id == test_invitation.id, QuestionnaireAnswer.question_id == q_choice.id)
         .first()
     )
     assert json_mod.loads(stored.answer_text) == ["Oui", "Non"]

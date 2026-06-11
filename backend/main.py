@@ -342,6 +342,7 @@ app.mount("/profile_photos", StaticFiles(directory="profile_photos"), name="prof
 async def startup_event():
     """Initialize database and run Alembic migrations on startup."""
     import time as _time
+
     t0 = _time.monotonic()
 
     def _elapsed():
@@ -522,6 +523,7 @@ from routers.automations import router as automations_router  # noqa: E402
 
 # Discover and register all plugins
 from plugins import discover_plugins  # noqa: E402
+
 discover_plugins()
 
 app.include_router(auth_router)

@@ -51,7 +51,10 @@ class GoogleDocsPlugin(BasePlugin):
         fn = action_map.get(action_name)
         if not fn:
             return ActionResult(
-                success=False, data={}, display_message="", resource_url=None,
+                success=False,
+                data={},
+                display_message="",
+                resource_url=None,
                 error_message=f"Unknown action: {action_name}",
             )
         return fn(args, credentials)

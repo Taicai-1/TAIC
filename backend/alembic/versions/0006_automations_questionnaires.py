@@ -36,7 +36,9 @@ def upgrade() -> None:
             "questionnaires",
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False, index=True),
-            sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True),
+            sa.Column(
+                "user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+            ),
             sa.Column("title", sa.String(length=255), nullable=False),
             sa.Column("description", sa.Text(), nullable=True),
             sa.Column("created_at", sa.DateTime(), nullable=True),

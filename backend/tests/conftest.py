@@ -186,6 +186,7 @@ def test_conversation(db_session, test_user, test_agent):
 def test_company(db_session):
     """Create a test company."""
     from tests.factories import CompanyFactory
+
     company = CompanyFactory.build()
     db_session.add(company)
     db_session.flush()
@@ -196,12 +197,11 @@ def test_company(db_session):
 def test_admin_user(db_session, test_company):
     """Create an admin user in the test company."""
     from tests.factories import UserFactory, CompanyMembershipFactory
+
     user = UserFactory.build(company_id=test_company.id)
     db_session.add(user)
     db_session.flush()
-    membership = CompanyMembershipFactory.build(
-        user_id=user.id, company_id=test_company.id, role="admin"
-    )
+    membership = CompanyMembershipFactory.build(user_id=user.id, company_id=test_company.id, role="admin")
     db_session.add(membership)
     db_session.flush()
     return user
@@ -223,12 +223,11 @@ def admin_cookies(test_admin_token):
 def test_member_user(db_session, test_company):
     """Create a member user in the test company."""
     from tests.factories import UserFactory, CompanyMembershipFactory
+
     user = UserFactory.build(company_id=test_company.id)
     db_session.add(user)
     db_session.flush()
-    membership = CompanyMembershipFactory.build(
-        user_id=user.id, company_id=test_company.id, role="member"
-    )
+    membership = CompanyMembershipFactory.build(user_id=user.id, company_id=test_company.id, role="member")
     db_session.add(membership)
     db_session.flush()
     return user
@@ -251,15 +250,11 @@ def test_questionnaire(db_session, test_member_user, test_company):
     """Create a questionnaire with 2 questions (open + single_choice) in test_company."""
     from tests.factories import QuestionnaireFactory, QuestionnaireQuestionFactory
 
-    questionnaire = QuestionnaireFactory.build(
-        company_id=test_company.id, user_id=test_member_user.id
-    )
+    questionnaire = QuestionnaireFactory.build(company_id=test_company.id, user_id=test_member_user.id)
     db_session.add(questionnaire)
     db_session.flush()
 
-    q1 = QuestionnaireQuestionFactory.build(
-        questionnaire_id=questionnaire.id, company_id=test_company.id, position=0
-    )
+    q1 = QuestionnaireQuestionFactory.build(questionnaire_id=questionnaire.id, company_id=test_company.id, position=0)
     q2 = QuestionnaireQuestionFactory.build(
         questionnaire_id=questionnaire.id,
         company_id=test_company.id,
@@ -280,7 +275,9 @@ def test_team(db_session, test_user):
     from tests.factories import AgentFactory, TeamFactory, TeamMemberFactory
     import json
 
-    leader = AgentFactory.build(user_id=test_user.id, name="Leader Agent", company_id=getattr(test_user, 'company_id', None))
+    leader = AgentFactory.build(
+        user_id=test_user.id, name="Leader Agent", company_id=getattr(test_user, "company_id", None)
+    )
     db_session.add(leader)
     db_session.flush()
 
@@ -288,14 +285,17 @@ def test_team(db_session, test_user):
         user_id=test_user.id,
         leader_agent_id=leader.id,
         action_agent_ids="[]",
-        company_id=getattr(test_user, 'company_id', None),
+        company_id=getattr(test_user, "company_id", None),
     )
     db_session.add(team)
     db_session.flush()
 
     leader_member = TeamMemberFactory.build(
-        team_id=team.id, agent_id=leader.id, role="leader", position=0,
-        company_id=getattr(test_user, 'company_id', None),
+        team_id=team.id,
+        agent_id=leader.id,
+        role="leader",
+        position=0,
+        company_id=getattr(test_user, "company_id", None),
     )
     db_session.add(leader_member)
     db_session.flush()
@@ -309,11 +309,17 @@ def test_team_with_members(db_session, test_user):
     from tests.factories import AgentFactory, TeamFactory, TeamMemberFactory
     import json
 
-    company_id = getattr(test_user, 'company_id', None)
+    company_id = getattr(test_user, "company_id", None)
 
-    leader = AgentFactory.build(user_id=test_user.id, name="Leader", contexte="Coordinateur general", company_id=company_id)
-    member1 = AgentFactory.build(user_id=test_user.id, name="Expert Finance", contexte="Expert en comptabilite", company_id=company_id)
-    member2 = AgentFactory.build(user_id=test_user.id, name="Analyste Marche", contexte="Veille concurrentielle", company_id=company_id)
+    leader = AgentFactory.build(
+        user_id=test_user.id, name="Leader", contexte="Coordinateur general", company_id=company_id
+    )
+    member1 = AgentFactory.build(
+        user_id=test_user.id, name="Expert Finance", contexte="Expert en comptabilite", company_id=company_id
+    )
+    member2 = AgentFactory.build(
+        user_id=test_user.id, name="Analyste Marche", contexte="Veille concurrentielle", company_id=company_id
+    )
     for a in [leader, member1, member2]:
         db_session.add(a)
     db_session.flush()
@@ -334,8 +340,12 @@ def test_team_with_members(db_session, test_user):
     ]
     for agent, role, pos in members_data:
         m = TeamMemberFactory.build(
-            team_id=team.id, agent_id=agent.id, role=role, position=pos,
-            specialization=agent.contexte, company_id=company_id,
+            team_id=team.id,
+            agent_id=agent.id,
+            role=role,
+            position=pos,
+            specialization=agent.contexte,
+            company_id=company_id,
         )
         db_session.add(m)
     db_session.flush()
