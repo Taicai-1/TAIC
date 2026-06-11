@@ -91,6 +91,26 @@ function QuestionField({ question, value, error, onChange, t }) {
   );
 }
 
+function Shell({ title, children }) {
+  return (
+    <div className="min-h-screen bg-slate-50 py-10 px-4">
+      <Head>
+        <title>{`${title} — TAIC`}</title>
+      </Head>
+      <div className="max-w-2xl mx-auto">{children}</div>
+    </div>
+  );
+}
+
+function CenteredMessage({ icon, text }) {
+  return (
+    <div className="bg-white rounded-card border border-gray-200 p-10 text-center">
+      {icon}
+      <p className="text-sm text-gray-600">{text}</p>
+    </div>
+  );
+}
+
 export default function PublicQuestionnairePage() {
   const router = useRouter();
   const { token } = router.query;
@@ -156,32 +176,18 @@ export default function PublicQuestionnairePage() {
     }
   };
 
-  const Shell = ({ children }) => (
-    <div className="min-h-screen bg-slate-50 py-10 px-4">
-      <Head>
-        <title>{questionnaire?.title || 'Questionnaire'} — TAIC</title>
-      </Head>
-      <div className="max-w-2xl mx-auto">{children}</div>
-    </div>
-  );
-
-  const CenteredMessage = ({ icon, text }) => (
-    <div className="bg-white rounded-card border border-gray-200 p-10 text-center">
-      {icon}
-      <p className="text-sm text-gray-600">{text}</p>
-    </div>
-  );
+  const pageTitle = questionnaire?.title || 'Questionnaire';
 
   if (state === 'loading') {
     return (
-      <Shell>
+      <Shell title={pageTitle}>
         <CenteredMessage icon={null} text={t('loading')} />
       </Shell>
     );
   }
   if (state === 'notFound' || state === 'error') {
     return (
-      <Shell>
+      <Shell title={pageTitle}>
         <CenteredMessage
           icon={<AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-3" />}
           text={state === 'notFound' ? t('notFound') : t('error')}
@@ -191,7 +197,7 @@ export default function PublicQuestionnairePage() {
   }
   if (state === 'completed') {
     return (
-      <Shell>
+      <Shell title={pageTitle}>
         <CenteredMessage
           icon={<CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-3" />}
           text={t('alreadyCompleted')}
@@ -201,7 +207,7 @@ export default function PublicQuestionnairePage() {
   }
   if (state === 'success') {
     return (
-      <Shell>
+      <Shell title={pageTitle}>
         <div className="bg-white rounded-card border border-gray-200 p-10 text-center">
           <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
           <h1 className="text-lg font-bold text-gray-900 mb-2">{t('success.title')}</h1>
@@ -212,7 +218,7 @@ export default function PublicQuestionnairePage() {
   }
 
   return (
-    <Shell>
+    <Shell title={pageTitle}>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">{questionnaire.title}</h1>
         {questionnaire.description && (
