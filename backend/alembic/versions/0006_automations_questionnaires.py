@@ -36,7 +36,7 @@ def upgrade() -> None:
             "questionnaires",
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False, index=True),
-            sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False, index=True),
+            sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True),
             sa.Column("title", sa.String(length=255), nullable=False),
             sa.Column("description", sa.Text(), nullable=True),
             sa.Column("created_at", sa.DateTime(), nullable=True),
@@ -116,6 +116,43 @@ def upgrade() -> None:
             "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_response_questionnaire_email') THEN "
             "ALTER TABLE questionnaire_responses ADD CONSTRAINT uq_response_questionnaire_email "
             "UNIQUE (questionnaire_id, respondent_email); "
+            "END IF; "
+            "END $$"
+        )
+    )
+
+    # Guard: make user_id nullable on DBs where create_all() ran with the old
+    # NOT NULL model (before the SET NULL fix).
+    conn.execute(
+        sa.text(
+            "DO $$ BEGIN "
+            "IF EXISTS ("
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'questionnaires' AND column_name = 'user_id' AND is_nullable = 'NO'"
+            ") THEN "
+            "ALTER TABLE questionnaires ALTER COLUMN user_id DROP NOT NULL; "
+            "END IF; "
+            "END $$"
+        )
+    )
+
+    # Guard: recreate the user_id FK with ON DELETE SET NULL on DBs where the
+    # old NO ACTION FK still exists (confdeltype 'a' = NO ACTION).
+    conn.execute(
+        sa.text(
+            "DO $$ BEGIN "
+            "IF EXISTS ("
+            "SELECT 1 FROM pg_constraint c "
+            "JOIN pg_class t ON c.conrelid = t.oid "
+            "WHERE t.relname = 'questionnaires' AND c.contype = 'f' AND c.confdeltype = 'a' "
+            "AND EXISTS ("
+            "SELECT 1 FROM pg_attribute a "
+            "WHERE a.attrelid = t.oid AND a.attname = 'user_id' AND a.attnum = ANY(c.conkey)"
+            ")"
+            ") THEN "
+            "ALTER TABLE questionnaires DROP CONSTRAINT questionnaires_user_id_fkey; "
+            "ALTER TABLE questionnaires ADD CONSTRAINT questionnaires_user_id_fkey "
+            "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL; "
             "END IF; "
             "END $$"
         )

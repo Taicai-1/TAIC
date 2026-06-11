@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from auth import verify_token, verify_password, hash_password
-from database import get_db, User, Agent, Document, Conversation, Message, Team, PasswordResetToken
+from database import get_db, User, Agent, Document, Conversation, Message, Team, PasswordResetToken, Questionnaire
 from helpers.rate_limiting import _check_password_change_rate_limit
 from redis_client import get_cached_user, invalidate_user_cache
 from validation import ChangePasswordRequest
@@ -367,6 +367,11 @@ async def delete_user_account(
             # Delete password reset tokens
             db.query(PasswordResetToken).filter(PasswordResetToken.user_id == int(user_id)).delete(
                 synchronize_session=False
+            )
+
+            # Nullify questionnaire creator FK so company questionnaires survive
+            db.query(Questionnaire).filter(Questionnaire.user_id == int(user_id)).update(
+                {"user_id": None}, synchronize_session=False
             )
 
             # Finally delete user

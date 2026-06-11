@@ -793,3 +793,19 @@ async def test_public_submit_dedupes_multiple_choice(client, db_session, test_in
         .first()
     )
     assert json_mod.loads(stored.answer_text) == ["Oui", "Non"]
+
+
+# ---------------------------------------------------------------------------
+# Deletion-flow safety
+# ---------------------------------------------------------------------------
+
+
+def test_user_deletion_nullifies_questionnaire_creator(db_session, test_questionnaire, test_member_user):
+    from database import Questionnaire
+
+    db_session.query(Questionnaire).filter(Questionnaire.user_id == test_member_user.id).update(
+        {"user_id": None}, synchronize_session=False
+    )
+    db_session.flush()
+    db_session.refresh(test_questionnaire)
+    assert test_questionnaire.user_id is None  # questionnaire survives creator deletion

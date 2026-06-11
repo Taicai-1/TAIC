@@ -729,6 +729,11 @@ async def delete_company(user_id: str = Depends(verify_token), db: Session = Dep
         for table in rls_tables:
             cur.execute(f"UPDATE {table} SET company_id = NULL WHERE company_id = %s", (company_id,))
 
+        # Delete questionnaires (and their children via DB CASCADE) before the
+        # company row is removed — questionnaire_questions/responses/answers also
+        # hold company_id FKs; cascading the parent delete removes those rows.
+        cur.execute("DELETE FROM questionnaires WHERE company_id = %s", (company_id,))
+
         # Dissociate users and delete the company
         cur.execute("UPDATE users SET company_id = NULL WHERE company_id = %s", (company_id,))
         cur.execute("DELETE FROM companies WHERE id = %s", (company_id,))
