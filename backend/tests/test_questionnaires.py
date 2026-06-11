@@ -542,6 +542,11 @@ async def test_export_to_rag(
     markdown = mock_ingest.call_args[0][0]
     assert test_questionnaire.questions[0].question_text in markdown
     assert "Très satisfait" in markdown
+    args, kwargs = mock_ingest.call_args
+    assert args[1] == f"questionnaire-{test_questionnaire.id}-reponse-{test_completed_response.id}.md"
+    assert kwargs["company_id"] == test_company.id
+    assert args[3] == agent.id
+    assert resp.json()["failed_response_ids"] == []
 
 
 @pytest.mark.asyncio
@@ -590,3 +595,61 @@ async def test_export_requires_completed_responses(
         cookies=member_cookies,
     )
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_export_rejects_wrong_agent_type(
+    client, member_cookies, db_session, test_questionnaire, test_company,
+    test_member_user, test_completed_response,
+):
+    from tests.factories import AgentFactory
+
+    visuel = AgentFactory.build(
+        user_id=test_member_user.id, company_id=test_company.id, type="visuel"
+    )
+    db_session.add(visuel)
+    db_session.flush()
+
+    resp = await client.post(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/export",
+        json={"response_ids": [test_completed_response.id], "target_agent_id": visuel.id},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_export_reports_partial_failure(
+    client, member_cookies, db_session, test_questionnaire, test_company,
+    test_member_user, test_completed_response,
+):
+    from datetime import datetime
+
+    from tests.factories import AgentFactory, QuestionnaireResponseFactory
+
+    agent = AgentFactory.build(
+        user_id=test_member_user.id, company_id=test_company.id, type="conversationnel"
+    )
+    second = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id,
+        company_id=test_company.id,
+        status="completed",
+        completed_at=datetime.utcnow(),
+    )
+    db_session.add(agent)
+    db_session.add(second)
+    db_session.flush()
+
+    with patch("rag_engine.ingest_text_content", side_effect=[1, RuntimeError("embed down")]) as mock_ingest:
+        resp = await client.post(
+            f"/api/automations/questionnaires/{test_questionnaire.id}/export",
+            json={
+                "response_ids": [test_completed_response.id, second.id],
+                "target_agent_id": agent.id,
+            },
+            cookies=member_cookies,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["exported"] == 1
+    assert len(resp.json()["failed_response_ids"]) == 1
+    assert mock_ingest.call_count == 2

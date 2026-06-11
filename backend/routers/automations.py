@@ -592,17 +592,24 @@ async def export_responses_to_rag(
     from rag_engine import ingest_text_content
 
     exported = 0
+    failed_ids = []
     for response in responses:
         markdown = _build_response_markdown(questionnaire, response, db)
         filename = f"questionnaire-{questionnaire.id}-reponse-{response.id}.md"
-        ingest_text_content(
-            markdown,
-            filename,
-            user_id,
-            agent.id,
-            db,
-            company_id=membership.company_id,
-        )
-        exported += 1
+        try:
+            ingest_text_content(
+                markdown,
+                filename,
+                user_id,
+                agent.id,
+                db,
+                company_id=membership.company_id,
+            )
+            exported += 1
+        except Exception as e:
+            # ingest_text_content commits per document; a failure here leaves
+            # previously exported responses ingested — report rather than 500.
+            logger.error("Export failed for response %s: %s", response.id, e)
+            failed_ids.append(response.id)
 
-    return {"exported": exported, "target_agent_id": agent.id}
+    return {"exported": exported, "failed_response_ids": failed_ids, "target_agent_id": agent.id}
