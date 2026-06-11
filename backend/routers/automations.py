@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from auth import verify_token
 from database import (
+    Agent,
     Company,
     Questionnaire,
     QuestionnaireAnswer,
@@ -25,6 +26,7 @@ from database import (
 from email_service import send_questionnaire_invitation_email
 from permissions import require_role
 from schemas.questionnaires import (
+    ExportRequest,
     InviteRequest,
     QuestionnaireCreate,
     QuestionnaireUpdate,
@@ -514,3 +516,93 @@ async def delete_response(
     db.delete(response)
     db.commit()
     return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Export to companion RAG
+# ---------------------------------------------------------------------------
+
+
+def _build_response_markdown(
+    questionnaire: Questionnaire, response: QuestionnaireResponse, db: Session
+) -> str:
+    lines = [
+        f"# {questionnaire.title} — Réponse de {response.respondent_name or response.respondent_email}",
+        "",
+    ]
+    if response.completed_at:
+        lines.append(f"Complété le : {response.completed_at.strftime('%d/%m/%Y %H:%M')}")
+        lines.append("")
+    rows = (
+        db.query(QuestionnaireAnswer, QuestionnaireQuestion)
+        .join(QuestionnaireQuestion, QuestionnaireAnswer.question_id == QuestionnaireQuestion.id)
+        .filter(QuestionnaireAnswer.response_id == response.id)
+        .order_by(QuestionnaireQuestion.position)
+        .all()
+    )
+    for answer, question in rows:
+        value = answer.answer_text or ""
+        if question.question_type == "multiple_choice" and value:
+            try:
+                value = ", ".join(json.loads(value))
+            except (ValueError, TypeError):
+                pass
+        lines.append(f"**Q : {question.question_text}**")
+        lines.append(f"R : {value}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+@router.post("/api/automations/questionnaires/{questionnaire_id}/export")
+async def export_responses_to_rag(
+    questionnaire_id: int,
+    body: ExportRequest,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
+
+    agent = (
+        db.query(Agent)
+        .filter(Agent.id == body.target_agent_id, Agent.company_id == membership.company_id)
+        .first()
+    )
+    if not agent:
+        raise HTTPException(status_code=404, detail="Target agent not found")
+    if agent.type not in EXPORTABLE_AGENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="L'export RAG n'est possible que vers un companion conversationnel ou actionnable.",
+        )
+
+    responses = (
+        db.query(QuestionnaireResponse)
+        .filter(
+            QuestionnaireResponse.id.in_(body.response_ids),
+            QuestionnaireResponse.questionnaire_id == questionnaire.id,
+            QuestionnaireResponse.status == "completed",
+        )
+        .all()
+    )
+    if not responses:
+        raise HTTPException(status_code=400, detail="Aucune réponse complétée à exporter.")
+
+    from rag_engine import ingest_text_content
+
+    exported = 0
+    for response in responses:
+        markdown = _build_response_markdown(questionnaire, response, db)
+        filename = f"questionnaire-{questionnaire.id}-reponse-{response.id}.md"
+        ingest_text_content(
+            markdown,
+            filename,
+            user_id,
+            agent.id,
+            db,
+            company_id=membership.company_id,
+        )
+        exported += 1
+
+    return {"exported": exported, "target_agent_id": agent.id}

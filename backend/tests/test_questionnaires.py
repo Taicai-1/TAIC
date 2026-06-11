@@ -510,3 +510,83 @@ async def test_list_responses_invalid_status_422(client, member_cookies, test_qu
         cookies=member_cookies,
     )
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoint tests — export to RAG
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_export_to_rag(
+    client, member_cookies, db_session, test_questionnaire, test_company,
+    test_member_user, test_completed_response,
+):
+    from tests.factories import AgentFactory
+
+    agent = AgentFactory.build(
+        user_id=test_member_user.id, company_id=test_company.id, type="conversationnel"
+    )
+    db_session.add(agent)
+    db_session.flush()
+
+    with patch("rag_engine.ingest_text_content", return_value=1) as mock_ingest:
+        resp = await client.post(
+            f"/api/automations/questionnaires/{test_questionnaire.id}/export",
+            json={"response_ids": [test_completed_response.id], "target_agent_id": agent.id},
+            cookies=member_cookies,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["exported"] == 1
+    mock_ingest.assert_called_once()
+    markdown = mock_ingest.call_args[0][0]
+    assert test_questionnaire.questions[0].question_text in markdown
+    assert "Très satisfait" in markdown
+
+
+@pytest.mark.asyncio
+async def test_export_rejects_foreign_agent(
+    client, member_cookies, db_session, test_questionnaire, test_completed_response
+):
+    from tests.factories import AgentFactory, CompanyFactory, UserFactory
+
+    other_company = CompanyFactory.build()
+    db_session.add(other_company)
+    db_session.flush()
+    other_user = UserFactory.build(company_id=other_company.id)
+    db_session.add(other_user)
+    db_session.flush()
+    foreign_agent = AgentFactory.build(user_id=other_user.id, company_id=other_company.id)
+    db_session.add(foreign_agent)
+    db_session.flush()
+
+    resp = await client.post(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/export",
+        json={"response_ids": [test_completed_response.id], "target_agent_id": foreign_agent.id},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_export_requires_completed_responses(
+    client, member_cookies, db_session, test_questionnaire, test_company, test_member_user
+):
+    from tests.factories import AgentFactory, QuestionnaireResponseFactory
+
+    agent = AgentFactory.build(
+        user_id=test_member_user.id, company_id=test_company.id, type="conversationnel"
+    )
+    pending = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id, company_id=test_company.id
+    )
+    db_session.add(agent)
+    db_session.add(pending)
+    db_session.flush()
+
+    resp = await client.post(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/export",
+        json={"response_ids": [pending.id], "target_agent_id": agent.id},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 400
