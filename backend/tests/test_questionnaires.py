@@ -763,3 +763,33 @@ async def test_public_submit_unknown_question_422(client, test_invitation, test_
         },
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_public_submit_dedupes_multiple_choice(client, db_session, test_invitation, test_questionnaire):
+    import json as json_mod
+
+    from database import QuestionnaireAnswer
+
+    q_open, q_choice = test_questionnaire.questions
+    # make the choice question multiple_choice for this test
+    q_choice.question_type = "multiple_choice"
+    db_session.flush()
+
+    resp = await client.post(
+        f"/questionnaire/{test_invitation.token}/submit",
+        json={
+            "answers": [
+                {"question_id": q_open.id, "value": "ok"},
+                {"question_id": q_choice.id, "value": ["Oui", "Oui", "Non"]},
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    stored = (
+        db_session.query(QuestionnaireAnswer)
+        .filter(QuestionnaireAnswer.response_id == test_invitation.id,
+                QuestionnaireAnswer.question_id == q_choice.id)
+        .first()
+    )
+    assert json_mod.loads(stored.answer_text) == ["Oui", "Non"]

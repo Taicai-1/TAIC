@@ -128,9 +128,12 @@ def _validate_answer_value(question, value):
             )
         if isinstance(options, list) and any(v not in options for v in value):
             raise HTTPException(status_code=422, detail=f"Question {question.id}: choix invalide")
+        value = list(dict.fromkeys(value))
         return json.dumps(value)
 
     if question.question_type == "rating":
+        if isinstance(value, bool):
+            raise HTTPException(status_code=422, detail=f"Question {question.id}: note attendue")
         try:
             rating = int(value)
         except (TypeError, ValueError):
@@ -190,7 +193,10 @@ async def public_submit_questionnaire(
         raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
 
     response = (
-        db.query(QuestionnaireResponse).filter(QuestionnaireResponse.token == token).first()
+        db.query(QuestionnaireResponse)
+        .filter(QuestionnaireResponse.token == token)
+        .with_for_update()
+        .first()
     )
     if not response:
         raise HTTPException(status_code=404, detail="Questionnaire not found")
