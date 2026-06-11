@@ -19,7 +19,9 @@ from database import Base, get_database_url  # noqa: E402
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: alembic runs inside the app at startup;
+    # the default (True) silenced every application logger after migrations.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

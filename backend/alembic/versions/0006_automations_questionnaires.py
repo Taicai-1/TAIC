@@ -24,8 +24,17 @@ def upgrade() -> None:
     conn.execute(sa.text("DROP TABLE IF EXISTS questionnaire_answers CASCADE"))
     conn.execute(sa.text("DROP TABLE IF EXISTS questionnaire_responses CASCADE"))
     conn.execute(sa.text("DROP TABLE IF EXISTS questionnaire_questions CASCADE"))
-    conn.execute(sa.text("ALTER TABLE agents DROP COLUMN IF EXISTS welcome_message"))
-    conn.execute(sa.text("ALTER TABLE agents DROP COLUMN IF EXISTS closing_message"))
+
+    # ALTER TABLE agents needs an ACCESS EXCLUSIVE lock on the busiest table in
+    # the app; with lock_timeout=5s during a rolling deploy this can fail. Run
+    # it under a savepoint so a lock timeout can't roll back the whole rebuild —
+    # leftover welcome_message/closing_message columns are unused and harmless.
+    try:
+        with conn.begin_nested():
+            conn.execute(sa.text("ALTER TABLE agents DROP COLUMN IF EXISTS welcome_message"))
+            conn.execute(sa.text("ALTER TABLE agents DROP COLUMN IF EXISTS closing_message"))
+    except Exception as e:  # pragma: no cover - timing dependent
+        print(f"0006: agents column drop deferred (lock contention?): {e}", flush=True)
 
     # create_all() runs before Alembic at startup, so the new tables may already
     # exist on a fresh database — guard each create.
