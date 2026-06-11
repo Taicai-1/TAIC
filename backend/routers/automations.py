@@ -451,6 +451,7 @@ async def list_responses(
     query = base
     if status:
         query = query.filter(QuestionnaireResponse.status == status)
+    filtered_total = query.count() if status else total
     rows = (
         query.order_by(QuestionnaireResponse.invited_at.desc())
         .offset(offset)
@@ -460,6 +461,7 @@ async def list_responses(
     return {
         "responses": [_response_to_dict(r) for r in rows],
         "total": total,
+        "filtered_total": filtered_total,
         "completed_count": completed_count,
         "limit": limit,
         "offset": offset,

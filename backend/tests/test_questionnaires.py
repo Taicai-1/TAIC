@@ -462,6 +462,8 @@ async def test_list_responses_with_filter_and_pagination(
         cookies=member_cookies,
     )
     assert len(only_completed.json()["responses"]) == 1
+    assert only_completed.json()["filtered_total"] == 1
+    assert only_completed.json()["total"] == 2
 
     paged = await client.get(
         f"/api/automations/questionnaires/{test_questionnaire.id}/responses?limit=1&offset=0",
@@ -499,3 +501,12 @@ async def test_delete_response(client, member_cookies, test_questionnaire, test_
         cookies=member_cookies,
     )
     assert again.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_responses_invalid_status_422(client, member_cookies, test_questionnaire):
+    resp = await client.get(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses?status=bogus",
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 422
