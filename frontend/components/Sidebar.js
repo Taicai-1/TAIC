@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
-import { Bot, Users, Building2, Settings, LogOut, User, ChevronsLeft, ChevronsRight, LayoutTemplate } from 'lucide-react';
+import { Bot, Users, Building2, Settings, LogOut, User, ChevronsLeft, ChevronsRight, LayoutTemplate, Zap } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import Image from 'next/image';
 
 const NAV_ITEMS = [
   { href: '/agents',       labelKey: 'navigation.agents',       Icon: Bot },
   { href: '/templates',    labelKey: 'navigation.templates',    Icon: LayoutTemplate },
+  { href: '/automations',  labelKey: 'navigation.automations',  Icon: Zap },
   { href: '/teams',        labelKey: 'navigation.teams',        Icon: Users },
   { href: '/organization', labelKey: 'navigation.organization', Icon: Building2 },
   { href: '/profile',      labelKey: 'navigation.profile',      Icon: Settings },

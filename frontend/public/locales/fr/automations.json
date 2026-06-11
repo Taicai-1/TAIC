@@ -1,0 +1,99 @@
+{
+  "title": "Automatisations",
+  "subtitle": "Automatisez des tâches récurrentes pour votre organisation",
+  "tabs": {
+    "questionnaires": "Questionnaires"
+  },
+  "list": {
+    "empty": "Aucun questionnaire pour le moment",
+    "emptyHint": "Créez votre premier questionnaire pour recueillir des réponses par email.",
+    "create": "Nouveau questionnaire",
+    "questionCount": "{{count}} question(s)",
+    "responseCount": "{{completed}}/{{invited}} réponse(s)",
+    "deleteConfirm": "Supprimer ce questionnaire et toutes ses réponses ?",
+    "deleted": "Questionnaire supprimé"
+  },
+  "editor": {
+    "createTitle": "Nouveau questionnaire",
+    "titleLabel": "Titre",
+    "titlePlaceholder": "Ex : Enquête de satisfaction client",
+    "descriptionLabel": "Description (visible par les répondants)",
+    "descriptionPlaceholder": "Décrivez l'objectif de ce questionnaire…",
+    "questionsTitle": "Questions",
+    "addQuestion": "Ajouter une question",
+    "noQuestions": "Aucune question. Ajoutez-en une pour commencer.",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "saved": "Questionnaire enregistré",
+    "titleRequired": "Le titre est requis",
+    "questionTextRequired": "Chaque question doit avoir un intitulé",
+    "lockedByResponses": "Des réponses ont déjà été reçues : le questionnaire n'est plus modifiable."
+  },
+  "builder": {
+    "questionPlaceholder": "Intitulé de la question…",
+    "questionType": "Type",
+    "required": "Obligatoire",
+    "addOption": "Ajouter une option",
+    "optionPlaceholder": "Option {{n}}",
+    "ratingMin": "Min",
+    "ratingMax": "Max",
+    "types": {
+      "open": "Texte libre",
+      "single_choice": "Choix unique",
+      "multiple_choice": "Choix multiple",
+      "rating": "Note"
+    }
+  },
+  "detail": {
+    "back": "Retour aux questionnaires",
+    "tabs": {
+      "questions": "Questions",
+      "invitations": "Invitations",
+      "responses": "Réponses"
+    }
+  },
+  "invitations": {
+    "title": "Inviter des répondants",
+    "hint": "Une adresse par ligne. Format optionnel : email, Nom",
+    "placeholder": "marie@exemple.com\njean@exemple.com, Jean Dupont",
+    "send": "Envoyer les invitations",
+    "sent": "{{count}} invitation(s) envoyée(s)",
+    "skipped": "{{count}} adresse(s) déjà invitée(s)",
+    "noEmails": "Saisissez au moins une adresse email valide",
+    "listTitle": "Invitations",
+    "empty": "Aucune invitation envoyée",
+    "resend": "Renvoyer",
+    "resent": "Invitation renvoyée",
+    "emailFailed": "Email non envoyé",
+    "status": {
+      "pending": "En attente",
+      "completed": "Complété"
+    }
+  },
+  "responses": {
+    "empty": "Aucune réponse pour le moment",
+    "filterAll": "Toutes",
+    "filterCompleted": "Complétées",
+    "filterPending": "En attente",
+    "loadMore": "Voir plus",
+    "export": "Exporter vers un companion",
+    "selectHint": "Cochez des réponses complétées pour les exporter",
+    "deleteConfirm": "Supprimer cette invitation et ses réponses ?",
+    "deleted": "Réponse supprimée"
+  },
+  "export": {
+    "title": "Exporter vers le RAG d'un companion",
+    "description": "Les réponses sélectionnées seront ajoutées à la base documentaire du companion choisi.",
+    "targetLabel": "Companion cible",
+    "selectAgent": "Choisir un companion…",
+    "confirm": "Exporter {{count}} réponse(s)",
+    "cancel": "Annuler",
+    "success": "{{count}} réponse(s) exportée(s)",
+    "partialFail": "{{count}} réponse(s) n'ont pas pu être exportées",
+    "error": "Échec de l'export"
+  },
+  "errors": {
+    "loadFailed": "Erreur de chargement",
+    "saveFailed": "Échec de l'enregistrement"
+  }
+}

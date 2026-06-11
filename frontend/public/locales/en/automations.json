@@ -1,0 +1,99 @@
+{
+  "title": "Automations",
+  "subtitle": "Automate recurring tasks for your organization",
+  "tabs": {
+    "questionnaires": "Questionnaires"
+  },
+  "list": {
+    "empty": "No questionnaires yet",
+    "emptyHint": "Create your first questionnaire to collect answers by email.",
+    "create": "New questionnaire",
+    "questionCount": "{{count}} question(s)",
+    "responseCount": "{{completed}}/{{invited}} response(s)",
+    "deleteConfirm": "Delete this questionnaire and all its responses?",
+    "deleted": "Questionnaire deleted"
+  },
+  "editor": {
+    "createTitle": "New questionnaire",
+    "titleLabel": "Title",
+    "titlePlaceholder": "E.g. Customer satisfaction survey",
+    "descriptionLabel": "Description (visible to respondents)",
+    "descriptionPlaceholder": "Describe the purpose of this questionnaire…",
+    "questionsTitle": "Questions",
+    "addQuestion": "Add a question",
+    "noQuestions": "No questions yet. Add one to get started.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saved": "Questionnaire saved",
+    "titleRequired": "Title is required",
+    "questionTextRequired": "Every question needs a label",
+    "lockedByResponses": "Responses have been received: this questionnaire can no longer be edited."
+  },
+  "builder": {
+    "questionPlaceholder": "Question label…",
+    "questionType": "Type",
+    "required": "Required",
+    "addOption": "Add an option",
+    "optionPlaceholder": "Option {{n}}",
+    "ratingMin": "Min",
+    "ratingMax": "Max",
+    "types": {
+      "open": "Free text",
+      "single_choice": "Single choice",
+      "multiple_choice": "Multiple choice",
+      "rating": "Rating"
+    }
+  },
+  "detail": {
+    "back": "Back to questionnaires",
+    "tabs": {
+      "questions": "Questions",
+      "invitations": "Invitations",
+      "responses": "Responses"
+    }
+  },
+  "invitations": {
+    "title": "Invite respondents",
+    "hint": "One address per line. Optional format: email, Name",
+    "placeholder": "marie@example.com\njohn@example.com, John Smith",
+    "send": "Send invitations",
+    "sent": "{{count}} invitation(s) sent",
+    "skipped": "{{count}} address(es) already invited",
+    "noEmails": "Enter at least one valid email address",
+    "listTitle": "Invitations",
+    "empty": "No invitations sent",
+    "resend": "Resend",
+    "resent": "Invitation resent",
+    "emailFailed": "Email not sent",
+    "status": {
+      "pending": "Pending",
+      "completed": "Completed"
+    }
+  },
+  "responses": {
+    "empty": "No responses yet",
+    "filterAll": "All",
+    "filterCompleted": "Completed",
+    "filterPending": "Pending",
+    "loadMore": "Load more",
+    "export": "Export to a companion",
+    "selectHint": "Select completed responses to export them",
+    "deleteConfirm": "Delete this invitation and its answers?",
+    "deleted": "Response deleted"
+  },
+  "export": {
+    "title": "Export to a companion's RAG",
+    "description": "Selected responses will be added to the chosen companion's knowledge base.",
+    "targetLabel": "Target companion",
+    "selectAgent": "Choose a companion…",
+    "confirm": "Export {{count}} response(s)",
+    "cancel": "Cancel",
+    "success": "{{count}} response(s) exported",
+    "partialFail": "{{count}} response(s) could not be exported",
+    "error": "Export failed"
+  },
+  "errors": {
+    "loadFailed": "Failed to load",
+    "saveFailed": "Failed to save"
+  }
+}

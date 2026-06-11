@@ -1,0 +1,18 @@
+{
+  "loading": "Chargement…",
+  "notFound": "Questionnaire introuvable ou lien invalide.",
+  "alreadyCompleted": "Vous avez déjà répondu à ce questionnaire. Merci pour votre participation !",
+  "form": {
+    "nameLabel": "Votre nom (optionnel)",
+    "namePlaceholder": "Jean Dupont",
+    "required": "Cette question est obligatoire",
+    "openPlaceholder": "Votre réponse…",
+    "submit": "Envoyer mes réponses",
+    "submitting": "Envoi…"
+  },
+  "success": {
+    "title": "Merci pour vos réponses !",
+    "message": "Vos réponses ont bien été enregistrées. Vous pouvez fermer cette page."
+  },
+  "error": "Une erreur s'est produite. Veuillez réessayer."
+}
