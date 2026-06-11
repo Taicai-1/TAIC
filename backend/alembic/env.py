@@ -55,9 +55,15 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        # Prevent hanging on table locks during startup (e.g. ALTER TABLE on busy tables)
+        # Prevent hanging on table locks during startup (e.g. ALTER TABLE on busy tables).
+        # SET is session-scoped, so the timeouts survive the commit below.
         connection.execute(text("SET lock_timeout = '5s'"))
         connection.execute(text("SET statement_timeout = '30s'"))
+        # CRITICAL: end the implicit (autobegin) transaction opened by the SET
+        # statements. When alembic finds a transaction already active, it assumes
+        # the caller owns it and never commits — every migration then silently
+        # rolls back when the connection closes.
+        connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
