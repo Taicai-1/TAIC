@@ -403,3 +403,99 @@ async def test_resend_404_for_foreign_questionnaire_response(
         cookies=member_cookies,
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoint tests — responses
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def test_completed_response(db_session, test_questionnaire, test_company):
+    """A completed response with one answer on the first (open) question."""
+    from tests.factories import QuestionnaireAnswerFactory, QuestionnaireResponseFactory
+    from datetime import datetime
+
+    response = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id,
+        company_id=test_company.id,
+        status="completed",
+        completed_at=datetime.utcnow(),
+    )
+    db_session.add(response)
+    db_session.flush()
+    answer = QuestionnaireAnswerFactory.build(
+        response_id=response.id,
+        question_id=test_questionnaire.questions[0].id,
+        company_id=test_company.id,
+        answer_text="Très satisfait",
+    )
+    db_session.add(answer)
+    db_session.flush()
+    return response
+
+
+@pytest.mark.asyncio
+async def test_list_responses_with_filter_and_pagination(
+    client, member_cookies, db_session, test_questionnaire, test_company, test_completed_response
+):
+    from tests.factories import QuestionnaireResponseFactory
+
+    pending = QuestionnaireResponseFactory.build(
+        questionnaire_id=test_questionnaire.id, company_id=test_company.id
+    )
+    db_session.add(pending)
+    db_session.flush()
+
+    resp = await client.get(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses",
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert data["completed_count"] == 1
+    assert len(data["responses"]) == 2
+
+    only_completed = await client.get(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses?status=completed",
+        cookies=member_cookies,
+    )
+    assert len(only_completed.json()["responses"]) == 1
+
+    paged = await client.get(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses?limit=1&offset=0",
+        cookies=member_cookies,
+    )
+    assert len(paged.json()["responses"]) == 1
+    assert paged.json()["total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_response_detail_with_answers(
+    client, member_cookies, test_questionnaire, test_completed_response
+):
+    resp = await client.get(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses/{test_completed_response.id}",
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 200
+    data = resp.json()["response"]
+    assert data["status"] == "completed"
+    assert len(data["answers"]) == 1
+    assert data["answers"][0]["answer_text"] == "Très satisfait"
+    assert data["answers"][0]["question_text"] == test_questionnaire.questions[0].question_text
+
+
+@pytest.mark.asyncio
+async def test_delete_response(client, member_cookies, test_questionnaire, test_completed_response):
+    resp = await client.delete(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses/{test_completed_response.id}",
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 200
+    again = await client.get(
+        f"/api/automations/questionnaires/{test_questionnaire.id}/responses/{test_completed_response.id}",
+        cookies=member_cookies,
+    )
+    assert again.status_code == 404

@@ -5,8 +5,9 @@ import logging
 import os
 import secrets
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
@@ -15,6 +16,7 @@ from auth import verify_token
 from database import (
     Company,
     Questionnaire,
+    QuestionnaireAnswer,
     QuestionnaireQuestion,
     QuestionnaireResponse,
     SessionLocal,
@@ -391,4 +393,122 @@ async def resend_invitation(
         raise HTTPException(status_code=409, detail="Ce questionnaire a déjà été complété.")
 
     background_tasks.add_task(_send_invitations, [response.id])
+    return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Responses
+# ---------------------------------------------------------------------------
+
+
+def _response_to_dict(response: QuestionnaireResponse) -> dict:
+    return {
+        "id": response.id,
+        "respondent_email": response.respondent_email,
+        "respondent_name": response.respondent_name,
+        "status": response.status,
+        "email_sent": response.email_sent,
+        "invited_at": response.invited_at.isoformat() if response.invited_at else None,
+        "completed_at": response.completed_at.isoformat() if response.completed_at else None,
+    }
+
+
+def _get_response_or_404(
+    response_id: int, questionnaire: Questionnaire, db: Session
+) -> QuestionnaireResponse:
+    response = (
+        db.query(QuestionnaireResponse)
+        .filter(
+            QuestionnaireResponse.id == response_id,
+            QuestionnaireResponse.questionnaire_id == questionnaire.id,
+        )
+        .first()
+    )
+    if not response:
+        raise HTTPException(status_code=404, detail="Response not found")
+    return response
+
+
+@router.get("/api/automations/questionnaires/{questionnaire_id}/responses")
+async def list_responses(
+    questionnaire_id: int,
+    status: Optional[str] = Query(None, pattern="^(pending|completed)$"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
+
+    base = db.query(QuestionnaireResponse).filter(
+        QuestionnaireResponse.questionnaire_id == questionnaire.id
+    )
+    total = base.count()
+    completed_count = _completed_count(questionnaire.id, questionnaire.company_id, db)
+
+    query = base
+    if status:
+        query = query.filter(QuestionnaireResponse.status == status)
+    rows = (
+        query.order_by(QuestionnaireResponse.invited_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "responses": [_response_to_dict(r) for r in rows],
+        "total": total,
+        "completed_count": completed_count,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.get("/api/automations/questionnaires/{questionnaire_id}/responses/{response_id}")
+async def get_response(
+    questionnaire_id: int,
+    response_id: int,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
+    response = _get_response_or_404(response_id, questionnaire, db)
+
+    rows = (
+        db.query(QuestionnaireAnswer, QuestionnaireQuestion)
+        .join(QuestionnaireQuestion, QuestionnaireAnswer.question_id == QuestionnaireQuestion.id)
+        .filter(QuestionnaireAnswer.response_id == response.id)
+        .order_by(QuestionnaireQuestion.position)
+        .all()
+    )
+    data = _response_to_dict(response)
+    data["answers"] = [
+        {
+            "question_id": question.id,
+            "question_text": question.question_text,
+            "question_type": question.question_type,
+            "answer_text": answer.answer_text,
+        }
+        for answer, question in rows
+    ]
+    return {"response": data}
+
+
+@router.delete("/api/automations/questionnaires/{questionnaire_id}/responses/{response_id}")
+async def delete_response(
+    questionnaire_id: int,
+    response_id: int,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    questionnaire = _get_questionnaire_or_404(questionnaire_id, membership.company_id, db)
+    response = _get_response_or_404(response_id, questionnaire, db)
+    db.delete(response)
+    db.commit()
     return {"success": True}
