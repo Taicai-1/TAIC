@@ -119,3 +119,100 @@ class TestIsMissionDue:
     def test_not_due_when_no_companion(self, db_session):
         m = _FakeMission(weekday=2, hour=8, agent_id=None)
         assert _is_mission_due(m, self._now(2, 8), db_session) is False
+
+
+# ---------------------------------------------------------------------------
+# Endpoint tests (require DB; auto-skip when PostgreSQL is unavailable)
+# ---------------------------------------------------------------------------
+
+
+async def test_create_and_list_mission(client, member_cookies):
+    resp = await client.post(
+        "/api/automations/missions",
+        json={"name": "Lancement", "objective": "Réussir le lancement"},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    mid = resp.json()["mission"]["id"]
+
+    listing = await client.get("/api/automations/missions", cookies=member_cookies)
+    assert listing.status_code == 200
+    assert any(m["id"] == mid for m in listing.json()["missions"])
+
+
+async def test_owner_can_get_mission(client, member_cookies, test_mission):
+    # member_cookies belongs to test_member_user, who OWNS test_mission → 200
+    resp = await client.get(f"/api/automations/missions/{test_mission.id}", cookies=member_cookies)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["mission"]["id"] == test_mission.id
+
+
+async def test_other_user_cannot_get_mission(client, db_session, test_mission, test_company):
+    # A DIFFERENT user in the SAME company must not see another user's private mission → 404
+    from auth import create_access_token
+    from tests.factories import UserFactory, CompanyMembershipFactory
+
+    other = UserFactory.build(company_id=test_company.id)
+    db_session.add(other)
+    db_session.flush()
+    membership = CompanyMembershipFactory.build(user_id=other.id, company_id=test_company.id, role="member")
+    db_session.add(membership)
+    db_session.flush()
+    other_cookies = {"token": create_access_token(data={"sub": str(other.id)})}
+
+    resp = await client.get(f"/api/automations/missions/{test_mission.id}", cookies=other_cookies)
+    assert resp.status_code == 404
+
+
+async def test_create_event_and_list(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    ev = await client.post(
+        f"/api/automations/missions/{mid}/events",
+        json={"date": "2026-07-01", "title": "Comité"},
+        cookies=member_cookies,
+    )
+    assert ev.status_code == 200, ev.text
+    listing = await client.get(f"/api/automations/missions/{mid}/events", cookies=member_cookies)
+    assert listing.status_code == 200
+    events = listing.json()["events"]
+    assert len(events) == 1
+    assert events[0]["source"] == "manual"
+
+
+async def test_generate_recap_requires_companion(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},  # no agent_id
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    resp = await client.post(
+        f"/api/automations/missions/{mid}/recaps/generate", cookies=member_cookies
+    )
+    assert resp.status_code == 400
+
+
+async def test_archived_mission_blocks_event_create(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    # archive it
+    await client.put(
+        f"/api/automations/missions/{mid}",
+        json={"name": "M", "objective": "O", "status": "archived"},
+        cookies=member_cookies,
+    )
+    resp = await client.post(
+        f"/api/automations/missions/{mid}/events",
+        json={"date": "2026-07-01", "title": "X"},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 400
