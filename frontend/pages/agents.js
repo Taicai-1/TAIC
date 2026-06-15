@@ -28,7 +28,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, enabled_plugins: [] });
+  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, enabled_plugins: [] });
   const [emailTagInput, setEmailTagInput] = useState("");
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoPreviewError, setPhotoPreviewError] = useState(false);
@@ -574,6 +574,25 @@ export default function AgentsPage() {
                 </div>
                 <p className="text-xs text-gray-500">{t('agents:form.weeklyRecap.helpText')}</p>
               </div>
+              {/* Company RAG Section */}
+              <div className="p-4 bg-gradient-to-br from-emerald-50 to-green-50 rounded-button border border-emerald-200">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700 flex items-center">
+                    <FileText className="w-4 h-4 mr-2 text-emerald-600" />
+                    {t('agents:companyRag.label')}
+                  </label>
+                  <button
+                    type="button"
+                    className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border border-emerald-600 ${form.include_company_rag ? 'bg-emerald-600' : 'bg-gray-200'}`}
+                    onClick={() => setForm(f => ({ ...f, include_company_rag: !f.include_company_rag }))}
+                  >
+                    <span
+                      className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.include_company_rag ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`}
+                    />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">{t('agents:companyRag.help')}</p>
+              </div>
 
               <div className="flex flex-col items-center space-y-4 p-6 bg-gray-50 rounded-card border border-dashed border-gray-300">
                 {photoPreview && !photoPreviewError ? (
@@ -643,6 +662,7 @@ export default function AgentsPage() {
                     if (form.neo4j_person_name) formData.append("neo4j_person_name", form.neo4j_person_name);
                     formData.append("neo4j_depth", String(form.neo4j_depth || 1));
                     formData.append("date_awareness_enabled", form.date_awareness_enabled ? "true" : "false");
+                    formData.append("include_company_rag", form.include_company_rag ? "true" : "false");
                     formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
                     if (form.weekly_recap_prompt) formData.append("weekly_recap_prompt", form.weekly_recap_prompt);
                     if (form.weekly_recap_recipients && form.weekly_recap_recipients.length > 0) {
@@ -664,6 +684,7 @@ export default function AgentsPage() {
                         neo4j_person_name: form.neo4j_person_name || undefined,
                         neo4j_depth: form.neo4j_depth,
                         date_awareness_enabled: form.date_awareness_enabled,
+                        include_company_rag: form.include_company_rag,
                         weekly_recap_enabled: form.weekly_recap_enabled,
                         weekly_recap_prompt: form.weekly_recap_prompt || undefined,
                         weekly_recap_recipients: form.weekly_recap_recipients?.length > 0 ? form.weekly_recap_recipients : undefined,
