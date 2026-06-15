@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'next-i18next';
 import { Play, X, Check, AlertCircle, Loader2, ExternalLink, ChevronDown, ChevronUp, FileText, Table, Mail, Calendar, Presentation, HardDrive, Brain } from 'lucide-react';
 import api from '../lib/api';
@@ -14,10 +14,57 @@ const PLUGIN_ICONS = {
 
 export default function ActionProposal({ proposal, onResult, onContinuation }) {
   const { t } = useTranslation(['chat']);
-  const [status, setStatus] = useState('pending');
+  // 'checking' until the real status is fetched from the backend, so a
+  // proposal re-rendered from history never shows active buttons for an
+  // action that was already executed or cancelled.
+  const [status, setStatus] = useState('checking');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncStatus = async () => {
+      if (!proposal?.execution_id) {
+        setStatus('pending');
+        return;
+      }
+      try {
+        const res = await api.get(`/actions/${proposal.execution_id}`);
+        if (cancelled) return;
+        const backendStatus = res.data.status;
+        if (backendStatus === 'pending_confirmation') {
+          setStatus('pending');
+        } else if (backendStatus === 'confirmed' || backendStatus === 'executing') {
+          setStatus('executing');
+        } else if (backendStatus === 'completed') {
+          setStatus('completed');
+          setResult({
+            display_message: null,
+            resource_url: res.data.result?.url || null,
+          });
+        } else if (backendStatus === 'failed') {
+          setStatus('failed');
+          setResult({ error_message: res.data.error_message });
+        } else if (backendStatus === 'cancelled') {
+          setStatus('cancelled');
+        } else {
+          setStatus('pending');
+        }
+      } catch (e) {
+        if (cancelled) return;
+        // If the action no longer exists, don't offer buttons; on transient
+        // errors fall back to pending — the backend rejects double execution.
+        if (e.response?.status === 404) {
+          setStatus('cancelled');
+        } else {
+          setStatus('pending');
+        }
+      }
+    };
+    syncStatus();
+    return () => { cancelled = true; };
+  }, [proposal?.execution_id]);
 
   const Icon = PLUGIN_ICONS[proposal.plugin] || FileText;
 
@@ -90,6 +137,13 @@ export default function ActionProposal({ proposal, onResult, onContinuation }) {
               </pre>
             )}
           </>
+        )}
+
+        {/* Status check in progress: no actionable buttons until verified */}
+        {status === 'checking' && (
+          <div className="flex items-center mt-3 text-sm text-gray-400">
+            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+          </div>
         )}
 
         {/* Action buttons */}
