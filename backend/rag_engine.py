@@ -245,6 +245,7 @@ def get_answer(
         # Resolve the per-agent company-RAG opt-in early so it can scope doc listing + search.
         agent = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
         include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
+        company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
 
         # Get documents to consider for RAG
         # If selected_doc_ids provided, use those (and respect agent_id if present)
@@ -271,7 +272,9 @@ def get_answer(
                     .filter(
                         or_(
                             Document.agent_id == agent_id,
-                            Document.is_company_rag.is_(True) if include_company_rag else False,
+                            and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
+                            if include_company_rag
+                            else False,
                         ),
                         Document.document_type != "traceability",
                     )
@@ -542,6 +545,7 @@ def get_answer_stream(
         # Resolve the per-agent company-RAG opt-in early so it can scope doc listing + search.
         agent = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
         include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
+        company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
 
         # --- Document retrieval (same as get_answer) ---
         if selected_doc_ids:
@@ -562,7 +566,9 @@ def get_answer_stream(
                     .filter(
                         or_(
                             Document.agent_id == agent_id,
-                            Document.is_company_rag.is_(True) if include_company_rag else False,
+                            and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
+                            if include_company_rag
+                            else False,
                         ),
                         Document.document_type != "traceability",
                     )
