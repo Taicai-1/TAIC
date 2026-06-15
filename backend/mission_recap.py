@@ -170,6 +170,9 @@ def process_mission_recap(mission, db: Session, trigger: str = "scheduled", run_
 
     try:
         recall = fetch_events(mission.id, rc_start, rc_end, db)
+        # RAG enrichment (the only RLS-protected SELECTs here) must run BEFORE the
+        # first commit below: the scheduler sets `SET LOCAL app.service_bypass`,
+        # which is transaction-scoped and lost after a commit. Do not reorder.
         enriched = enrich_events_with_docs(mission, upcoming, db)
         prompt = build_mission_recap_prompt(mission, agent, recall, enriched)
         model_id = get_model_id_for_agent(agent) if agent else "mistral:mistral-large-latest"
@@ -188,15 +191,24 @@ def process_mission_recap(mission, db: Session, trigger: str = "scheduled", run_
         db.commit()
         db.refresh(recap)
 
+        # Email is best-effort: the recap was generated and persisted as success,
+        # so a send failure must not flip the run to error or leave it un-retried.
         if trigger == "scheduled":
-            _send_recap_email(mission, content, db)
-            recap.email_sent = True
-            db.commit()
+            try:
+                _send_recap_email(mission, content, db)
+                recap.email_sent = True
+                db.commit()
+            except Exception as email_err:
+                logger.error(f"Mission {mission.id}: recap email failed: {email_err}")
+                db.rollback()
 
         return {"status": "success", "recap_id": recap.id, "content": content}
 
     except Exception as e:
         logger.error(f"Mission recap failed for mission {mission.id}: {e}")
+        # The session may be in an aborted-transaction state after a DB-level
+        # error; roll back before attempting the error-row INSERT.
+        db.rollback()
         try:
             recap = MissionRecap(
                 mission_id=mission.id,
