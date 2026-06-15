@@ -1093,6 +1093,15 @@ def ensure_rls_policies():
         # session var. Tenant isolation is app-level (company_id filters in
         # routers/automations.py). Do not add them here without reworking the
         # public endpoints first.
+        # Mission tables (missions, mission_events, mission_recaps) are also
+        # intentionally ABSENT: the recap scheduler INSERTs mission_recaps from a
+        # background session that has no app.company_id set, which a tenant_isolation
+        # WITH CHECK policy would reject (service_bypass only covers SELECT). Tenant
+        # isolation is app-level and stricter here — every mission query in
+        # routers/missions.py filters BOTH company_id AND the creator user_id
+        # (private-to-creator). Mission documents live in `documents`, which keeps
+        # its RLS. Do not add mission tables here without making the scheduler set a
+        # tenant/bypass context for its writes first.
     ]
     try:
         with engine.connect() as conn:

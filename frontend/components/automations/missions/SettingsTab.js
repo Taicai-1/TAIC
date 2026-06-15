@@ -17,6 +17,20 @@ export default function SettingsTab({ mission, onChanged, onDeleted }) {
   const [agents, setAgents] = useState([]);
   const [saving, setSaving] = useState(false);
 
+  // Resync the form when the mission prop changes (e.g. after an archive toggle
+  // reloads the mission), so the archive/unarchive label doesn't go stale.
+  useEffect(() => {
+    setForm({
+      name: mission.name,
+      objective: mission.objective,
+      agent_id: mission.agent_id || '',
+      status: mission.status,
+      recap_enabled: mission.recap_enabled,
+      recap_weekday: mission.recap_weekday,
+      recap_hour: mission.recap_hour,
+    });
+  }, [mission]);
+
   useEffect(() => {
     api
       .get('/agents')
