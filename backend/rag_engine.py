@@ -5,6 +5,7 @@ import logging
 import time
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from mistral_embeddings import get_embedding, get_embedding_fast
 from openai_client import get_chat_response, get_chat_response_stream
@@ -241,6 +242,11 @@ def get_answer(
     it is resolved from agent_id or user_id inside search_similar_texts_for_user.
     """
     try:
+        # Resolve the per-agent company-RAG opt-in early so it can scope doc listing + search.
+        agent = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
+        include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
+        company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
+
         # Get documents to consider for RAG
         # If selected_doc_ids provided, use those (and respect agent_id if present)
         if selected_doc_ids:
@@ -263,14 +269,26 @@ def get_answer(
             if agent_id:
                 user_docs = (
                     db.query(Document)
-                    .filter(Document.agent_id == agent_id, Document.document_type != "traceability")
+                    .filter(
+                        or_(
+                            Document.agent_id == agent_id,
+                            and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
+                            if include_company_rag
+                            else False,
+                        ),
+                        Document.document_type != "traceability",
+                    )
                     .all()
                 )
                 logger.info(f"Using {len(user_docs)} documents attached to agent {agent_id}")
             else:
                 user_docs = (
                     db.query(Document)
-                    .filter(Document.user_id == user_id, Document.document_type != "traceability")
+                    .filter(
+                        Document.user_id == user_id,
+                        Document.document_type != "traceability",
+                        Document.is_company_rag.is_(False),
+                    )
                     .all()
                 )
                 logger.info(f"Using all {len(user_docs)} user documents")
@@ -292,10 +310,8 @@ def get_answer(
                 logger.info(f"User mentioned document, filtering to doc_id: {mentioned_doc_id}")
 
         # Récupérer le contexte personnalisé de l'agent par son id
-        agent = None
+        # (agent was already loaded above for the include_company_rag flag)
         contexte_agent = ""
-        if agent_id:
-            agent = db.query(Agent).filter(Agent.id == agent_id).first()
         if not agent:
             agent = db.query(Agent).filter(Agent.user_id == user_id).first()
         # Security: sanitize agent contexte to mitigate prompt injection via HTML/script tags
@@ -421,6 +437,7 @@ def get_answer(
             selected_doc_ids=selected_doc_ids,
             agent_id=agent_id,
             company_id=company_id,
+            include_company_rag=include_company_rag,
         )
 
         # Build sources metadata for the frontend
@@ -525,6 +542,11 @@ def get_answer_stream(
     from streaming_response import sse_event
 
     try:
+        # Resolve the per-agent company-RAG opt-in early so it can scope doc listing + search.
+        agent = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
+        include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
+        company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
+
         # --- Document retrieval (same as get_answer) ---
         if selected_doc_ids:
             q = db.query(Document).filter(Document.id.in_(selected_doc_ids))
@@ -541,13 +563,25 @@ def get_answer_stream(
             if agent_id:
                 user_docs = (
                     db.query(Document)
-                    .filter(Document.agent_id == agent_id, Document.document_type != "traceability")
+                    .filter(
+                        or_(
+                            Document.agent_id == agent_id,
+                            and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
+                            if include_company_rag
+                            else False,
+                        ),
+                        Document.document_type != "traceability",
+                    )
                     .all()
                 )
             else:
                 user_docs = (
                     db.query(Document)
-                    .filter(Document.user_id == user_id, Document.document_type != "traceability")
+                    .filter(
+                        Document.user_id == user_id,
+                        Document.document_type != "traceability",
+                        Document.is_company_rag.is_(False),
+                    )
                     .all()
                 )
 
@@ -565,11 +599,8 @@ def get_answer_stream(
                 selected_doc_ids = [mentioned_doc_id]
                 user_docs = [doc for doc in user_docs if doc.id == mentioned_doc_id]
 
-        # Agent context
-        agent = None
+        # Agent context (agent was already loaded above for the include_company_rag flag)
         contexte_agent = ""
-        if agent_id:
-            agent = db.query(Agent).filter(Agent.id == agent_id).first()
         if not agent:
             agent = db.query(Agent).filter(Agent.user_id == user_id).first()
         # Security: sanitize agent contexte to mitigate prompt injection via HTML/script tags
@@ -674,6 +705,7 @@ def get_answer_stream(
                 selected_doc_ids=selected_doc_ids,
                 agent_id=agent_id,
                 company_id=company_id,
+                include_company_rag=include_company_rag,
             )
 
             # Build sources metadata for the frontend
@@ -777,6 +809,7 @@ def search_similar_texts_for_user(
     agent_id: int = None,
     company_id: int = None,
     mission_id: int = None,
+    include_company_rag: bool = False,
 ) -> List[dict]:
     """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context.
 
@@ -839,11 +872,19 @@ def search_similar_texts_for_user(
         if mission_id:
             query = query.filter(Document.mission_id == mission_id)
         elif agent_id:
-            # Exclude mission-siloed docs from agent RAG
-            query = query.filter(Document.agent_id == agent_id, Document.mission_id.is_(None))
+            # Agent-scoped docs; optionally union the company-shared docs
+            agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))
+            if include_company_rag:
+                query = query.filter(or_(agent_scope, Document.is_company_rag.is_(True)))
+            else:
+                query = query.filter(agent_scope, Document.is_company_rag.is_(False))
         else:
-            # Exclude mission-siloed docs from the user-level general RAG
-            query = query.filter(Document.user_id == user_id, Document.mission_id.is_(None))
+            # User-level general RAG: never leak company docs into personal scope
+            query = query.filter(
+                Document.user_id == user_id,
+                Document.mission_id.is_(None),
+                Document.is_company_rag.is_(False),
+            )
 
         if selected_doc_ids:
             query = query.filter(Document.id.in_(selected_doc_ids))
@@ -994,6 +1035,7 @@ def ingest_text_content(
     drive_file_id: str = None,
     progress_callback=None,
     mission_id: int = None,
+    is_company_rag: bool = False,
 ) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
@@ -1031,6 +1073,7 @@ def ingest_text_content(
             drive_link_id=drive_link_id,
             drive_file_id=drive_file_id,
             mission_id=mission_id,
+            is_company_rag=is_company_rag,
         )
         db.add(document)
         db.commit()
@@ -1090,6 +1133,7 @@ def process_document_for_user(
     company_id: int = None,
     progress_callback=None,
     mission_id: int = None,
+    is_company_rag: bool = False,
 ) -> int:
     import tempfile
     import os
@@ -1153,6 +1197,7 @@ def process_document_for_user(
             company_id=company_id,
             progress_callback=progress_callback,
             mission_id=mission_id,
+            is_company_rag=is_company_rag,
         )
     except Exception as e:
         logger.error(f"Error processing document: {e}")

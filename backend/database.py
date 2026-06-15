@@ -326,6 +326,9 @@ class Agent(Base):
     # Date awareness: inject current date/time into system prompt
     date_awareness_enabled = Column(Boolean, default=False, nullable=False)
 
+    # Company RAG: include the organization's shared documents in this agent's retrieval
+    include_company_rag = Column(Boolean, default=False, nullable=False)
+
     # Actionnable plugins
     enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
 
@@ -550,6 +553,9 @@ class Document(Base):
     mission_id = Column(
         Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=True, index=True
     )  # Documents siloed to a mission (RAG sources)
+    is_company_rag = Column(
+        Boolean, default=False, nullable=False, server_default="false", index=True
+    )  # Company-shared document (agent_id is NULL); included only when an agent opts in
 
     # Relations
     owner = relationship("User", back_populates="documents")
@@ -1013,6 +1019,9 @@ def ensure_columns():
         # Missions
         ("documents", "mission_id", "INTEGER REFERENCES missions(id) ON DELETE CASCADE"),
         ("conversations", "mission_id", "INTEGER REFERENCES missions(id) ON DELETE CASCADE"),
+        # Company RAG
+        ("documents", "is_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("agents", "include_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ]
     try:
         with engine.connect() as conn:

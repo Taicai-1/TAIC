@@ -172,3 +172,24 @@ async def test_agent_isolation(client, auth_cookies, test_agent, db_session):
     data = resp.json()
     assert "message" in data
     assert "denied" in data["message"].lower() or "access" in data["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_create_agent_include_company_rag_roundtrips(client, admin_cookies, test_admin_user, mock_gcs):
+    """include_company_rag set at creation is returned by GET."""
+    resp = await client.post(
+        "/agents",
+        data={
+            "name": "RAG Agent",
+            "contexte": "ctx",
+            "type": "conversationnel",
+            "include_company_rag": "true",
+        },
+        cookies=admin_cookies,
+    )
+    assert resp.status_code == 200
+    agent_id = resp.json()["agent"]["id"]
+
+    got = await client.get(f"/agents/{agent_id}", cookies=admin_cookies)
+    assert got.status_code == 200
+    assert got.json()["agent"]["include_company_rag"] is True

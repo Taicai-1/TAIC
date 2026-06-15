@@ -2,6 +2,10 @@
   "pageTitle": "TAIC Companion",
   "pageSubtitle": "Create an expert twin.",
   "logout": "Logout",
+  "companyRag": {
+    "label": "Include company RAG",
+    "help": "Gives this companion access to the organization's shared documents."
+  },
   "types": {
     "conversationnel": {
       "name": "Conversational",
