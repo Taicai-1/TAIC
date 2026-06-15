@@ -570,6 +570,7 @@ def _process_document_background(
     agent_id: int,
     company_id: int = None,
     mission_id: int = None,
+    is_company_rag: bool = False,
 ):
     """Background worker for async document processing. Uses its own DB session."""
     db = SessionLocal()
@@ -624,6 +625,7 @@ def _process_document_background(
             company_id=company_id,
             progress_callback=_report_progress,
             mission_id=mission_id,
+            is_company_rag=is_company_rag,
         )
 
         logger.info(f"Background processing completed: {filename} -> doc_id={doc_id}")
