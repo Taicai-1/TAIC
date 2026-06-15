@@ -151,3 +151,18 @@ async def test_admin_deletes_company_doc(client, admin_cookies, db_session, test
     assert resp.json()["status"] == "deleted"
     from database import Document
     assert db_session.query(Document).filter(Document.id == doc.id).first() is None
+
+
+@pytest.mark.asyncio
+async def test_member_can_get_download_url_for_company_doc(client, member_cookies, db_session, test_company, test_admin_user, mock_gcs):
+    from tests.factories import DocumentFactory
+    doc = DocumentFactory.build(
+        user_id=test_admin_user.id, agent_id=None, company_id=test_company.id,
+        is_company_rag=True, filename="shared.pdf",
+        gcs_url="https://storage.googleapis.com/test-bucket/shared.pdf",
+    )
+    db_session.add(doc)
+    db_session.flush()
+    resp = await client.get(f"/documents/{doc.id}/download-url", cookies=member_cookies)
+    # Member is in the same company as the uploader (test_admin_user) -> never 403
+    assert resp.status_code != 403

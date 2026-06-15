@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, Document, DocumentChunk, AgentShare, SessionLocal
+from database import get_db, Document, DocumentChunk, AgentShare, SessionLocal, User
 from helpers.agent_helpers import _user_can_access_agent, _user_can_edit_agent
 from helpers.tenant import _get_caller_company_id
 from helpers.rate_limiting import _check_api_rate_limit, _API_UPLOAD_LIMIT
@@ -869,7 +869,11 @@ async def get_signed_download_url(
             raise HTTPException(status_code=404, detail="Document non trouvé ou pas de fichier GCS")
         # Owner or has access to the agent
         if document.user_id != int(user_id):
-            if document.agent_id:
+            if getattr(document, "is_company_rag", False) and document.company_id:
+                caller_company_id = db.query(User.company_id).filter(User.id == int(user_id)).scalar()
+                if caller_company_id != document.company_id:
+                    raise HTTPException(status_code=403, detail="Access denied")
+            elif document.agent_id:
                 _user_can_access_agent(int(user_id), document.agent_id, db)
             else:
                 raise HTTPException(status_code=403, detail="Access denied")
@@ -959,7 +963,11 @@ async def proxy_download_document(
         raise HTTPException(status_code=404, detail="Document non trouvé ou pas de fichier GCS")
     # Owner or has access to the agent
     if document.user_id != int(user_id):
-        if document.agent_id:
+        if getattr(document, "is_company_rag", False) and document.company_id:
+            caller_company_id = db.query(User.company_id).filter(User.id == int(user_id)).scalar()
+            if caller_company_id != document.company_id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif document.agent_id:
             _user_can_access_agent(int(user_id), document.agent_id, db)
         else:
             raise HTTPException(status_code=403, detail="Access denied")
