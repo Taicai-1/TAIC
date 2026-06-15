@@ -96,7 +96,6 @@ async def test_company_doc_included_when_toggle_on(db_session, test_company):
     assert any(r["document_id"] == doc.id for r in results)
 
 
-from pathlib import Path
 from unittest.mock import patch
 
 
@@ -149,3 +148,6 @@ async def test_admin_deletes_company_doc(client, admin_cookies, db_session, test
 
     resp = await client.delete(f"/api/company-rag/documents/{doc.id}", cookies=admin_cookies)
     assert resp.status_code == 200
+    assert resp.json()["status"] == "deleted"
+    from database import Document
+    assert db_session.query(Document).filter(Document.id == doc.id).first() is None
