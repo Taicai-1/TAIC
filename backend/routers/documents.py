@@ -563,7 +563,7 @@ async def upload_file(
 
 
 def _process_document_background(
-    task_id: str, filename: str, content: bytes, user_id: int, agent_id: int, company_id: int = None
+    task_id: str, filename: str, content: bytes, user_id: int, agent_id: int, company_id: int = None, mission_id: int = None
 ):
     """Background worker for async document processing. Uses its own DB session."""
     db = SessionLocal()
@@ -617,6 +617,7 @@ def _process_document_background(
             agent_id,
             company_id=company_id,
             progress_callback=_report_progress,
+            mission_id=mission_id,
         )
 
         logger.info(f"Background processing completed: {filename} -> doc_id={doc_id}")
@@ -781,7 +782,11 @@ async def get_user_documents(user_id: str = Depends(verify_token), db: Session =
         else:
             query = db.query(Document).filter(Document.user_id == uid)
 
-        documents = query.filter(Document.document_type != "traceability").order_by(Document.created_at.desc()).all()
+        documents = (
+            query.filter(Document.document_type != "traceability", Document.mission_id.is_(None))
+            .order_by(Document.created_at.desc())
+            .all()
+        )
         logger.info(f"Found {len(documents)} documents for user {user_id}, agent {agent_id}")
 
         result = []

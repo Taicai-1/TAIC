@@ -776,6 +776,7 @@ def search_similar_texts_for_user(
     selected_doc_ids: List[int] = None,
     agent_id: int = None,
     company_id: int = None,
+    mission_id: int = None,
 ) -> List[dict]:
     """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context.
 
@@ -796,6 +797,12 @@ def search_similar_texts_for_user(
                 _agent_row = db.query(Agent.company_id).filter(Agent.id == agent_id).first()
                 if _agent_row is not None:
                     company_id = _agent_row[0]
+            if company_id is None and mission_id:
+                from database import Mission
+
+                _m_row = db.query(Mission.company_id).filter(Mission.id == mission_id).first()
+                if _m_row is not None:
+                    company_id = _m_row[0]
             if company_id is None and user_id is not None:
                 _user_row = db.query(User.company_id).filter(User.id == user_id).first()
                 if _user_row is not None:
@@ -829,10 +836,14 @@ def search_similar_texts_for_user(
             )
         )
 
-        if agent_id:
-            query = query.filter(Document.agent_id == agent_id)
+        if mission_id:
+            query = query.filter(Document.mission_id == mission_id)
+        elif agent_id:
+            # Exclude mission-siloed docs from agent RAG
+            query = query.filter(Document.agent_id == agent_id, Document.mission_id.is_(None))
         else:
-            query = query.filter(Document.user_id == user_id)
+            # Exclude mission-siloed docs from the user-level general RAG
+            query = query.filter(Document.user_id == user_id, Document.mission_id.is_(None))
 
         if selected_doc_ids:
             query = query.filter(Document.id.in_(selected_doc_ids))
@@ -982,6 +993,7 @@ def ingest_text_content(
     drive_link_id: int = None,
     drive_file_id: str = None,
     progress_callback=None,
+    mission_id: int = None,
 ) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
@@ -993,6 +1005,12 @@ def ingest_text_content(
             _agent = db.query(Agent.company_id).filter(Agent.id == agent_id).first()
             if _agent:
                 company_id = _agent[0]
+        if company_id is None and mission_id:
+            from database import Mission
+
+            _m = db.query(Mission.company_id).filter(Mission.id == mission_id).first()
+            if _m:
+                company_id = _m[0]
         if company_id is None and user_id:
             _user = db.query(User.company_id).filter(User.id == user_id).first()
             if _user:
@@ -1012,6 +1030,7 @@ def ingest_text_content(
             notion_link_id=notion_link_id,
             drive_link_id=drive_link_id,
             drive_file_id=drive_file_id,
+            mission_id=mission_id,
         )
         db.add(document)
         db.commit()
@@ -1070,6 +1089,7 @@ def process_document_for_user(
     agent_id: int = None,
     company_id: int = None,
     progress_callback=None,
+    mission_id: int = None,
 ) -> int:
     import tempfile
     import os
@@ -1132,6 +1152,7 @@ def process_document_for_user(
             gcs_url=gcs_url,
             company_id=company_id,
             progress_callback=progress_callback,
+            mission_id=mission_id,
         )
     except Exception as e:
         logger.error(f"Error processing document: {e}")
