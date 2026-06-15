@@ -34,6 +34,9 @@ import {
   XCircle,
   Zap,
   Edit3,
+  Database,
+  Upload,
+  Download,
 } from 'lucide-react';
 
 export default function Organization() {
@@ -89,6 +92,11 @@ export default function Organization() {
   const [slashLoading, setSlashLoading] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
 
+  // Company RAG documents
+  const [companyDocs, setCompanyDocs] = useState([]);
+  const [companyDocsLoading, setCompanyDocsLoading] = useState(false);
+  const [companyDocUploading, setCompanyDocUploading] = useState(false);
+
   useEffect(() => {
     if (!authenticated) return;
     loadCompany();
@@ -113,11 +121,14 @@ export default function Organization() {
         setMyRequest(null);
       }
 
-      if (data.company && ['admin', 'owner'].includes(data.company.role)) {
-        loadMembers();
-        loadOrgAgents();
-        loadSlashCommands();
-        if (data.company.role === 'owner') loadIntegrations();
+      if (data.company) {
+        loadCompanyDocs();
+        if (['admin', 'owner'].includes(data.company.role)) {
+          loadMembers();
+          loadOrgAgents();
+          loadSlashCommands();
+          if (data.company.role === 'owner') loadIntegrations();
+        }
       }
     } catch (error) {
       toast.error(error.response?.data?.detail || t('organization:errors.loadFailed'));
@@ -155,6 +166,70 @@ export default function Organization() {
       const res = await api.get('/api/companies/slash-commands');
       setSlashCommands(res.data.slash_commands || []);
     } catch {}
+  };
+
+  // ---- Company RAG documents ----
+  const loadCompanyDocs = async () => {
+    try {
+      setCompanyDocsLoading(true);
+      const res = await api.get('/api/company-rag/documents');
+      setCompanyDocs(res.data.documents || []);
+    } catch {
+      toast.error(t('organization:companyRag.loadError'));
+    } finally {
+      setCompanyDocsLoading(false);
+    }
+  };
+
+  const handleCompanyDocUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      setCompanyDocUploading(true);
+      await api.post('/api/company-rag/documents', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success(t('organization:companyRag.uploadSuccess'));
+      await loadCompanyDocs();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:companyRag.uploadError'));
+    } finally {
+      setCompanyDocUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleCompanyDocDelete = async (docId) => {
+    if (!confirm(t('organization:companyRag.deleteConfirm'))) return;
+    try {
+      await api.delete(`/api/company-rag/documents/${docId}`);
+      setCompanyDocs(docs => docs.filter(d => d.id !== docId));
+    } catch {
+      toast.error(t('organization:companyRag.deleteError'));
+    }
+  };
+
+  const handleCompanyDocDownload = async (docId, filename) => {
+    try {
+      const res = await api.get(`/documents/${docId}/download-url`);
+      if (res.data.signed_url) {
+        window.open(res.data.signed_url, '_blank');
+      } else if (res.data.proxy_url) {
+        const dlRes = await api.get(res.data.proxy_url, { responseType: 'blob' });
+        const url = window.URL.createObjectURL(dlRes.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'document';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch {
+      toast.error(t('organization:companyRag.downloadError'));
+    }
   };
 
   const handleSaveSlashCommand = async () => {
@@ -591,6 +666,66 @@ export default function Organization() {
                   )}
                 </div>
               </div>
+
+              {/* ---- RAG Entreprise (all members; manage = admin/owner) ---- */}
+              {(() => {
+                const canManage = ['owner', 'admin'].includes(company.role);
+                return (
+                  <div className="bg-white rounded-card shadow-card border border-gray-200 p-8">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-button bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center">
+                          <Database className="w-5 h-5 text-white" />
+                        </div>
+                        <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:companyRag.title')}</h2>
+                      </div>
+                      {canManage && (
+                        <label className={`flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white text-sm font-semibold rounded-button shadow-card hover:shadow-elevated transition-all cursor-pointer ${companyDocUploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                          {companyDocUploading
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <Upload className="w-4 h-4" />}
+                          <span>{companyDocUploading ? t('organization:companyRag.uploading') : t('organization:companyRag.upload')}</span>
+                          <input type="file" className="hidden" accept=".pdf,.txt,.docx,.ics,.json" onChange={handleCompanyDocUpload} />
+                        </label>
+                      )}
+                    </div>
+                    <p className="text-gray-500 text-sm mb-6 ml-13">{t('organization:companyRag.description')}</p>
+
+                    {companyDocsLoading ? (
+                      <p className="text-sm text-gray-400">{t('common:loading')}</p>
+                    ) : companyDocs.length === 0 ? (
+                      <p className="text-gray-400 text-sm text-center py-8">{t('organization:companyRag.empty')}</p>
+                    ) : (
+                      <ul className="divide-y divide-gray-100">
+                        {companyDocs.map(doc => (
+                          <li key={doc.id} className="flex items-center justify-between py-3">
+                            <div className="flex items-center space-x-3 min-w-0">
+                              <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{doc.source_url || doc.filename}</p>
+                                <p className="text-xs text-gray-400">{doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ''}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                              <button onClick={() => handleCompanyDocDownload(doc.id, doc.filename)}
+                                className="flex items-center space-x-1 px-3 py-1.5 text-xs bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-button transition-colors border border-primary-100">
+                                <Download className="w-3.5 h-3.5" />
+                                <span>{t('organization:companyRag.download')}</span>
+                              </button>
+                              {canManage && (
+                                <button onClick={() => handleCompanyDocDelete(doc.id)}
+                                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors" title={t('organization:companyRag.delete')}>
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ---- Invitations (admin/owner) ---- */}
               {['admin', 'owner'].includes(company.role) && (
