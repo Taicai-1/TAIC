@@ -22,6 +22,8 @@ from database import (
     QuestionnaireQuestion,
     QuestionnaireResponse,
     QuestionnaireAnswer,
+    Mission,
+    MissionEvent,
 )
 from auth import hash_password
 
@@ -195,3 +197,24 @@ class QuestionnaireAnswerFactory(factory.Factory):
         model = QuestionnaireAnswer
 
     answer_text = "Bleu"
+
+
+class MissionFactory(factory.Factory):
+    class Meta:
+        model = Mission
+
+    name = factory.Sequence(lambda n: f"mission-{n}")
+    objective = "Réussir le lancement du produit."
+    status = "active"
+    recap_enabled = True
+    recap_weekday = 0
+    recap_hour = 8
+
+
+class MissionEventFactory(factory.Factory):
+    class Meta:
+        model = MissionEvent
+
+    title = factory.Sequence(lambda n: f"event-{n}")
+    description = "Détail de l'évènement."
+    source = "upload"

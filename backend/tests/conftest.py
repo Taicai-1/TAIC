@@ -270,6 +270,30 @@ def test_questionnaire(db_session, test_member_user, test_company):
 
 
 @pytest.fixture
+def test_mission(db_session, test_member_user, test_company, test_agent):
+    """Create an active mission owned by test_member_user with one upcoming event."""
+    from datetime import date, timedelta
+    from tests.factories import MissionFactory, MissionEventFactory
+
+    mission = MissionFactory.build(
+        company_id=test_company.id,
+        user_id=test_member_user.id,
+        agent_id=test_agent.id,
+    )
+    db_session.add(mission)
+    db_session.flush()
+
+    event = MissionEventFactory.build(
+        mission_id=mission.id,
+        company_id=test_company.id,
+        event_date=date.today() + timedelta(days=2),
+    )
+    db_session.add(event)
+    db_session.flush()
+    return mission
+
+
+@pytest.fixture
 def test_team(db_session, test_user):
     """Create a test team owned by test_user with a leader agent."""
     from tests.factories import AgentFactory, TeamFactory, TeamMemberFactory
