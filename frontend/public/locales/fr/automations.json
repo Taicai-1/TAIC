@@ -2,7 +2,8 @@
   "title": "Automatisations",
   "subtitle": "Automatisez des tâches récurrentes pour votre organisation",
   "tabs": {
-    "questionnaires": "Questionnaires"
+    "questionnaires": "Questionnaires",
+    "missions": "Missions"
   },
   "list": {
     "empty": "Aucun questionnaire pour le moment",
@@ -91,6 +92,100 @@
     "success": "{{count}} réponse(s) exportée(s)",
     "partialFail": "{{count}} réponse(s) n'ont pas pu être exportées",
     "error": "Échec de l'export"
+  },
+  "missions": {
+    "list": {
+      "empty": "Aucune mission pour le moment",
+      "emptyHint": "Créez une mission : un objectif, un planning, des documents et un companion qui résume votre semaine.",
+      "create": "Nouvelle mission",
+      "count": "{{count}} mission(s)",
+      "noCompanion": "Aucun companion",
+      "lastRecap": "Dernier récap : {{date}}",
+      "neverRecap": "Aucun récap",
+      "deleteConfirm": "Supprimer cette mission, ses évènements, documents et récaps ?",
+      "deleted": "Mission supprimée"
+    },
+    "editor": {
+      "createTitle": "Nouvelle mission",
+      "nameLabel": "Nom de la mission",
+      "namePlaceholder": "Ex : Lancement produit Q3",
+      "objectiveLabel": "Objectif précis",
+      "objectivePlaceholder": "Décrivez l'objectif que le companion doit garder en tête…",
+      "companionLabel": "Companion connecté",
+      "selectCompanion": "Choisir un companion…",
+      "save": "Créer la mission",
+      "saved": "Mission créée",
+      "nameRequired": "Le nom est requis",
+      "objectiveRequired": "L'objectif est requis"
+    },
+    "detail": {
+      "back": "Retour aux missions",
+      "tabs": {
+        "planning": "Planning",
+        "documents": "Documents",
+        "recaps": "Récaps",
+        "chat": "Chat",
+        "settings": "Réglages"
+      }
+    },
+    "planning": {
+      "upload": "Importer un planning",
+      "uploadHint": "PDF, Excel, CSV, Word… Les évènements sont extraits puis validés avant l'enregistrement.",
+      "parsing": "Analyse du planning…",
+      "reviewTitle": "Vérifiez les évènements extraits",
+      "reviewHint": "{{skipped}} ligne(s) ignorée(s). Corrigez ou supprimez avant d'enregistrer.",
+      "replaceUpload": "Remplacer les évènements importés précédemment",
+      "confirm": "Enregistrer les évènements",
+      "saved": "Évènements enregistrés",
+      "addManual": "Ajouter un évènement",
+      "empty": "Aucun évènement. Importez un planning ou ajoutez-en un.",
+      "upcoming": "À venir",
+      "past": "Passés",
+      "dateLabel": "Date",
+      "titleLabel": "Titre",
+      "descriptionLabel": "Description",
+      "deleteConfirm": "Supprimer cet évènement ?",
+      "parseFailed": "Aucun évènement n'a pu être extrait. Saisissez-les manuellement.",
+      "cancel": "Annuler"
+    },
+    "documents": {
+      "upload": "Ajouter un document source",
+      "uploading": "Envoi…",
+      "empty": "Aucun document source",
+      "deleteConfirm": "Supprimer ce document ?",
+      "uploaded": "Document ajouté"
+    },
+    "recaps": {
+      "generate": "Générer maintenant",
+      "generating": "Génération…",
+      "empty": "Aucun récap pour le moment",
+      "period": "Semaine du {{start}} au {{end}}",
+      "noData": "Aucun évènement à venir",
+      "error": "Échec de la génération",
+      "generated": "Récap généré",
+      "noCompanion": "Connectez un companion pour générer un récap."
+    },
+    "chat": {
+      "placeholder": "Posez une question sur la mission…",
+      "send": "Envoyer",
+      "empty": "Démarrez la conversation avec votre companion.",
+      "noCompanion": "Connectez un companion pour discuter."
+    },
+    "settings": {
+      "recapEnabled": "Récap automatique activé",
+      "weekday": "Jour d'envoi",
+      "hour": "Heure d'envoi",
+      "companion": "Companion connecté",
+      "archive": "Archiver la mission",
+      "unarchive": "Réactiver la mission",
+      "delete": "Supprimer la mission",
+      "save": "Enregistrer",
+      "saved": "Réglages enregistrés",
+      "weekdays": {
+        "0": "Lundi", "1": "Mardi", "2": "Mercredi", "3": "Jeudi",
+        "4": "Vendredi", "5": "Samedi", "6": "Dimanche"
+      }
+    }
   },
   "errors": {
     "loadFailed": "Erreur de chargement",
