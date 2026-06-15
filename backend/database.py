@@ -1011,8 +1011,8 @@ def ensure_columns():
         # Date awareness
         ("agents", "date_awareness_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
         # Missions
-        ("documents", "mission_id", "INTEGER"),
-        ("conversations", "mission_id", "INTEGER"),
+        ("documents", "mission_id", "INTEGER REFERENCES missions(id) ON DELETE CASCADE"),
+        ("conversations", "mission_id", "INTEGER REFERENCES missions(id) ON DELETE CASCADE"),
     ]
     try:
         with engine.connect() as conn:
