@@ -94,3 +94,58 @@ async def test_company_doc_included_when_toggle_on(db_session, test_company):
         include_company_rag=True,
     )
     assert any(r["document_id"] == doc.id for r in results)
+
+
+from pathlib import Path
+from unittest.mock import patch
+
+
+@pytest.mark.asyncio
+async def test_member_cannot_upload_company_doc(client, member_cookies):
+    files = {"file": ("policy.txt", b"hello company", "text/plain")}
+    resp = await client.post("/api/company-rag/documents", files=files, cookies=member_cookies)
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_uploads_company_doc(client, admin_cookies, test_admin_user, mock_redis_none, mock_event_tracker):
+    with patch("routers.company_rag.process_document_for_user", return_value=777) as mock_proc:
+        files = {"file": ("policy.txt", b"hello company", "text/plain")}
+        resp = await client.post("/api/company-rag/documents", files=files, cookies=admin_cookies)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["document_id"] == 777
+    kwargs = mock_proc.call_args.kwargs
+    assert kwargs["is_company_rag"] is True
+    assert kwargs["agent_id"] is None
+    assert kwargs["company_id"] == test_admin_user.company_id
+
+
+@pytest.mark.asyncio
+async def test_member_can_list_company_docs(client, member_cookies, db_session, test_company, test_member_user):
+    from tests.factories import DocumentFactory
+    doc = DocumentFactory.build(
+        user_id=test_member_user.id, agent_id=None, company_id=test_company.id,
+        is_company_rag=True, filename="shared.txt",
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    resp = await client.get("/api/company-rag/documents", cookies=member_cookies)
+    assert resp.status_code == 200
+    names = [d["filename"] for d in resp.json()["documents"]]
+    assert "shared.txt" in names
+
+
+@pytest.mark.asyncio
+async def test_admin_deletes_company_doc(client, admin_cookies, db_session, test_admin_user):
+    from tests.factories import DocumentFactory
+    doc = DocumentFactory.build(
+        user_id=test_admin_user.id, agent_id=None, company_id=test_admin_user.company_id,
+        is_company_rag=True, filename="to-delete.txt",
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    resp = await client.delete(f"/api/company-rag/documents/{doc.id}", cookies=admin_cookies)
+    assert resp.status_code == 200
