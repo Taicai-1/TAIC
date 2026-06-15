@@ -1,7 +1,7 @@
 """Tests for the missions feature: schemas, date windows, due-check, models."""
 
 import pytest
-from datetime import date
+from datetime import date, timedelta
 from pydantic import ValidationError
 
 from schemas.missions import MissionCreate, ParsedEvent, EventsBulk
@@ -75,3 +75,47 @@ class TestDateWindows:
         start, end = recall_window(d)
         assert start == _date(2026, 6, 8)
         assert end == _date(2026, 6, 14)
+
+
+from datetime import datetime as _dt
+import pytz as _pytz
+
+from recap_scheduler import _is_mission_due
+
+
+class _FakeMission:
+    def __init__(self, weekday, hour, enabled=True, status="active", agent_id=1):
+        self.id = 1
+        self.recap_weekday = weekday
+        self.recap_hour = hour
+        self.recap_enabled = enabled
+        self.status = status
+        self.agent_id = agent_id
+
+
+class TestIsMissionDue:
+    def _now(self, weekday, hour):
+        # 2026-06-15 is a Monday (weekday 0). Offset to reach target weekday.
+        base = _date(2026, 6, 15)
+        d = base + timedelta(days=weekday)
+        return _pytz.timezone("Europe/Paris").localize(_dt(d.year, d.month, d.day, hour, 0))
+
+    def test_due_on_matching_weekday_and_hour(self, db_session):
+        m = _FakeMission(weekday=2, hour=8)
+        assert _is_mission_due(m, self._now(2, 8), db_session) is True
+
+    def test_not_due_wrong_hour(self, db_session):
+        m = _FakeMission(weekday=2, hour=8)
+        assert _is_mission_due(m, self._now(2, 9), db_session) is False
+
+    def test_not_due_wrong_weekday(self, db_session):
+        m = _FakeMission(weekday=2, hour=8)
+        assert _is_mission_due(m, self._now(3, 8), db_session) is False
+
+    def test_not_due_when_disabled(self, db_session):
+        m = _FakeMission(weekday=2, hour=8, enabled=False)
+        assert _is_mission_due(m, self._now(2, 8), db_session) is False
+
+    def test_not_due_when_no_companion(self, db_session):
+        m = _FakeMission(weekday=2, hour=8, agent_id=None)
+        assert _is_mission_due(m, self._now(2, 8), db_session) is False

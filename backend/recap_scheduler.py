@@ -94,6 +94,57 @@ def _is_recap_due(recap: Recap, now: datetime, db) -> bool:
     return True
 
 
+def _is_mission_due(mission, now: datetime, db) -> bool:
+    """Check if a mission's weekly recap is due right now (Europe/Paris)."""
+    from database import MissionRecap
+
+    if not getattr(mission, "recap_enabled", False):
+        return False
+    if getattr(mission, "status", "active") != "active":
+        return False
+    if not getattr(mission, "agent_id", None):
+        return False
+
+    weekday = mission.recap_weekday if mission.recap_weekday is not None else 0
+    hour = mission.recap_hour if mission.recap_hour is not None else 8
+    if now.weekday() != weekday or now.hour != hour:
+        return False
+
+    last = (
+        db.query(MissionRecap)
+        .filter(
+            MissionRecap.mission_id == mission.id,
+            MissionRecap.trigger == "scheduled",
+            MissionRecap.status.in_(["success", "no_data"]),
+        )
+        .order_by(MissionRecap.created_at.desc())
+        .first()
+    )
+    if last and last.created_at:
+        if now.replace(tzinfo=None) - last.created_at < timedelta(days=6):
+            return False
+    return True
+
+
+def _run_scheduled_mission_recaps(now: datetime, db) -> int:
+    """Find and process all due mission recaps. Returns the count processed."""
+    from database import Mission
+
+    missions = db.query(Mission).filter(Mission.status == "active", Mission.recap_enabled == True).all()
+    due_count = 0
+    for mission in missions:
+        if _is_mission_due(mission, now, db):
+            due_count += 1
+            try:
+                from mission_recap import process_mission_recap
+
+                result = process_mission_recap(mission, db, trigger="scheduled", run_date=now.date())
+                logger.info(f"Mission recap {mission.id} ({mission.name}): {result.get('status')}")
+            except Exception as e:
+                logger.error(f"Mission recap failed for mission {mission.id}: {e}")
+    return due_count
+
+
 def _run_scheduled_recaps():
     """Hourly tick: find and process all due recaps (both legacy agent-level and new Recap entities)."""
     logger.info("Recap scheduler tick starting")
@@ -135,7 +186,17 @@ def _run_scheduled_recaps():
                 except Exception as e:
                     logger.error(f"Legacy recap failed for agent {agent.id}: {e}")
 
-        logger.info(f"Recap scheduler tick done: {recap_due_count} recaps + {legacy_due_count} legacy agents processed")
+        # Process mission recaps (same service_bypass session covers their RAG SELECTs)
+        mission_due_count = 0
+        try:
+            mission_due_count = _run_scheduled_mission_recaps(now, db)
+        except Exception as e:
+            logger.error(f"Mission recap sweep failed: {e}")
+
+        logger.info(
+            f"Recap scheduler tick done: {recap_due_count} recaps + {legacy_due_count} legacy agents "
+            f"+ {mission_due_count} missions processed"
+        )
     except Exception as e:
         logger.error(f"Recap scheduler tick failed: {e}")
     finally:
