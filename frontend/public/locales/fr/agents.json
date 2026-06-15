@@ -2,6 +2,10 @@
   "pageTitle": "TAIC Companion",
   "pageSubtitle": "Créez un jumeau expert.",
   "logout": "Se déconnecter",
+  "companyRag": {
+    "label": "Inclure le RAG entreprise",
+    "help": "Donne à ce companion accès aux documents partagés de l'entreprise."
+  },
   "types": {
     "conversationnel": {
       "name": "Conversationnel",
