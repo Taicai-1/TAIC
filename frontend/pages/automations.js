@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Target } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../hooks/useAuth';
 import QuestionnairesTab from '../components/automations/questionnaire/QuestionnairesTab';
+import MissionsTab from '../components/automations/missions/MissionsTab';
 
 const TABS = [
   { key: 'questionnaires', labelKey: 'tabs.questionnaires', Icon: ClipboardList },
+  { key: 'missions', labelKey: 'tabs.missions', Icon: Target },
 ];
 
 export default function AutomationsPage() {
@@ -42,6 +44,7 @@ export default function AutomationsPage() {
         </div>
 
         {activeTab === 'questionnaires' && <QuestionnairesTab />}
+        {activeTab === 'missions' && <MissionsTab />}
       </div>
     </Layout>
   );
