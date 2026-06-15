@@ -563,7 +563,13 @@ async def upload_file(
 
 
 def _process_document_background(
-    task_id: str, filename: str, content: bytes, user_id: int, agent_id: int, company_id: int = None, mission_id: int = None
+    task_id: str,
+    filename: str,
+    content: bytes,
+    user_id: int,
+    agent_id: int,
+    company_id: int = None,
+    mission_id: int = None,
 ):
     """Background worker for async document processing. Uses its own DB session."""
     db = SessionLocal()
