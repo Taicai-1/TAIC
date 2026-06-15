@@ -57,3 +57,21 @@ class TestEventsBulkSchema:
     def test_empty_events_allowed(self):
         b = EventsBulk(events=[])
         assert b.events == []
+
+from datetime import date as _date
+
+from mission_recap import upcoming_window, recall_window
+
+
+class TestDateWindows:
+    def test_upcoming_window_is_7_days_inclusive(self):
+        d = _date(2026, 6, 15)
+        start, end = upcoming_window(d)
+        assert start == _date(2026, 6, 15)
+        assert end == _date(2026, 6, 21)
+
+    def test_recall_window_is_prior_7_days(self):
+        d = _date(2026, 6, 15)
+        start, end = recall_window(d)
+        assert start == _date(2026, 6, 8)
+        assert end == _date(2026, 6, 14)
