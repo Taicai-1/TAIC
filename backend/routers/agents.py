@@ -103,6 +103,7 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                 "llm_provider": a.llm_provider,
                 "neo4j_enabled": a.neo4j_enabled,
                 "date_awareness_enabled": getattr(a, "date_awareness_enabled", False),
+                "include_company_rag": getattr(a, "include_company_rag", False),
                 "email_tags": a.email_tags,
                 "weekly_recap_enabled": a.weekly_recap_enabled,
                 "recap_frequency": a.recap_frequency,
@@ -133,6 +134,7 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                     "llm_provider": a.llm_provider,
                     "neo4j_enabled": a.neo4j_enabled,
                     "date_awareness_enabled": a.date_awareness_enabled,
+                    "include_company_rag": getattr(a, "include_company_rag", False),
                     "email_tags": a.email_tags,
                     "weekly_recap_enabled": a.weekly_recap_enabled,
                     "recap_frequency": a.recap_frequency,
@@ -166,6 +168,7 @@ async def create_agent(
     recap_frequency: str = Form("weekly"),
     recap_hour: str = Form("9"),
     date_awareness_enabled: str = Form("false"),
+    include_company_rag: str = Form("false"),
     enabled_plugins: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
@@ -244,6 +247,7 @@ async def create_agent(
             recap_frequency=recap_frequency if recap_frequency in ("daily", "weekly", "monthly") else "weekly",
             recap_hour=max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9,
             date_awareness_enabled=date_awareness_enabled.lower() in ("true", "1", "yes"),
+            include_company_rag=include_company_rag.lower() in ("true", "1", "yes"),
             enabled_plugins=parsed_plugins,
             user_id=int(user_id),
             company_id=caller_company_id,
@@ -325,6 +329,7 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
             "llm_provider": agent.llm_provider,
             "neo4j_enabled": agent.neo4j_enabled,
             "date_awareness_enabled": agent.date_awareness_enabled,
+            "include_company_rag": getattr(agent, "include_company_rag", False),
             "enabled_plugins": agent.enabled_plugins,
             "created_at": agent.created_at.isoformat() if agent.created_at else None,
             "shared": not is_owner,
@@ -702,6 +707,7 @@ async def update_agent(
     recap_frequency: str = Form("weekly"),
     recap_hour: str = Form("9"),
     date_awareness_enabled: str = Form("false"),
+    include_company_rag: str = Form("false"),
     enabled_plugins: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
@@ -750,6 +756,9 @@ async def update_agent(
 
         # Update Date Awareness
         agent.date_awareness_enabled = date_awareness_enabled.lower() in ("true", "1", "yes")
+
+        # Update Company RAG inclusion
+        agent.include_company_rag = include_company_rag.lower() in ("true", "1", "yes")
 
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
 
