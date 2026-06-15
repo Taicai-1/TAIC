@@ -384,6 +384,8 @@ async def update_event(
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    if mission.status != "active":
+        raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
     event = (
         db.query(MissionEvent)
         .filter(MissionEvent.id == event_id, MissionEvent.mission_id == mission.id)
@@ -405,6 +407,8 @@ async def delete_event(
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    if mission.status != "active":
+        raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
     event = (
         db.query(MissionEvent)
         .filter(MissionEvent.id == event_id, MissionEvent.mission_id == mission.id)
