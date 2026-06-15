@@ -1,15 +1,17 @@
 """Missions automation endpoints: CRUD, planning parse/events, documents, recaps, chat."""
 
+import json
 import logging
 from datetime import datetime
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import Agent, Mission, MissionEvent, MissionRecap, get_db
+from database import Agent, Document, Mission, MissionEvent, MissionRecap, get_db
 from permissions import require_role
-from schemas.missions import EventCreate, EventsBulk, EventUpdate, MissionCreate, MissionUpdate
+from schemas.missions import EventCreate, EventsBulk, EventUpdate, MissionChatRequest, MissionCreate, MissionUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -419,3 +421,290 @@ async def delete_event(
     db.delete(event)
     db.commit()
     return {"success": True}
+
+
+# --------------------------------------------------------------------------- #
+# Mission documents (siloed RAG sources)
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/api/automations/missions/{mission_id}/documents")
+async def upload_mission_document(
+    mission_id: int,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Upload a source document siloed to the mission (async via Redis when available)."""
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+
+    if not any(file.filename.lower().endswith(ext) for ext in ALLOWED_EXT):
+        raise HTTPException(status_code=400, detail="Type de fichier non supporté")
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="Fichier trop volumineux")
+
+    from redis_client import get_redis
+    from routers.documents import _process_document_background
+
+    r = get_redis()
+    if r is not None:
+        task_id = str(uuid4())
+        r.setex(
+            f"doc_task:{task_id}",
+            3600,
+            json.dumps(
+                {"task_id": task_id, "status": "processing", "filename": file.filename,
+                 "document_id": None, "error": None}
+            ),
+        )
+        background_tasks.add_task(
+            _process_document_background,
+            task_id,
+            file.filename,
+            content,
+            user_id,
+            None,  # agent_id
+            mission.company_id,
+            mission.id,  # mission_id
+        )
+        return {"filename": file.filename, "task_id": task_id, "status": "processing"}
+
+    from rag_engine import process_document_for_user
+
+    doc_id = process_document_for_user(
+        file.filename, content, user_id, db, agent_id=None, company_id=mission.company_id, mission_id=mission.id
+    )
+    return {"filename": file.filename, "document_id": doc_id, "status": "uploaded"}
+
+
+@router.get("/api/automations/missions/{mission_id}/documents")
+async def list_mission_documents(
+    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    docs = (
+        db.query(Document)
+        .filter(Document.mission_id == mission.id)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+    return {
+        "documents": [
+            {"id": d.id, "filename": d.filename, "created_at": d.created_at.isoformat() if d.created_at else None}
+            for d in docs
+        ]
+    }
+
+
+@router.delete("/api/automations/missions/{mission_id}/documents/{document_id}")
+async def delete_mission_document(
+    mission_id: int, document_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.mission_id == mission.id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    db.delete(doc)  # chunks cascade via the relationship
+    db.commit()
+    return {"success": True}
+
+
+# --------------------------------------------------------------------------- #
+# Recaps
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/api/automations/missions/{mission_id}/recaps")
+async def list_recaps(
+    mission_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    base = db.query(MissionRecap).filter(MissionRecap.mission_id == mission.id)
+    total = base.count()
+    rows = base.order_by(MissionRecap.created_at.desc()).offset(offset).limit(limit).all()
+    return {
+        "recaps": [
+            {
+                "id": rcp.id,
+                "period_start": rcp.period_start.isoformat(),
+                "period_end": rcp.period_end.isoformat(),
+                "content": rcp.content,
+                "status": rcp.status,
+                "trigger": rcp.trigger,
+                "email_sent": rcp.email_sent,
+                "created_at": rcp.created_at.isoformat() if rcp.created_at else None,
+            }
+            for rcp in rows
+        ],
+        "total": total,
+    }
+
+
+@router.post("/api/automations/missions/{mission_id}/recaps/generate")
+async def generate_recap_now(
+    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Generate a recap on demand (synchronous, no email, no scheduler impact)."""
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    if not mission.agent_id:
+        raise HTTPException(status_code=400, detail="Connectez un companion à la mission d'abord")
+
+    from mission_recap import process_mission_recap
+
+    result = process_mission_recap(mission, db, trigger="manual")
+    if result["status"] == "no_data":
+        raise HTTPException(status_code=400, detail="Aucun évènement à venir cette semaine")
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail="La génération du récap a échoué")
+    return {"recap_id": result["recap_id"], "content": result["content"]}
+
+
+# --------------------------------------------------------------------------- #
+# Mission chat
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/api/automations/missions/{mission_id}/chat")
+async def mission_chat(
+    mission_id: int, body: MissionChatRequest, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Chat with the connected companion in the mission's context."""
+    from datetime import date, timedelta
+
+    from database import Conversation, Message
+    from mistral_embeddings import get_embedding_fast
+    from openai_client import get_chat_response
+    from rag_engine import search_similar_texts_for_user
+    from weekly_recap import get_model_id_for_agent
+
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    if not mission.agent_id:
+        raise HTTPException(status_code=400, detail="Connectez un companion à la mission d'abord")
+    agent = db.query(Agent).filter(Agent.id == mission.agent_id).first()
+
+    # Resolve or create the conversation (scoped to this mission).
+    conversation = None
+    if body.conversation_id:
+        conversation = (
+            db.query(Conversation)
+            .filter(Conversation.id == body.conversation_id, Conversation.mission_id == mission.id)
+            .first()
+        )
+    if conversation is None:
+        conversation = Conversation(
+            agent_id=mission.agent_id,
+            user_id=user_id,
+            company_id=mission.company_id,
+            mission_id=mission.id,
+            title=body.message[:60],
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+    # Build mission context: objective + events [-7, +7] + RAG snippets.
+    today = date.today()
+    events = (
+        db.query(MissionEvent)
+        .filter(
+            MissionEvent.mission_id == mission.id,
+            MissionEvent.event_date >= today - timedelta(days=7),
+            MissionEvent.event_date <= today + timedelta(days=7),
+        )
+        .order_by(MissionEvent.event_date.asc())
+        .all()
+    )
+    events_text = "\n".join(
+        f"- {e.event_date.isoformat()} : {e.title}" + (f" — {e.description}" if e.description else "")
+        for e in events
+    ) or "(aucun évènement proche)"
+
+    rag_text = ""
+    try:
+        emb = get_embedding_fast(body.message)
+        results = search_similar_texts_for_user(
+            emb, user_id=user_id, db=db, top_k=4, company_id=mission.company_id, mission_id=mission.id
+        )
+        rag_text = "\n".join(f"> {r['text'][:800]}" for r in results)
+    except Exception as e:
+        logger.warning(f"Mission {mission.id} chat RAG failed: {e}")
+    rag_text = rag_text or "(aucun extrait documentaire pertinent)"
+
+    agent_name = (agent.name if agent else None) or "Assistant"
+    agent_context = (getattr(agent, "contexte", "") if agent else "") or ""
+    system_prompt = (
+        f"Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}\n\n"
+        f"Tu assistes sur une mission dont l'objectif est :\n\"\"\"{mission.objective.strip()}\"\"\"\n\n"
+        f"Évènements proches (±7 jours) :\n{events_text}\n\n"
+        f"Extraits de documents de la mission :\n{rag_text}\n\n"
+        "Réponds en t'appuyant sur ce contexte. N'invente pas d'évènements absents."
+    )
+
+    db.add(Message(conversation_id=conversation.id, company_id=mission.company_id, role="user", content=body.message))
+    db.commit()
+
+    model_id = get_model_id_for_agent(agent) if agent else "mistral:mistral-large-latest"
+    answer = get_chat_response(
+        [{"role": "system", "content": system_prompt}, {"role": "user", "content": body.message}],
+        model_id=model_id,
+    )
+
+    db.add(Message(conversation_id=conversation.id, company_id=mission.company_id, role="agent", content=answer))
+    db.commit()
+
+    return {"conversation_id": conversation.id, "answer": answer}
+
+
+@router.get("/api/automations/missions/{mission_id}/conversations")
+async def list_mission_conversations(
+    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    from database import Conversation, Message
+
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    convs = (
+        db.query(Conversation)
+        .filter(Conversation.mission_id == mission.id, Conversation.user_id == user_id)
+        .order_by(Conversation.created_at.desc())
+        .all()
+    )
+    result = []
+    for c in convs:
+        messages = (
+            db.query(Message)
+            .filter(Message.conversation_id == c.id)
+            .order_by(Message.timestamp.asc())
+            .all()
+        )
+        result.append(
+            {
+                "id": c.id,
+                "title": c.title,
+                "messages": [{"role": m.role, "content": m.content} for m in messages],
+            }
+        )
+    return {"conversations": result}
