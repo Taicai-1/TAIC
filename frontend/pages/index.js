@@ -62,7 +62,7 @@ export default function CompanionSettings() {
     name: "", contexte: "", biographie: "", profile_photo: null,
     type: 'conversationnel', enabled_plugins: [],
     email_tags: [], neo4j_enabled: false, neo4j_person_name: "",
-    neo4j_depth: 1, date_awareness_enabled: false,
+    neo4j_depth: 1, date_awareness_enabled: false, include_company_rag: false,
     weekly_recap_enabled: false, weekly_recap_prompt: "",
     weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9,
   });
@@ -183,6 +183,7 @@ export default function CompanionSettings() {
         email_tags: parsedEmailTags, neo4j_enabled: agent.neo4j_enabled || false,
         neo4j_person_name: agent.neo4j_person_name || "", neo4j_depth: agent.neo4j_depth || 1,
         date_awareness_enabled: agent.date_awareness_enabled || false,
+        include_company_rag: agent.include_company_rag || false,
         weekly_recap_enabled: agent.weekly_recap_enabled || false,
         weekly_recap_prompt: agent.weekly_recap_prompt || "",
         weekly_recap_recipients: agent.weekly_recap_recipients ? JSON.parse(agent.weekly_recap_recipients) : [],
@@ -501,6 +502,7 @@ export default function CompanionSettings() {
       if (f.neo4j_person_name) formData.append("neo4j_person_name", f.neo4j_person_name);
       formData.append("neo4j_depth", String(f.neo4j_depth || 1));
       formData.append("date_awareness_enabled", f.date_awareness_enabled ? "true" : "false");
+      formData.append("include_company_rag", f.include_company_rag ? "true" : "false");
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -1218,6 +1220,25 @@ export default function CompanionSettings() {
               onClick={() => setForm(f => ({ ...f, date_awareness_enabled: !f.date_awareness_enabled }))}
             >
               <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.date_awareness_enabled ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
+            </button>
+          </div>
+        </Section>
+
+        {/* Company RAG */}
+        <Section
+          icon={FileText}
+          title={t('agents:companyRag.label')}
+          subtitle={t('agents:companyRag.help')}
+          color="bg-emerald-600"
+        >
+          <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-button border border-emerald-200">
+            <span className="text-sm font-semibold text-gray-700">{t('agents:companyRag.label')}</span>
+            <button
+              type="button"
+              className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border-2 ${form.include_company_rag ? 'bg-emerald-600 border-emerald-600' : 'bg-gray-200 border-gray-300'}`}
+              onClick={() => setForm(f => ({ ...f, include_company_rag: !f.include_company_rag }))}
+            >
+              <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.include_company_rag ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
             </button>
           </div>
         </Section>
