@@ -3,7 +3,7 @@ import logging
 import secrets
 import contextvars
 from typing import List, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Boolean, text, event
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, text, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import UniqueConstraint
@@ -547,6 +547,9 @@ class Document(Base):
     drive_link_id = Column(Integer, ForeignKey("drive_links.id"), nullable=True, index=True)
     drive_file_id = Column(String(128), nullable=True, index=True)
     source_url = Column(String(2048), nullable=True)
+    mission_id = Column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # Documents siloed to a mission (RAG sources)
 
     # Relations
     owner = relationship("User", back_populates="documents")
@@ -633,6 +636,9 @@ class Conversation(Base):
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
+    mission_id = Column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # Conversations scoped to a mission chat
     title = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -736,6 +742,65 @@ class RecapDocument(Base):
 
     recap = relationship("Recap", back_populates="recap_documents")
     document = relationship("Document")
+
+
+class Mission(Base):
+    __tablename__ = "missions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)  # Tenant isolation
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Creator (private)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="SET NULL"), nullable=True, index=True)  # Companion
+    name = Column(String(255), nullable=False)
+    objective = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="active", server_default="active")  # active | archived
+    recap_enabled = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    recap_weekday = Column(Integer, nullable=False, default=0, server_default="0")  # 0=Monday .. 6=Sunday
+    recap_hour = Column(Integer, nullable=False, default=8, server_default="8")  # Europe/Paris
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    agent = relationship("Agent")
+    events = relationship(
+        "MissionEvent",
+        back_populates="mission",
+        cascade="all, delete-orphan",
+        order_by="MissionEvent.event_date",
+    )
+    recaps = relationship("MissionRecap", back_populates="mission", cascade="all, delete-orphan")
+
+
+class MissionEvent(Base):
+    __tablename__ = "mission_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mission_id = Column(Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    event_date = Column(Date, nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    source = Column(String(10), nullable=False, default="upload", server_default="upload")  # upload | manual
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mission = relationship("Mission", back_populates="events")
+
+
+class MissionRecap(Base):
+    __tablename__ = "mission_recaps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mission_id = Column(Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    content = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False)  # success | error | no_data
+    error_message = Column(Text, nullable=True)
+    email_sent = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    trigger = Column(String(10), nullable=False, default="scheduled", server_default="scheduled")  # scheduled | manual
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mission = relationship("Mission", back_populates="recaps")
 
 
 class RoutineReport(Base):
@@ -945,6 +1010,9 @@ def ensure_columns():
         ("action_executions", "loop_state", "TEXT"),
         # Date awareness
         ("agents", "date_awareness_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        # Missions
+        ("documents", "mission_id", "INTEGER"),
+        ("conversations", "mission_id", "INTEGER"),
     ]
     try:
         with engine.connect() as conn:
