@@ -83,6 +83,15 @@ export default function PlanningTab({ missionId }) {
     }
   };
 
+  const saveEvent = async (id, fields) => {
+    try {
+      await api.put(`/api/automations/missions/${missionId}/events/${id}`, fields);
+      load();
+    } catch {
+      toast.error(t('errors.saveFailed'));
+    }
+  };
+
   const deleteEvent = async (id) => {
     if (!window.confirm(t('missions.planning.deleteConfirm'))) return;
     try {
@@ -187,6 +196,7 @@ export default function PlanningTab({ missionId }) {
         <EventGroups
           upcoming={upcoming}
           past={past}
+          onSave={saveEvent}
           onDelete={deleteEvent}
           labels={{
             upcoming: t('missions.planning.upcoming'),
@@ -198,7 +208,7 @@ export default function PlanningTab({ missionId }) {
   );
 }
 
-function EventGroups({ upcoming, past, onDelete, labels }) {
+function EventGroups({ upcoming, past, onSave, onDelete, labels }) {
   return (
     <div className="space-y-6">
       {[
@@ -211,24 +221,54 @@ function EventGroups({ upcoming, past, onDelete, labels }) {
               <p className="text-xs font-semibold text-gray-400 uppercase mb-2">{group.title}</p>
               <div className="space-y-1.5">
                 {group.list.map((e) => (
-                  <div
-                    key={e.id}
-                    className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-200 rounded-card"
-                  >
-                    <span className="text-xs font-mono text-gray-500 shrink-0">{e.date}</span>
-                    <span className="flex-1 text-sm text-gray-800 truncate">{e.title}</span>
-                    <button
-                      onClick={() => onDelete(e.id)}
-                      className="p-1 text-gray-300 hover:text-red-500"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  <EventRow key={e.id} event={e} onSave={onSave} onDelete={onDelete} />
                 ))}
               </div>
             </div>
           )
       )}
+    </div>
+  );
+}
+
+function EventRow({ event, onSave, onDelete }) {
+  const [date, setDate] = useState(event.date);
+  const [title, setTitle] = useState(event.title);
+
+  // Resync local fields when the event is reloaded from the server.
+  useEffect(() => {
+    setDate(event.date);
+    setTitle(event.title);
+  }, [event.date, event.title]);
+
+  const commit = () => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setTitle(event.title); // revert empty title
+      return;
+    }
+    if (date === event.date && trimmed === event.title) return; // nothing changed
+    onSave(event.id, { date, title: trimmed, description: event.description ?? null });
+  };
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-200 rounded-card">
+      <input
+        type="date"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        onBlur={commit}
+        className="text-xs font-mono text-gray-600 bg-transparent border border-transparent hover:border-gray-200 focus:border-primary-300 rounded px-1 py-0.5 shrink-0 focus:outline-none"
+      />
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={commit}
+        className="flex-1 text-sm text-gray-800 bg-transparent border border-transparent hover:border-gray-200 focus:border-primary-300 rounded px-1 py-0.5 focus:outline-none"
+      />
+      <button onClick={() => onDelete(event.id)} className="p-1 text-gray-300 hover:text-red-500">
+        <Trash2 className="w-4 h-4" />
+      </button>
     </div>
   );
 }
