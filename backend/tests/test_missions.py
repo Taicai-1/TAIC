@@ -282,3 +282,70 @@ async def test_archived_mission_blocks_event_create(client, member_cookies):
         cookies=member_cookies,
     )
     assert resp.status_code == 400
+
+
+async def test_create_list_recap_schedule(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    resp = await client.post(
+        f"/api/automations/missions/{mid}/recap-schedules",
+        json={"kind": "recurring", "weekday": 1, "hour": 9},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    listing = await client.get(
+        f"/api/automations/missions/{mid}/recap-schedules", cookies=member_cookies
+    )
+    assert listing.status_code == 200
+    schedules = listing.json()["schedules"]
+    assert len(schedules) == 1
+    assert schedules[0]["kind"] == "recurring"
+    assert schedules[0]["weekday"] == 1
+
+
+async def test_update_and_delete_recap_schedule(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    made = await client.post(
+        f"/api/automations/missions/{mid}/recap-schedules",
+        json={"kind": "once", "run_date": "2026-07-01", "hour": 10},
+        cookies=member_cookies,
+    )
+    sid = made.json()["id"]
+    upd = await client.put(
+        f"/api/automations/missions/{mid}/recap-schedules/{sid}",
+        json={"kind": "once", "run_date": "2026-07-02", "hour": 11, "enabled": False},
+        cookies=member_cookies,
+    )
+    assert upd.status_code == 200, upd.text
+    deleted = await client.delete(
+        f"/api/automations/missions/{mid}/recap-schedules/{sid}", cookies=member_cookies
+    )
+    assert deleted.status_code == 200
+    listing = await client.get(
+        f"/api/automations/missions/{mid}/recap-schedules", cookies=member_cookies
+    )
+    assert listing.json()["schedules"] == []
+
+
+async def test_recap_schedule_recurring_requires_weekday(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    resp = await client.post(
+        f"/api/automations/missions/{mid}/recap-schedules",
+        json={"kind": "recurring", "hour": 9},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 422
