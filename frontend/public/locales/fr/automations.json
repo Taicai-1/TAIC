@@ -181,6 +181,19 @@
       "delete": "Supprimer la mission",
       "save": "Enregistrer",
       "saved": "Réglages enregistrés",
+      "recapSchedules": {
+        "title": "Récaps planifiés",
+        "add": "Ajouter un récap",
+        "empty": "Aucun récap planifié.",
+        "recurring": "Récurrent",
+        "once": "Ponctuel",
+        "weekday": "Jour",
+        "date": "Date",
+        "hour": "Heure",
+        "enabled": "Activé",
+        "saved": "Récap planifié enregistré",
+        "deleted": "Récap planifié supprimé"
+      },
       "weekdays": {
         "0": "Lundi", "1": "Mardi", "2": "Mercredi", "3": "Jeudi",
         "4": "Vendredi", "5": "Samedi", "6": "Dimanche"
