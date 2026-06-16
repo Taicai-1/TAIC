@@ -136,10 +136,7 @@ function ScheduleRow({ schedule, weekdays, onSave, onDelete, t }) {
 
       <select
         value={kind}
-        onChange={(e) => {
-          setKind(e.target.value);
-          commit({ kind: e.target.value });
-        }}
+        onChange={(e) => setKind(e.target.value)}
         className="px-2 py-1.5 border border-gray-300 rounded-button text-sm bg-white"
       >
         <option value="recurring">{t('missions.settings.recapSchedules.recurring')}</option>
