@@ -4,7 +4,7 @@ import pytest
 from datetime import date, timedelta
 from pydantic import ValidationError
 
-from schemas.missions import MissionCreate, ParsedEvent, EventsBulk
+from schemas.missions import MissionCreate, ParsedEvent, EventsBulk, RecapScheduleCreate
 
 
 class TestMissionCreateSchema:
@@ -28,6 +28,36 @@ class TestMissionCreateSchema:
     def test_recap_hour_bounds(self):
         with pytest.raises(ValidationError):
             MissionCreate(name="x", objective="y", recap_hour=24)
+
+
+class TestRecapScheduleSchema:
+    def test_recurring_valid(self):
+        s = RecapScheduleCreate(kind="recurring", weekday=2, hour=8)
+        assert s.weekday == 2
+
+    def test_recurring_requires_weekday(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="recurring", hour=8)
+
+    def test_once_valid(self):
+        s = RecapScheduleCreate(kind="once", run_date="2026-07-01", hour=9)
+        assert s.run_date == date(2026, 7, 1)
+
+    def test_once_requires_run_date(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="once", hour=9)
+
+    def test_bad_kind_rejected(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="daily", weekday=0, hour=9)
+
+    def test_hour_bounds(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="recurring", weekday=0, hour=24)
+
+    def test_weekday_bounds(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="recurring", weekday=7, hour=9)
 
 
 class TestParsedEventSchema:

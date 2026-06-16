@@ -3,7 +3,7 @@
 from datetime import date
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class MissionCreate(BaseModel):
@@ -78,6 +78,26 @@ class EventCreate(BaseModel):
 
 
 class EventUpdate(EventCreate):
+    pass
+
+
+class RecapScheduleCreate(BaseModel):
+    kind: str = Field(..., pattern="^(recurring|once)$")
+    weekday: Optional[int] = Field(None, ge=0, le=6)
+    run_date: Optional[date] = None
+    hour: int = Field(..., ge=0, le=23)
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def check_kind_fields(self):
+        if self.kind == "recurring" and self.weekday is None:
+            raise ValueError("weekday is required for a recurring schedule")
+        if self.kind == "once" and self.run_date is None:
+            raise ValueError("run_date is required for a one-shot schedule")
+        return self
+
+
+class RecapScheduleUpdate(RecapScheduleCreate):
     pass
 
 
