@@ -798,9 +798,29 @@ class MissionRecap(Base):
     error_message = Column(Text, nullable=True)
     email_sent = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     trigger = Column(String(10), nullable=False, default="scheduled", server_default="scheduled")  # scheduled | manual
+    schedule_id = Column(
+        Integer, ForeignKey("mission_recap_schedules.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
 
     mission = relationship("Mission", back_populates="recaps")
+
+
+class MissionRecapSchedule(Base):
+    __tablename__ = "mission_recap_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mission_id = Column(Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    kind = Column(String(10), nullable=False)  # recurring | once
+    weekday = Column(Integer, nullable=True)  # 0=Monday .. 6=Sunday (recurring only)
+    run_date = Column(Date, nullable=True)  # one-shot only
+    hour = Column(Integer, nullable=False, default=8, server_default="8")  # Europe/Paris, full hour
+    enabled = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    last_run_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mission = relationship("Mission")
 
 
 class RoutineReport(Base):
@@ -1013,6 +1033,7 @@ def ensure_columns():
         # Missions
         ("documents", "mission_id", "INTEGER REFERENCES missions(id) ON DELETE CASCADE"),
         ("conversations", "mission_id", "INTEGER REFERENCES missions(id) ON DELETE CASCADE"),
+        ("mission_recaps", "schedule_id", "INTEGER REFERENCES mission_recap_schedules(id) ON DELETE SET NULL"),
     ]
     try:
         with engine.connect() as conn:
@@ -1093,8 +1114,8 @@ def ensure_rls_policies():
         # session var. Tenant isolation is app-level (company_id filters in
         # routers/automations.py). Do not add them here without reworking the
         # public endpoints first.
-        # Mission tables (missions, mission_events, mission_recaps) are also
-        # intentionally ABSENT: the recap scheduler INSERTs mission_recaps from a
+        # Mission tables (missions, mission_events, mission_recaps,
+        # mission_recap_schedules) are also intentionally ABSENT: the recap scheduler INSERTs mission_recaps from a
         # background session that has no app.company_id set, which a tenant_isolation
         # WITH CHECK policy would reject (service_bypass only covers SELECT). Tenant
         # isolation is app-level and stricter here — every mission query in
