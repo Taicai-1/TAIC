@@ -136,7 +136,17 @@ function ScheduleRow({ schedule, weekdays, onSave, onDelete, t }) {
 
       <select
         value={kind}
-        onChange={(e) => setKind(e.target.value)}
+        onChange={(e) => {
+          const newKind = e.target.value;
+          setKind(newKind);
+          // Persist immediately only when switching to recurring: its default
+          // weekday is a valid choice. For one-shot we wait for the date input's
+          // onBlur, so we never persist an unchosen run_date the scheduler could
+          // fire today.
+          if (newKind === 'recurring') {
+            commit({ kind: newKind });
+          }
+        }}
         className="px-2 py-1.5 border border-gray-300 rounded-button text-sm bg-white"
       >
         <option value="recurring">{t('missions.settings.recapSchedules.recurring')}</option>
