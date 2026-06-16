@@ -531,6 +531,8 @@ async def delete_recap_schedule(
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    if mission.status != "active":
+        raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
     schedule = (
         db.query(MissionRecapSchedule)
         .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
