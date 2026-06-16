@@ -138,53 +138,53 @@ class TestIsScheduleDue:
         d = base + timedelta(days=weekday)
         return _pytz.timezone("Europe/Paris").localize(_dt(d.year, d.month, d.day, hour, 0))
 
-    def test_recurring_due(self, db_session):
+    def test_recurring_due(self):
         m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8)
-        assert _is_schedule_due(s, m, self._now(2, 8), db_session) is True
+        assert _is_schedule_due(s, m, self._now(2, 8)) is True
 
-    def test_recurring_wrong_hour(self, db_session):
+    def test_recurring_wrong_hour(self):
         m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8)
-        assert _is_schedule_due(s, m, self._now(2, 9), db_session) is False
+        assert _is_schedule_due(s, m, self._now(2, 9)) is False
 
-    def test_recurring_wrong_weekday(self, db_session):
+    def test_recurring_wrong_weekday(self):
         m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8)
-        assert _is_schedule_due(s, m, self._now(3, 8), db_session) is False
+        assert _is_schedule_due(s, m, self._now(3, 8)) is False
 
-    def test_recurring_deduped_within_6_days(self, db_session):
+    def test_recurring_deduped_within_6_days(self):
         now = self._now(2, 8)
         recent = now.replace(tzinfo=None) - timedelta(days=2)
         m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8, last_run_at=recent)
-        assert _is_schedule_due(s, m, now, db_session) is False
+        assert _is_schedule_due(s, m, now) is False
 
-    def test_once_due(self, db_session):
+    def test_once_due(self):
         now = self._now(2, 8)
         m = _FakeMission()
         s = _FakeSchedule("once", run_date=now.date(), hour=8)
-        assert _is_schedule_due(s, m, now, db_session) is True
+        assert _is_schedule_due(s, m, now) is True
 
-    def test_once_wrong_date(self, db_session):
+    def test_once_wrong_date(self):
         now = self._now(2, 8)
         m = _FakeMission()
         s = _FakeSchedule("once", run_date=now.date() + timedelta(days=1), hour=8)
-        assert _is_schedule_due(s, m, now, db_session) is False
+        assert _is_schedule_due(s, m, now) is False
 
-    def test_once_already_run(self, db_session):
+    def test_once_already_run(self):
         now = self._now(2, 8)
         m = _FakeMission()
         s = _FakeSchedule("once", run_date=now.date(), hour=8, last_run_at=now.replace(tzinfo=None))
-        assert _is_schedule_due(s, m, now, db_session) is False
+        assert _is_schedule_due(s, m, now) is False
 
-    def test_disabled(self, db_session):
+    def test_disabled(self):
         m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8, enabled=False)
-        assert _is_schedule_due(s, m, self._now(2, 8), db_session) is False
+        assert _is_schedule_due(s, m, self._now(2, 8)) is False
 
-    def test_archived_mission(self, db_session):
+    def test_archived_mission(self):
         m, s = _FakeMission(status="archived"), _FakeSchedule("recurring", weekday=2, hour=8)
-        assert _is_schedule_due(s, m, self._now(2, 8), db_session) is False
+        assert _is_schedule_due(s, m, self._now(2, 8)) is False
 
-    def test_no_companion(self, db_session):
+    def test_no_companion(self):
         m, s = _FakeMission(agent_id=None), _FakeSchedule("recurring", weekday=2, hour=8)
-        assert _is_schedule_due(s, m, self._now(2, 8), db_session) is False
+        assert _is_schedule_due(s, m, self._now(2, 8)) is False
 
 
 # ---------------------------------------------------------------------------

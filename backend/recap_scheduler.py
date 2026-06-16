@@ -94,7 +94,7 @@ def _is_recap_due(recap: Recap, now: datetime, db) -> bool:
     return True
 
 
-def _is_schedule_due(schedule, mission, now: datetime, db) -> bool:
+def _is_schedule_due(schedule, mission, now: datetime) -> bool:
     """Check if a recap schedule is due right now (Europe/Paris)."""
     if not getattr(schedule, "enabled", False):
         return False
@@ -135,7 +135,7 @@ def _run_scheduled_mission_recaps(now: datetime, db) -> int:
     due_count = 0
     for schedule in schedules:
         mission = schedule.mission
-        if mission and _is_schedule_due(schedule, mission, now, db):
+        if mission and _is_schedule_due(schedule, mission, now):
             due_count += 1
             try:
                 from mission_recap import process_mission_recap
