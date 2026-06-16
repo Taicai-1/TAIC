@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'next-i18next';
 import toast from 'react-hot-toast';
 import api from '../../../lib/api';
+import RecapSchedules from './RecapSchedules';
 
 export default function SettingsTab({ mission, onChanged, onDeleted }) {
   const { t } = useTranslation('automations');
@@ -10,9 +11,6 @@ export default function SettingsTab({ mission, onChanged, onDeleted }) {
     objective: mission.objective,
     agent_id: mission.agent_id || '',
     status: mission.status,
-    recap_enabled: mission.recap_enabled,
-    recap_weekday: mission.recap_weekday,
-    recap_hour: mission.recap_hour,
   });
   const [agents, setAgents] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -25,9 +23,6 @@ export default function SettingsTab({ mission, onChanged, onDeleted }) {
       objective: mission.objective,
       agent_id: mission.agent_id || '',
       status: mission.status,
-      recap_enabled: mission.recap_enabled,
-      recap_weekday: mission.recap_weekday,
-      recap_hour: mission.recap_hour,
     });
   }, [mission]);
 
@@ -44,8 +39,6 @@ export default function SettingsTab({ mission, onChanged, onDeleted }) {
     const payload = {
       ...merged,
       agent_id: merged.agent_id ? parseInt(merged.agent_id, 10) : null,
-      recap_weekday: parseInt(merged.recap_weekday, 10),
-      recap_hour: parseInt(merged.recap_hour, 10),
     };
     try {
       await api.put(`/api/automations/missions/${mission.id}`, payload);
@@ -69,53 +62,9 @@ export default function SettingsTab({ mission, onChanged, onDeleted }) {
     }
   };
 
-  const weekdays = t('missions.settings.weekdays', { returnObjects: true });
-
   return (
     <div className="max-w-xl space-y-4">
-      <label className="flex items-center gap-2 text-sm text-gray-700">
-        <input
-          type="checkbox"
-          checked={form.recap_enabled}
-          onChange={(e) => setForm({ ...form, recap_enabled: e.target.checked })}
-        />
-        {t('missions.settings.recapEnabled')}
-      </label>
-
-      <div className="flex gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {t('missions.settings.weekday')}
-          </label>
-          <select
-            value={form.recap_weekday}
-            onChange={(e) => setForm({ ...form, recap_weekday: e.target.value })}
-            className="px-3 py-2 border border-gray-300 rounded-button text-sm bg-white"
-          >
-            {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-              <option key={d} value={d}>
-                {weekdays[String(d)]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {t('missions.settings.hour')}
-          </label>
-          <select
-            value={form.recap_hour}
-            onChange={(e) => setForm({ ...form, recap_hour: e.target.value })}
-            className="px-3 py-2 border border-gray-300 rounded-button text-sm bg-white"
-          >
-            {Array.from({ length: 24 }, (_, h) => (
-              <option key={h} value={h}>
-                {String(h).padStart(2, '0')}:00
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <RecapSchedules missionId={mission.id} />
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">

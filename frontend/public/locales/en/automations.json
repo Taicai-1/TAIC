@@ -181,6 +181,19 @@
       "delete": "Delete mission",
       "save": "Save",
       "saved": "Settings saved",
+      "recapSchedules": {
+        "title": "Scheduled recaps",
+        "add": "Add a recap",
+        "empty": "No scheduled recap yet.",
+        "recurring": "Recurring",
+        "once": "One-shot",
+        "weekday": "Day",
+        "date": "Date",
+        "hour": "Hour",
+        "enabled": "Enabled",
+        "saved": "Scheduled recap saved",
+        "deleted": "Scheduled recap deleted"
+      },
       "weekdays": {
         "0": "Monday", "1": "Tuesday", "2": "Wednesday", "3": "Thursday",
         "4": "Friday", "5": "Saturday", "6": "Sunday"

@@ -130,7 +130,9 @@ Génère le récap Markdown maintenant."""
     return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
 
-def process_mission_recap(mission, db: Session, trigger: str = "scheduled", run_date: date | None = None) -> dict:
+def process_mission_recap(
+    mission, db: Session, trigger: str = "scheduled", run_date: date | None = None, schedule_id: int | None = None
+) -> dict:
     """Full pipeline: fetch events -> RAG -> LLM -> persist MissionRecap -> email.
 
     trigger='manual' skips the email and the scheduler anti-dup is unaffected.
@@ -162,6 +164,7 @@ def process_mission_recap(mission, db: Session, trigger: str = "scheduled", run_
             content=None,
             status="no_data",
             trigger=trigger,
+            schedule_id=schedule_id,
         )
         db.add(recap)
         db.commit()
@@ -186,6 +189,7 @@ def process_mission_recap(mission, db: Session, trigger: str = "scheduled", run_
             content=content,
             status="success",
             trigger=trigger,
+            schedule_id=schedule_id,
         )
         db.add(recap)
         db.commit()
@@ -219,6 +223,7 @@ def process_mission_recap(mission, db: Session, trigger: str = "scheduled", run_
                 status="error",
                 error_message=str(e)[:500],
                 trigger=trigger,
+                schedule_id=schedule_id,
             )
             db.add(recap)
             db.commit()

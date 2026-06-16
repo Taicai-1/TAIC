@@ -94,54 +94,63 @@ def _is_recap_due(recap: Recap, now: datetime, db) -> bool:
     return True
 
 
-def _is_mission_due(mission, now: datetime, db) -> bool:
-    """Check if a mission's weekly recap is due right now (Europe/Paris)."""
-    from database import MissionRecap
-
-    if not getattr(mission, "recap_enabled", False):
+def _is_schedule_due(schedule, mission, now: datetime) -> bool:
+    """Check if a recap schedule is due right now (Europe/Paris)."""
+    if not getattr(schedule, "enabled", False):
         return False
     if getattr(mission, "status", "active") != "active":
         return False
     if not getattr(mission, "agent_id", None):
         return False
-
-    weekday = mission.recap_weekday if mission.recap_weekday is not None else 0
-    hour = mission.recap_hour if mission.recap_hour is not None else 8
-    if now.weekday() != weekday or now.hour != hour:
+    if now.hour != schedule.hour:
         return False
 
-    last = (
-        db.query(MissionRecap)
-        .filter(
-            MissionRecap.mission_id == mission.id,
-            MissionRecap.trigger == "scheduled",
-            MissionRecap.status.in_(["success", "no_data"]),
-        )
-        .order_by(MissionRecap.created_at.desc())
-        .first()
-    )
-    if last and last.created_at:
-        if now.replace(tzinfo=None) - last.created_at < timedelta(days=6):
+    if schedule.kind == "recurring":
+        if schedule.weekday is None or now.weekday() != schedule.weekday:
             return False
-    return True
+        if schedule.last_run_at and (now.replace(tzinfo=None) - schedule.last_run_at < timedelta(days=6)):
+            return False
+        return True
+
+    if schedule.kind == "once":
+        if schedule.run_date != now.date():
+            return False
+        if schedule.last_run_at is not None:
+            return False
+        return True
+
+    return False
 
 
 def _run_scheduled_mission_recaps(now: datetime, db) -> int:
-    """Find and process all due mission recaps. Returns the count processed."""
-    from database import Mission
+    """Find and process all due mission recap schedules. Returns the count processed."""
+    from database import Mission, MissionRecapSchedule
 
-    missions = db.query(Mission).filter(Mission.status == "active", Mission.recap_enabled == True).all()
+    schedules = (
+        db.query(MissionRecapSchedule)
+        .join(Mission, MissionRecapSchedule.mission_id == Mission.id)
+        .filter(MissionRecapSchedule.enabled == True, Mission.status == "active")  # noqa: E712
+        .all()
+    )
     due_count = 0
-    for mission in missions:
-        if _is_mission_due(mission, now, db):
+    for schedule in schedules:
+        mission = schedule.mission
+        if mission and _is_schedule_due(schedule, mission, now):
             due_count += 1
             try:
                 from mission_recap import process_mission_recap
 
-                result = process_mission_recap(mission, db, trigger="scheduled", run_date=now.date())
-                logger.info(f"Mission recap {mission.id} ({mission.name}): {result.get('status')}")
+                result = process_mission_recap(
+                    mission, db, trigger="scheduled", run_date=now.date(), schedule_id=schedule.id
+                )
+                schedule.last_run_at = now.replace(tzinfo=None)
+                if schedule.kind == "once":
+                    schedule.enabled = False
+                db.commit()
+                logger.info(f"Mission recap schedule {schedule.id} (mission {mission.id}): {result.get('status')}")
             except Exception as e:
-                logger.error(f"Mission recap failed for mission {mission.id}: {e}")
+                db.rollback()
+                logger.error(f"Mission recap failed for schedule {schedule.id}: {e}")
     return due_count
 
 

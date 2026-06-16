@@ -9,9 +9,18 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Qu
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import Agent, Document, Mission, MissionEvent, MissionRecap, get_db
+from database import Agent, Document, Mission, MissionEvent, MissionRecap, MissionRecapSchedule, get_db
 from permissions import require_role
-from schemas.missions import EventCreate, EventsBulk, EventUpdate, MissionChatRequest, MissionCreate, MissionUpdate
+from schemas.missions import (
+    EventCreate,
+    EventsBulk,
+    EventUpdate,
+    MissionChatRequest,
+    MissionCreate,
+    MissionUpdate,
+    RecapScheduleCreate,
+    RecapScheduleUpdate,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -419,6 +428,119 @@ async def delete_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     db.delete(event)
+    db.commit()
+    return {"success": True}
+
+
+# --------------------------------------------------------------------------- #
+# Recap schedules (recurring + one-shot)
+# --------------------------------------------------------------------------- #
+
+
+def _schedule_detail(s: MissionRecapSchedule) -> dict:
+    return {
+        "id": s.id,
+        "kind": s.kind,
+        "weekday": s.weekday,
+        "run_date": s.run_date.isoformat() if s.run_date else None,
+        "hour": s.hour,
+        "enabled": s.enabled,
+        "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
+    }
+
+
+@router.get("/api/automations/missions/{mission_id}/recap-schedules")
+async def list_recap_schedules(
+    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    rows = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.mission_id == mission.id)
+        .order_by(MissionRecapSchedule.created_at.asc())
+        .all()
+    )
+    return {"schedules": [_schedule_detail(s) for s in rows]}
+
+
+@router.post("/api/automations/missions/{mission_id}/recap-schedules")
+async def create_recap_schedule(
+    mission_id: int,
+    body: RecapScheduleCreate,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    if mission.status != "active":
+        raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
+    schedule = MissionRecapSchedule(
+        mission_id=mission.id,
+        company_id=mission.company_id,
+        kind=body.kind,
+        weekday=body.weekday if body.kind == "recurring" else None,
+        run_date=body.run_date if body.kind == "once" else None,
+        hour=body.hour,
+        enabled=body.enabled,
+    )
+    db.add(schedule)
+    db.commit()
+    db.refresh(schedule)
+    return {"id": schedule.id}
+
+
+@router.put("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}")
+async def update_recap_schedule(
+    mission_id: int,
+    schedule_id: int,
+    body: RecapScheduleUpdate,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    if mission.status != "active":
+        raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
+    schedule = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    schedule.kind = body.kind
+    schedule.weekday = body.weekday if body.kind == "recurring" else None
+    schedule.run_date = body.run_date if body.kind == "once" else None
+    schedule.hour = body.hour
+    schedule.enabled = body.enabled
+    db.commit()
+    return {"success": True}
+
+
+@router.delete("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}")
+async def delete_recap_schedule(
+    mission_id: int,
+    schedule_id: int,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    if mission.status != "active":
+        raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
+    schedule = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    db.delete(schedule)
     db.commit()
     return {"success": True}
 

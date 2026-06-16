@@ -4,7 +4,7 @@ import pytest
 from datetime import date, timedelta
 from pydantic import ValidationError
 
-from schemas.missions import MissionCreate, ParsedEvent, EventsBulk
+from schemas.missions import MissionCreate, ParsedEvent, EventsBulk, RecapScheduleCreate
 
 
 class TestMissionCreateSchema:
@@ -28,6 +28,36 @@ class TestMissionCreateSchema:
     def test_recap_hour_bounds(self):
         with pytest.raises(ValidationError):
             MissionCreate(name="x", objective="y", recap_hour=24)
+
+
+class TestRecapScheduleSchema:
+    def test_recurring_valid(self):
+        s = RecapScheduleCreate(kind="recurring", weekday=2, hour=8)
+        assert s.weekday == 2
+
+    def test_recurring_requires_weekday(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="recurring", hour=8)
+
+    def test_once_valid(self):
+        s = RecapScheduleCreate(kind="once", run_date="2026-07-01", hour=9)
+        assert s.run_date == date(2026, 7, 1)
+
+    def test_once_requires_run_date(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="once", hour=9)
+
+    def test_bad_kind_rejected(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="daily", weekday=0, hour=9)
+
+    def test_hour_bounds(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="recurring", weekday=0, hour=24)
+
+    def test_weekday_bounds(self):
+        with pytest.raises(ValidationError):
+            RecapScheduleCreate(kind="recurring", weekday=7, hour=9)
 
 
 class TestParsedEventSchema:
@@ -80,45 +110,81 @@ class TestDateWindows:
 from datetime import datetime as _dt
 import pytz as _pytz
 
-from recap_scheduler import _is_mission_due
+from recap_scheduler import _is_schedule_due
 
 
 class _FakeMission:
-    def __init__(self, weekday, hour, enabled=True, status="active", agent_id=1):
+    def __init__(self, status="active", agent_id=1):
         self.id = 1
-        self.recap_weekday = weekday
-        self.recap_hour = hour
-        self.recap_enabled = enabled
         self.status = status
         self.agent_id = agent_id
 
 
-class TestIsMissionDue:
+class _FakeSchedule:
+    def __init__(self, kind, weekday=None, run_date=None, hour=8, enabled=True, last_run_at=None):
+        self.id = 1
+        self.kind = kind
+        self.weekday = weekday
+        self.run_date = run_date
+        self.hour = hour
+        self.enabled = enabled
+        self.last_run_at = last_run_at
+
+
+class TestIsScheduleDue:
     def _now(self, weekday, hour):
         # 2026-06-15 is a Monday (weekday 0). Offset to reach target weekday.
         base = _date(2026, 6, 15)
         d = base + timedelta(days=weekday)
         return _pytz.timezone("Europe/Paris").localize(_dt(d.year, d.month, d.day, hour, 0))
 
-    def test_due_on_matching_weekday_and_hour(self, db_session):
-        m = _FakeMission(weekday=2, hour=8)
-        assert _is_mission_due(m, self._now(2, 8), db_session) is True
+    def test_recurring_due(self):
+        m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8)
+        assert _is_schedule_due(s, m, self._now(2, 8)) is True
 
-    def test_not_due_wrong_hour(self, db_session):
-        m = _FakeMission(weekday=2, hour=8)
-        assert _is_mission_due(m, self._now(2, 9), db_session) is False
+    def test_recurring_wrong_hour(self):
+        m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8)
+        assert _is_schedule_due(s, m, self._now(2, 9)) is False
 
-    def test_not_due_wrong_weekday(self, db_session):
-        m = _FakeMission(weekday=2, hour=8)
-        assert _is_mission_due(m, self._now(3, 8), db_session) is False
+    def test_recurring_wrong_weekday(self):
+        m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8)
+        assert _is_schedule_due(s, m, self._now(3, 8)) is False
 
-    def test_not_due_when_disabled(self, db_session):
-        m = _FakeMission(weekday=2, hour=8, enabled=False)
-        assert _is_mission_due(m, self._now(2, 8), db_session) is False
+    def test_recurring_deduped_within_6_days(self):
+        now = self._now(2, 8)
+        recent = now.replace(tzinfo=None) - timedelta(days=2)
+        m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8, last_run_at=recent)
+        assert _is_schedule_due(s, m, now) is False
 
-    def test_not_due_when_no_companion(self, db_session):
-        m = _FakeMission(weekday=2, hour=8, agent_id=None)
-        assert _is_mission_due(m, self._now(2, 8), db_session) is False
+    def test_once_due(self):
+        now = self._now(2, 8)
+        m = _FakeMission()
+        s = _FakeSchedule("once", run_date=now.date(), hour=8)
+        assert _is_schedule_due(s, m, now) is True
+
+    def test_once_wrong_date(self):
+        now = self._now(2, 8)
+        m = _FakeMission()
+        s = _FakeSchedule("once", run_date=now.date() + timedelta(days=1), hour=8)
+        assert _is_schedule_due(s, m, now) is False
+
+    def test_once_already_run(self):
+        now = self._now(2, 8)
+        m = _FakeMission()
+        s = _FakeSchedule("once", run_date=now.date(), hour=8, last_run_at=now.replace(tzinfo=None))
+        assert _is_schedule_due(s, m, now) is False
+
+    def test_disabled(self):
+        m, s = _FakeMission(), _FakeSchedule("recurring", weekday=2, hour=8, enabled=False)
+        assert _is_schedule_due(s, m, self._now(2, 8)) is False
+
+    def test_archived_mission(self):
+        m, s = _FakeMission(status="archived"), _FakeSchedule("recurring", weekday=2, hour=8)
+        assert _is_schedule_due(s, m, self._now(2, 8)) is False
+
+    def test_no_companion(self):
+        m, s = _FakeMission(agent_id=None), _FakeSchedule("recurring", weekday=2, hour=8)
+        assert _is_schedule_due(s, m, self._now(2, 8)) is False
 
 
 # ---------------------------------------------------------------------------
@@ -216,3 +282,70 @@ async def test_archived_mission_blocks_event_create(client, member_cookies):
         cookies=member_cookies,
     )
     assert resp.status_code == 400
+
+
+async def test_create_list_recap_schedule(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    resp = await client.post(
+        f"/api/automations/missions/{mid}/recap-schedules",
+        json={"kind": "recurring", "weekday": 1, "hour": 9},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    listing = await client.get(
+        f"/api/automations/missions/{mid}/recap-schedules", cookies=member_cookies
+    )
+    assert listing.status_code == 200
+    schedules = listing.json()["schedules"]
+    assert len(schedules) == 1
+    assert schedules[0]["kind"] == "recurring"
+    assert schedules[0]["weekday"] == 1
+
+
+async def test_update_and_delete_recap_schedule(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    made = await client.post(
+        f"/api/automations/missions/{mid}/recap-schedules",
+        json={"kind": "once", "run_date": "2026-07-01", "hour": 10},
+        cookies=member_cookies,
+    )
+    sid = made.json()["id"]
+    upd = await client.put(
+        f"/api/automations/missions/{mid}/recap-schedules/{sid}",
+        json={"kind": "once", "run_date": "2026-07-02", "hour": 11, "enabled": False},
+        cookies=member_cookies,
+    )
+    assert upd.status_code == 200, upd.text
+    deleted = await client.delete(
+        f"/api/automations/missions/{mid}/recap-schedules/{sid}", cookies=member_cookies
+    )
+    assert deleted.status_code == 200
+    listing = await client.get(
+        f"/api/automations/missions/{mid}/recap-schedules", cookies=member_cookies
+    )
+    assert listing.json()["schedules"] == []
+
+
+async def test_recap_schedule_recurring_requires_weekday(client, member_cookies):
+    created = await client.post(
+        "/api/automations/missions",
+        json={"name": "M", "objective": "O"},
+        cookies=member_cookies,
+    )
+    mid = created.json()["mission"]["id"]
+    resp = await client.post(
+        f"/api/automations/missions/{mid}/recap-schedules",
+        json={"kind": "recurring", "hour": 9},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 422
