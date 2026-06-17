@@ -1162,6 +1162,31 @@ def ensure_company_rag_default_folders():
         logger.warning(f"ensure_company_rag_default_folders skipped: {e}")
 
 
+# Canonical list of tenant-scoped tables protected by Postgres RLS.
+# Single source of truth for ensure_rls_policies() and delete_company().
+# NOTE: missions*/questionnaires* are intentionally EXCLUDED — their public
+# token endpoints and background scheduler write without an app.company_id
+# session var, so they use stricter app-level isolation instead (see the
+# comments inside ensure_rls_policies for the full rationale).
+TENANT_TABLES = [
+    "agents",
+    "agent_shares",
+    "documents",
+    "document_chunks",
+    "agent_actions",
+    "teams",
+    "conversations",
+    "messages",
+    "notion_links",
+    "weekly_recap_logs",
+    "recaps",
+    "recap_documents",
+    "drive_links",
+    "agent_templates",
+    "company_folders",
+]
+
+
 def ensure_rls_policies():
     """Create RLS bypass policies and fix tenant_isolation policies.
 
