@@ -6,6 +6,10 @@
     "label": "Inclure le RAG entreprise",
     "help": "Donne à ce companion accès aux documents partagés de l'entreprise."
   },
+  "companyRagFolders": {
+    "label": "Dossiers du RAG Entreprise inclus",
+    "allHint": "Tout coché = tous les dossiers (y compris les futurs)"
+  },
   "types": {
     "conversationnel": {
       "name": "Conversationnel",

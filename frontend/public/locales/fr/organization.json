@@ -26,7 +26,20 @@
     "deleteConfirm": "Supprimer ce document du RAG entreprise ?",
     "deleteError": "Échec de la suppression.",
     "downloadError": "Échec du téléchargement du document.",
-    "loadError": "Impossible de charger les documents d'entreprise."
+    "loadError": "Impossible de charger les documents d'entreprise.",
+    "newFolder": "Nouveau dossier",
+    "folderNamePrompt": "Nom du dossier",
+    "folderRename": "Renommer",
+    "folderDelete": "Supprimer",
+    "folderDeleteConfirm": "Supprimer ce dossier ? (il doit être vide)",
+    "folderCreateError": "Impossible de créer le dossier.",
+    "folderRenameError": "Impossible de renommer le dossier.",
+    "folderDeleteError": "Impossible de supprimer le dossier (non vide ?).",
+    "pickFolderFirst": "Sélectionnez d'abord un dossier.",
+    "moveTo": "Déplacer vers",
+    "moveError": "Impossible de déplacer le document.",
+    "emptyFolder": "Aucun document dans ce dossier.",
+    "noFolders": "Créez un dossier pour commencer."
   },
   "request": {
     "pendingTitle": "Demande en cours d'examen",

@@ -26,7 +26,20 @@
     "deleteConfirm": "Delete this document from the company RAG?",
     "deleteError": "Deletion failed.",
     "downloadError": "Document download failed.",
-    "loadError": "Could not load company documents."
+    "loadError": "Could not load company documents.",
+    "newFolder": "New folder",
+    "folderNamePrompt": "Folder name",
+    "folderRename": "Rename",
+    "folderDelete": "Delete",
+    "folderDeleteConfirm": "Delete this folder? (it must be empty)",
+    "folderCreateError": "Could not create folder.",
+    "folderRenameError": "Could not rename folder.",
+    "folderDeleteError": "Could not delete folder (not empty?).",
+    "pickFolderFirst": "Select a folder first.",
+    "moveTo": "Move to",
+    "moveError": "Could not move document.",
+    "emptyFolder": "No documents in this folder.",
+    "noFolders": "Create a folder to get started."
   },
   "request": {
     "pendingTitle": "Request under review",
