@@ -7,19 +7,21 @@ runs in CI against the pgvector service.
 import pytest
 from sqlalchemy import text
 
-from tests.conftest import _db_available, _test_engine
+# Import the conftest MODULE (not the names) so we read `_db_available` live —
+# it is flipped to True by the session-scoped setup_database fixture AFTER import.
+import tests.conftest as conftest
 from database import TENANT_TABLES, ensure_rls_policies
 
 
 @pytest.fixture(scope="module")
 def rls_applied():
-    if not _db_available:
+    if not conftest._db_available:
         pytest.skip("PostgreSQL not available")
     # ensure_rls_policies uses the module-level `engine`; point it at the test engine.
     import database
 
     original = database.engine
-    database.engine = _test_engine
+    database.engine = conftest._test_engine
     try:
         ensure_rls_policies()
         yield
@@ -29,7 +31,7 @@ def rls_applied():
 
 @pytest.mark.parametrize("table", TENANT_TABLES)
 def test_rls_enabled_and_forced(rls_applied, table):
-    with _test_engine.connect() as conn:
+    with conftest._test_engine.connect() as conn:
         row = conn.execute(
             text(
                 "SELECT c.relrowsecurity, c.relforcerowsecurity "
@@ -45,7 +47,7 @@ def test_rls_enabled_and_forced(rls_applied, table):
 
 @pytest.mark.parametrize("table", TENANT_TABLES)
 def test_both_policies_present(rls_applied, table):
-    with _test_engine.connect() as conn:
+    with conftest._test_engine.connect() as conn:
         names = {
             r[0]
             for r in conn.execute(
