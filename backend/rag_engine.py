@@ -30,7 +30,14 @@ def _sanitize_prompt_text(text: str) -> str:
 
 
 def _agent_folder_ids(agent):
-    """Return the agent's selected company-RAG folder ids as a list, or None for 'all'."""
+    """Return the agent's selected company-RAG folder ids as a list, or None for 'all'.
+
+    Retrieval-side counterpart to ``routers.agents._folder_ids_out``: both read the same
+    stored JSON, which is validated on write by ``routers.agents._parse_folder_ids``
+    (positive ints only). They live in separate modules to avoid a circular import
+    (rag_engine is imported by the routers). Empty/invalid -> None so callers treat it
+    as 'all folders'.
+    """
     raw = getattr(agent, "company_rag_folder_ids", None)
     if not raw:
         return None
@@ -264,7 +271,10 @@ def get_answer(
         company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
 
         # Get documents to consider for RAG
-        # If selected_doc_ids provided, use those (and respect agent_id if present)
+        # If selected_doc_ids provided, use those (and respect agent_id if present).
+        # The company-RAG folder filter is intentionally NOT applied here: an explicit
+        # user doc selection overrides folder scoping. The company_id tenant filter below
+        # still applies, so this never crosses organization boundaries.
         if selected_doc_ids:
             q = db.query(Document).filter(Document.id.in_(selected_doc_ids))
             if agent_id:
@@ -567,6 +577,8 @@ def get_answer_stream(
         company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
 
         # --- Document retrieval (same as get_answer) ---
+        # Folder filter intentionally not applied to an explicit selected_doc_ids set
+        # (explicit user selection overrides folder scoping); company_id tenant filter still applies.
         if selected_doc_ids:
             q = db.query(Document).filter(Document.id.in_(selected_doc_ids))
             if agent_id:
