@@ -328,7 +328,9 @@ class Agent(Base):
 
     # Company RAG: include the organization's shared documents in this agent's retrieval
     include_company_rag = Column(Boolean, default=False, nullable=False)
-    company_rag_folder_ids = Column(Text, nullable=True)  # JSON list of CompanyFolder ids; NULL/[] = all folders (dynamic)
+    company_rag_folder_ids = Column(
+        Text, nullable=True
+    )  # JSON list of CompanyFolder ids; NULL/[] = all folders (dynamic)
 
     # Actionnable plugins
     enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
@@ -1153,111 +1155,105 @@ def ensure_company_rag_default_folders():
                 ).update({Document.folder_id: folder.id}, synchronize_session=False)
             db.commit()
             if company_ids:
-                logger.info(
-                    f"ensure_company_rag_default_folders: migrated docs for {len(company_ids)} companies"
-                )
+                logger.info(f"ensure_company_rag_default_folders: migrated docs for {len(company_ids)} companies")
         finally:
             db.close()
     except Exception as e:
         logger.warning(f"ensure_company_rag_default_folders skipped: {e}")
 
 
-def ensure_rls_policies():
-    """Create RLS bypass policies and fix tenant_isolation policies.
+# Canonical list of tenant-scoped tables protected by Postgres RLS.
+# Single source of truth for ensure_rls_policies() and delete_company().
+# NOTE: missions*/questionnaires* are intentionally EXCLUDED — their public
+# token endpoints and background scheduler write without an app.company_id
+# session var, so they use stricter app-level isolation instead (see the
+# comments inside ensure_rls_policies for the full rationale).
+TENANT_TABLES = [
+    "agents",
+    "agent_shares",
+    "documents",
+    "document_chunks",
+    "agent_actions",
+    "teams",
+    "conversations",
+    "messages",
+    "notion_links",
+    "weekly_recap_logs",
+    "recaps",
+    "recap_documents",
+    "drive_links",
+    "agent_templates",
+    "company_folders",
+]
 
-    1. Adds a 'service_bypass' policy on tenant-scoped tables that allows
-       SELECT when the session variable app.service_bypass = 'true'.
-    2. Recreates 'tenant_isolation' policies with NULLIF to handle empty
-       string from current_setting (prevents ''::int cast errors).
+
+def ensure_rls_policies():
+    """Idempotently enforce RLS on every TENANT_TABLES table.
+
+    For each table:
+      1. ENABLE + FORCE ROW LEVEL SECURITY (no-op if already set).
+      2. Create the 'service_bypass' SELECT policy if missing (escape hatch for
+         background jobs that set app.service_bypass = 'true').
+      3. Create/repair the 'tenant_isolation' policy (USING + WITH CHECK with
+         NULLIF to tolerate an empty app.company_id session var → ''::int error).
+
+    Safe to run on every instance at startup; per-table failures (e.g. a table
+    that does not exist yet) are logged and skipped, never fatal.
+
+    NOTE: missions*/questionnaires* are intentionally NOT in TENANT_TABLES.
+    Questionnaire public token endpoints (/questionnaire/{token}) run without a
+    tenant session var; the recap scheduler INSERTs mission_recaps from a
+    background session with no app.company_id (a WITH CHECK policy would reject
+    it, and service_bypass only covers SELECT). Both use stricter app-level
+    isolation: every mission query in routers/missions.py filters BOTH company_id
+    AND the creator user_id. Do not add them here without reworking those flows.
     """
-    tables = [
-        "agents",
-        "agent_shares",
-        "documents",
-        "document_chunks",
-        "agent_actions",
-        "teams",
-        "conversations",
-        "messages",
-        "notion_links",
-        "weekly_recap_logs",
-        "recaps",
-        "recap_documents",
-        # Questionnaire tables (questionnaires, questionnaire_questions/responses/
-        # answers) are intentionally ABSENT: RLS is never enabled on them because
-        # the public token endpoints (/questionnaire/{token}) run without a tenant
-        # session var. Tenant isolation is app-level (company_id filters in
-        # routers/automations.py). Do not add them here without reworking the
-        # public endpoints first.
-        # Mission tables (missions, mission_events, mission_recaps,
-        # mission_recap_schedules) are also intentionally ABSENT: the recap scheduler INSERTs mission_recaps from a
-        # background session that has no app.company_id set, which a tenant_isolation
-        # WITH CHECK policy would reject (service_bypass only covers SELECT). Tenant
-        # isolation is app-level and stricter here — every mission query in
-        # routers/missions.py filters BOTH company_id AND the creator user_id
-        # (private-to-creator). Mission documents live in `documents`, which keeps
-        # its RLS. Do not add mission tables here without making the scheduler set a
-        # tenant/bypass context for its writes first.
-    ]
+    iso_qual = "company_id = NULLIF(current_setting('app.company_id', true), '')::int"
     try:
         with engine.connect() as conn:
-            # Set lock_timeout early to prevent blocking on any DDL
             conn.execute(text("SET lock_timeout = '5s'"))
-
-            for table in tables:
-                # service_bypass policy
+            for table in TENANT_TABLES:
                 try:
-                    stmt = (
-                        "CREATE POLICY service_bypass ON "
-                        + table
-                        + " FOR SELECT USING (current_setting('app.service_bypass', true) = 'true')"
-                    )
-                    conn.execute(text(stmt))
-                    conn.commit()
-                    print(f"ensure_rls_policies: service_bypass on {table} created", flush=True)
-                except Exception as e:
-                    conn.rollback()
-                    if "already exists" in str(e):
-                        pass  # expected
-                    else:
-                        print(f"ensure_rls_policies: {table} skipped: {e}", flush=True)
+                    conn.execute(text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"))
+                    conn.execute(text(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY"))
 
-            # Fix tenant_isolation policies: use NULLIF to prevent ''::int error.
-            # Check if already fixed by looking at policy definition.
-            needs_fix = False
-            try:
-                row = conn.execute(
-                    text(
-                        "SELECT polqual::text FROM pg_policy "
-                        "WHERE polname = 'tenant_isolation' AND polrelid = 'agents'::regclass"
-                    )
-                ).first()
-                needs_fix = row is not None and "nullif" not in (row[0] or "").lower()
-            except Exception:
-                conn.rollback()
-
-            if needs_fix:
-                print("ensure_rls_policies: fixing tenant_isolation policies (adding NULLIF)", flush=True)
-                try:
-                    for table in tables:
-                        drop_stmt = "DROP POLICY IF EXISTS tenant_isolation ON " + table
-                        conn.execute(text(drop_stmt))
-                        create_stmt = (
-                            "CREATE POLICY tenant_isolation ON " + table + " "
-                            "USING (company_id = NULLIF(current_setting('app.company_id', true), '')::int) "
-                            "WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::int)"
+                    # service_bypass (SELECT-only escape hatch for background jobs)
+                    sb = conn.execute(
+                        text(
+                            "SELECT 1 FROM pg_policy "
+                            "WHERE polname = 'service_bypass' AND polrelid = CAST(:t AS regclass)"
+                        ),
+                        {"t": table},
+                    ).first()
+                    if sb is None:
+                        conn.execute(
+                            text(
+                                f"CREATE POLICY service_bypass ON {table} "
+                                "FOR SELECT USING (current_setting('app.service_bypass', true) = 'true')"
+                            )
                         )
-                        conn.execute(text(create_stmt))
+
+                    # tenant_isolation — create if missing OR repair if it lacks NULLIF
+                    row = conn.execute(
+                        text(
+                            "SELECT polqual::text FROM pg_policy "
+                            "WHERE polname = 'tenant_isolation' AND polrelid = CAST(:t AS regclass)"
+                        ),
+                        {"t": table},
+                    ).first()
+                    needs_create = row is None or "nullif" not in (row[0] or "").lower()
+                    if needs_create:
+                        conn.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {table}"))
+                        conn.execute(
+                            text(
+                                f"CREATE POLICY tenant_isolation ON {table} USING ({iso_qual}) WITH CHECK ({iso_qual})"
+                            )
+                        )
                     conn.commit()
-                    print("ensure_rls_policies: tenant_isolation policies fixed", flush=True)
+                    print(f"ensure_rls_policies: {table} enforced", flush=True)
                 except Exception as e:
                     conn.rollback()
-                    print(
-                        f"ensure_rls_policies: tenant_isolation fix failed (will retry next startup): {e}", flush=True
-                    )
-            else:
-                print("ensure_rls_policies: tenant_isolation already OK", flush=True)
-
+                    print(f"ensure_rls_policies: {table} skipped: {e}", flush=True)
         print("ensure_rls_policies completed", flush=True)
     except Exception as e:
         print(f"ensure_rls_policies failed: {e}", flush=True)

@@ -96,9 +96,7 @@ async def list_missions(user_id: int = Depends(verify_token), db: Session = Depe
 
 
 @router.post("/api/automations/missions")
-async def create_mission(
-    body: MissionCreate, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
-):
+async def create_mission(body: MissionCreate, user_id: int = Depends(verify_token), db: Session = Depends(get_db)):
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     _validate_agent(body.agent_id, membership.company_id, db)
@@ -219,9 +217,7 @@ def _extract_text_from_upload(filename: str, content: bytes, db: Session, user_i
             path = tmp.name
         try:
             pres = Presentation(path)
-            return "\n".join(
-                shape.text for slide in pres.slides for shape in slide.shapes if hasattr(shape, "text")
-            )
+            return "\n".join(shape.text for slide in pres.slides for shape in slide.shapes if hasattr(shape, "text"))
         finally:
             os.unlink(path)
     # txt / csv / json
@@ -342,9 +338,9 @@ async def bulk_events(
         raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
 
     if body.replace_upload:
-        db.query(MissionEvent).filter(
-            MissionEvent.mission_id == mission.id, MissionEvent.source == "upload"
-        ).delete(synchronize_session=False)
+        db.query(MissionEvent).filter(MissionEvent.mission_id == mission.id, MissionEvent.source == "upload").delete(
+            synchronize_session=False
+        )
 
     for ev in body.events:
         db.add(
@@ -397,11 +393,7 @@ async def update_event(
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
     if mission.status != "active":
         raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
-    event = (
-        db.query(MissionEvent)
-        .filter(MissionEvent.id == event_id, MissionEvent.mission_id == mission.id)
-        .first()
-    )
+    event = db.query(MissionEvent).filter(MissionEvent.id == event_id, MissionEvent.mission_id == mission.id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     event.event_date = body.date
@@ -420,11 +412,7 @@ async def delete_event(
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
     if mission.status != "active":
         raise HTTPException(status_code=400, detail="Mission archivée : modification impossible")
-    event = (
-        db.query(MissionEvent)
-        .filter(MissionEvent.id == event_id, MissionEvent.mission_id == mission.id)
-        .first()
-    )
+    event = db.query(MissionEvent).filter(MissionEvent.id == event_id, MissionEvent.mission_id == mission.id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     db.delete(event)
@@ -450,9 +438,7 @@ def _schedule_detail(s: MissionRecapSchedule) -> dict:
 
 
 @router.get("/api/automations/missions/{mission_id}/recap-schedules")
-async def list_recap_schedules(
-    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
-):
+async def list_recap_schedules(mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)):
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
@@ -579,8 +565,13 @@ async def upload_mission_document(
             f"doc_task:{task_id}",
             3600,
             json.dumps(
-                {"task_id": task_id, "status": "processing", "filename": file.filename,
-                 "document_id": None, "error": None}
+                {
+                    "task_id": task_id,
+                    "status": "processing",
+                    "filename": file.filename,
+                    "document_id": None,
+                    "error": None,
+                }
             ),
         )
         background_tasks.add_task(
@@ -604,18 +595,11 @@ async def upload_mission_document(
 
 
 @router.get("/api/automations/missions/{mission_id}/documents")
-async def list_mission_documents(
-    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
-):
+async def list_mission_documents(mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)):
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
-    docs = (
-        db.query(Document)
-        .filter(Document.mission_id == mission.id)
-        .order_by(Document.created_at.desc())
-        .all()
-    )
+    docs = db.query(Document).filter(Document.mission_id == mission.id).order_by(Document.created_at.desc()).all()
     return {
         "documents": [
             {"id": d.id, "filename": d.filename, "created_at": d.created_at.isoformat() if d.created_at else None}
@@ -631,11 +615,7 @@ async def delete_mission_document(
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
-    doc = (
-        db.query(Document)
-        .filter(Document.id == document_id, Document.mission_id == mission.id)
-        .first()
-    )
+    doc = db.query(Document).filter(Document.id == document_id, Document.mission_id == mission.id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     db.delete(doc)  # chunks cascade via the relationship
@@ -681,9 +661,7 @@ async def list_recaps(
 
 
 @router.post("/api/automations/missions/{mission_id}/recaps/generate")
-async def generate_recap_now(
-    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
-):
+async def generate_recap_now(mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)):
     """Generate a recap on demand (synchronous, no email, no scheduler impact)."""
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
@@ -758,10 +736,13 @@ async def mission_chat(
         .order_by(MissionEvent.event_date.asc())
         .all()
     )
-    events_text = "\n".join(
-        f"- {e.event_date.isoformat()} : {e.title}" + (f" — {e.description}" if e.description else "")
-        for e in events
-    ) or "(aucun évènement proche)"
+    events_text = (
+        "\n".join(
+            f"- {e.event_date.isoformat()} : {e.title}" + (f" — {e.description}" if e.description else "")
+            for e in events
+        )
+        or "(aucun évènement proche)"
+    )
 
     rag_text = ""
     try:
@@ -778,7 +759,7 @@ async def mission_chat(
     agent_context = (getattr(agent, "contexte", "") if agent else "") or ""
     system_prompt = (
         f"Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}\n\n"
-        f"Tu assistes sur une mission dont l'objectif est :\n\"\"\"{mission.objective.strip()}\"\"\"\n\n"
+        f'Tu assistes sur une mission dont l\'objectif est :\n"""{mission.objective.strip()}"""\n\n'
         f"Évènements proches (±7 jours) :\n{events_text}\n\n"
         f"Extraits de documents de la mission :\n{rag_text}\n\n"
         "Réponds en t'appuyant sur ce contexte. N'invente pas d'évènements absents."
@@ -816,12 +797,7 @@ async def list_mission_conversations(
     )
     result = []
     for c in convs:
-        messages = (
-            db.query(Message)
-            .filter(Message.conversation_id == c.id)
-            .order_by(Message.timestamp.asc())
-            .all()
-        )
+        messages = db.query(Message).filter(Message.conversation_id == c.id).order_by(Message.timestamp.asc()).all()
         result.append(
             {
                 "id": c.id,

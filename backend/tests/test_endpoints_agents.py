@@ -177,16 +177,18 @@ async def test_agent_isolation(client, auth_cookies, test_agent, db_session):
 @pytest.mark.asyncio
 async def test_create_agent_include_company_rag_roundtrips(client, admin_cookies, test_admin_user, mock_gcs):
     """include_company_rag set at creation is returned by GET."""
-    resp = await client.post(
-        "/agents",
-        data={
-            "name": "RAG Agent",
-            "contexte": "ctx",
-            "type": "conversationnel",
-            "include_company_rag": "true",
-        },
-        cookies=admin_cookies,
-    )
+    # Patch the embedding step so creation does not make a real Mistral API call.
+    with patch("routers.agents.update_agent_embedding"):
+        resp = await client.post(
+            "/agents",
+            data={
+                "name": "RAG Agent",
+                "contexte": "ctx",
+                "type": "conversationnel",
+                "include_company_rag": "true",
+            },
+            cookies=admin_cookies,
+        )
     assert resp.status_code == 200
     agent_id = resp.json()["agent"]["id"]
 

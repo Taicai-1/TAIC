@@ -88,6 +88,7 @@ class TestEventsBulkSchema:
         b = EventsBulk(events=[])
         assert b.events == []
 
+
 from datetime import date as _date
 
 from mission_recap import upcoming_window, recall_window
@@ -257,9 +258,7 @@ async def test_generate_recap_requires_companion(client, member_cookies):
         cookies=member_cookies,
     )
     mid = created.json()["mission"]["id"]
-    resp = await client.post(
-        f"/api/automations/missions/{mid}/recaps/generate", cookies=member_cookies
-    )
+    resp = await client.post(f"/api/automations/missions/{mid}/recaps/generate", cookies=member_cookies)
     assert resp.status_code == 400
 
 
@@ -297,9 +296,7 @@ async def test_create_list_recap_schedule(client, member_cookies):
         cookies=member_cookies,
     )
     assert resp.status_code == 200, resp.text
-    listing = await client.get(
-        f"/api/automations/missions/{mid}/recap-schedules", cookies=member_cookies
-    )
+    listing = await client.get(f"/api/automations/missions/{mid}/recap-schedules", cookies=member_cookies)
     assert listing.status_code == 200
     schedules = listing.json()["schedules"]
     assert len(schedules) == 1
@@ -326,13 +323,9 @@ async def test_update_and_delete_recap_schedule(client, member_cookies):
         cookies=member_cookies,
     )
     assert upd.status_code == 200, upd.text
-    deleted = await client.delete(
-        f"/api/automations/missions/{mid}/recap-schedules/{sid}", cookies=member_cookies
-    )
+    deleted = await client.delete(f"/api/automations/missions/{mid}/recap-schedules/{sid}", cookies=member_cookies)
     assert deleted.status_code == 200
-    listing = await client.get(
-        f"/api/automations/missions/{mid}/recap-schedules", cookies=member_cookies
-    )
+    listing = await client.get(f"/api/automations/missions/{mid}/recap-schedules", cookies=member_cookies)
     assert listing.json()["schedules"] == []
 
 

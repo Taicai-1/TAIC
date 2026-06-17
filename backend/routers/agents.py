@@ -466,6 +466,8 @@ async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends
 @router.post("/teams")
 async def create_team(payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Create a team. Supports V2 (members array) and legacy (leader_agent_id) formats."""
+    from pydantic import ValidationError
+
     try:
         # Detect format
         is_v2 = "members" in payload
@@ -568,6 +570,9 @@ async def create_team(payload: dict, user_id: str = Depends(verify_token), db: S
         }
     except HTTPException:
         raise
+    except ValidationError as e:
+        msgs = "; ".join(err.get("msg", "invalid") for err in e.errors())
+        raise HTTPException(status_code=422, detail=msgs or "Invalid team data")
     except Exception as e:
         logger.exception(f"Error creating team: {e}")
         if 'relation "teams"' in str(e) or "does not exist" in str(e):

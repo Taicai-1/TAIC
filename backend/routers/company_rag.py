@@ -51,9 +51,7 @@ async def list_company_documents(
     """
     try:
         company_id = _require_company_id(user_id, db)
-        q = db.query(Document).filter(
-            Document.company_id == company_id, Document.is_company_rag.is_(True)
-        )
+        q = db.query(Document).filter(Document.company_id == company_id, Document.is_company_rag.is_(True))
         if folder_id is not None:
             _folder_or_404(folder_id, company_id, db)  # 404 on foreign/unknown folder (no id-probing)
             q = q.filter(Document.folder_id == folder_id)
@@ -107,21 +105,40 @@ async def upload_company_document(
             r.setex(
                 f"doc_task:{task_id}",
                 3600,
-                json.dumps({
-                    "task_id": task_id, "status": "processing",
-                    "filename": file.filename, "document_id": None, "error": None,
-                }),
+                json.dumps(
+                    {
+                        "task_id": task_id,
+                        "status": "processing",
+                        "filename": file.filename,
+                        "document_id": None,
+                        "error": None,
+                    }
+                ),
             )
             background_tasks.add_task(
                 _process_document_background,
-                task_id, file.filename, content, int(user_id), None, company_id, None, True, folder_id,
+                task_id,
+                file.filename,
+                content,
+                int(user_id),
+                None,
+                company_id,
+                None,
+                True,
+                folder_id,
             )
             logger.info(f"Company document queued for async processing: {file.filename} (task_id={task_id})")
             return {"filename": file.filename, "task_id": task_id, "status": "processing"}
 
         doc_id = process_document_for_user(
-            file.filename, content, int(user_id), db,
-            agent_id=None, company_id=company_id, is_company_rag=True, folder_id=folder_id,
+            file.filename,
+            content,
+            int(user_id),
+            db,
+            agent_id=None,
+            company_id=company_id,
+            is_company_rag=True,
+            folder_id=folder_id,
         )
         logger.info(f"Company document uploaded (sync) by user {user_id}: {file.filename}")
         event_tracker.track_document_upload(int(user_id), file.filename, len(content))
@@ -176,9 +193,7 @@ async def delete_company_document(
 
 def _folder_or_404(folder_id: int, company_id: int, db: Session) -> CompanyFolder:
     folder = (
-        db.query(CompanyFolder)
-        .filter(CompanyFolder.id == folder_id, CompanyFolder.company_id == company_id)
-        .first()
+        db.query(CompanyFolder).filter(CompanyFolder.id == folder_id, CompanyFolder.company_id == company_id).first()
     )
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
@@ -237,9 +252,7 @@ async def create_company_folder(
             raise HTTPException(status_code=400, detail="Folder name is required")
         # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
         exists = (
-            db.query(CompanyFolder)
-            .filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name)
-            .first()
+            db.query(CompanyFolder).filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name).first()
         )
         if exists:
             raise HTTPException(status_code=409, detail="A folder with this name already exists")
