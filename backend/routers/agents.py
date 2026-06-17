@@ -43,6 +43,44 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _parse_folder_ids(raw: "str | None"):
+    """Parse the company_rag_folder_ids form field into a JSON string or None.
+    Empty/[]/invalid -> None (means 'all folders'). Only positive integer ids are kept
+    (folder ids are positive FK values; negatives/0/non-ints would silently match nothing)."""
+    if not raw:
+        return None
+    try:
+        ids = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(ids, list):
+        return None
+    clean = []
+    for x in ids:
+        if isinstance(x, bool):
+            continue
+        if isinstance(x, int) and x > 0:
+            clean.append(x)
+        elif isinstance(x, str) and x.strip().isdigit() and int(x.strip()) > 0:
+            clean.append(int(x.strip()))
+    return json.dumps(clean) if clean else None
+
+
+def _folder_ids_out(raw: "str | None"):
+    """Serialize stored JSON company_rag_folder_ids back to a list of ints ([] = all)."""
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(v, list):
+        return []
+    # Mirror _parse_folder_ids' write-side guard (positive ints only) so a manually
+    # corrupted row can't surface a "ghost" checked-but-ineffective folder in the UI.
+    return [x for x in v if isinstance(x, int) and not isinstance(x, bool) and x > 0]
+
+
 def _parse_enabled_plugins(raw: str) -> str | None:
     """Parse enabled_plugins from a JSON array string or CSV string.
 
@@ -104,6 +142,7 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                 "neo4j_enabled": a.neo4j_enabled,
                 "date_awareness_enabled": getattr(a, "date_awareness_enabled", False),
                 "include_company_rag": getattr(a, "include_company_rag", False),
+                "company_rag_folder_ids": _folder_ids_out(getattr(a, "company_rag_folder_ids", None)),
                 "email_tags": a.email_tags,
                 "weekly_recap_enabled": a.weekly_recap_enabled,
                 "recap_frequency": a.recap_frequency,
@@ -135,6 +174,7 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                     "neo4j_enabled": a.neo4j_enabled,
                     "date_awareness_enabled": a.date_awareness_enabled,
                     "include_company_rag": getattr(a, "include_company_rag", False),
+                    "company_rag_folder_ids": _folder_ids_out(getattr(a, "company_rag_folder_ids", None)),
                     "email_tags": a.email_tags,
                     "weekly_recap_enabled": a.weekly_recap_enabled,
                     "recap_frequency": a.recap_frequency,
@@ -169,6 +209,7 @@ async def create_agent(
     recap_hour: str = Form("9"),
     date_awareness_enabled: str = Form("false"),
     include_company_rag: str = Form("false"),
+    company_rag_folder_ids: str = Form(None),
     enabled_plugins: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
@@ -248,6 +289,7 @@ async def create_agent(
             recap_hour=max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9,
             date_awareness_enabled=date_awareness_enabled.lower() in ("true", "1", "yes"),
             include_company_rag=include_company_rag.lower() in ("true", "1", "yes"),
+            company_rag_folder_ids=_parse_folder_ids(company_rag_folder_ids),
             enabled_plugins=parsed_plugins,
             user_id=int(user_id),
             company_id=caller_company_id,
@@ -330,6 +372,7 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
             "neo4j_enabled": agent.neo4j_enabled,
             "date_awareness_enabled": agent.date_awareness_enabled,
             "include_company_rag": getattr(agent, "include_company_rag", False),
+            "company_rag_folder_ids": _folder_ids_out(getattr(agent, "company_rag_folder_ids", None)),
             "enabled_plugins": agent.enabled_plugins,
             "created_at": agent.created_at.isoformat() if agent.created_at else None,
             "shared": not is_owner,
@@ -708,6 +751,7 @@ async def update_agent(
     recap_hour: str = Form("9"),
     date_awareness_enabled: str = Form("false"),
     include_company_rag: str = Form("false"),
+    company_rag_folder_ids: str = Form(None),
     enabled_plugins: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
@@ -759,6 +803,7 @@ async def update_agent(
 
         # Update Company RAG inclusion
         agent.include_company_rag = include_company_rag.lower() in ("true", "1", "yes")
+        agent.company_rag_folder_ids = _parse_folder_ids(company_rag_folder_ids)
 
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
 

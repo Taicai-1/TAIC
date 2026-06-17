@@ -6,6 +6,10 @@
     "label": "Include company RAG",
     "help": "Gives this companion access to the organization's shared documents."
   },
+  "companyRagFolders": {
+    "label": "Included Company RAG folders",
+    "allHint": "All checked = all folders (including future ones)"
+  },
   "types": {
     "conversationnel": {
       "name": "Conversational",

@@ -28,7 +28,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, enabled_plugins: [] });
+  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, company_rag_folder_ids: [], enabled_plugins: [] });
   const [emailTagInput, setEmailTagInput] = useState("");
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoPreviewError, setPhotoPreviewError] = useState(false);
@@ -46,12 +46,16 @@ export default function AgentsPage() {
   const [templates, setTemplates] = useState([]);
   const [creationStep, setCreationStep] = useState(1);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [companyFolders, setCompanyFolders] = useState([]);
 
   useEffect(() => {
     if (!authenticated) return;
     loadAgents();
     loadNeo4jData();
     loadTemplates();
+    api.get('/api/company-rag/folders')
+      .then(res => setCompanyFolders(res.data.folders || []))
+      .catch(() => setCompanyFolders([]));
   }, [authenticated]);
 
   // Lock body scroll when modal is open
@@ -258,7 +262,7 @@ export default function AgentsPage() {
         <div className="flex justify-end mb-6">
           <button
             onClick={() => {
-              setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [] });
+              setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, company_rag_folder_ids: [], enabled_plugins: [] });
               setPhotoPreview(null);
               setSelectedTemplate(null);
               setCreationStep(templates.length > 0 ? 1 : 2);
@@ -591,6 +595,32 @@ export default function AgentsPage() {
                     />
                   </button>
                 </div>
+                {form.include_company_rag && companyFolders.length > 0 && (
+                  <div className="mt-3 ml-1 space-y-2">
+                    <p className="text-xs text-gray-500">{t('agents:companyRagFolders.label')}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {companyFolders.map(f => {
+                        const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
+                        const checked = all || form.company_rag_folder_ids.includes(f.id);
+                        return (
+                          <label key={f.id}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
+                            <input type="checkbox" checked={checked}
+                              onChange={() => setForm(prev => {
+                                const base = (!prev.company_rag_folder_ids || prev.company_rag_folder_ids.length === 0)
+                                  ? companyFolders.map(x => x.id)
+                                  : [...prev.company_rag_folder_ids];
+                                const next = base.includes(f.id) ? base.filter(id => id !== f.id) : [...base, f.id];
+                                return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
+                              })} />
+                            {f.name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-400">{t('agents:companyRagFolders.allHint')}</p>
+                  </div>
+                )}
                 <p className="text-xs text-gray-500">{t('agents:companyRag.help')}</p>
               </div>
 
@@ -663,6 +693,7 @@ export default function AgentsPage() {
                     formData.append("neo4j_depth", String(form.neo4j_depth || 1));
                     formData.append("date_awareness_enabled", form.date_awareness_enabled ? "true" : "false");
                     formData.append("include_company_rag", form.include_company_rag ? "true" : "false");
+                    formData.append("company_rag_folder_ids", JSON.stringify(form.company_rag_folder_ids || []));
                     formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
                     if (form.weekly_recap_prompt) formData.append("weekly_recap_prompt", form.weekly_recap_prompt);
                     if (form.weekly_recap_recipients && form.weekly_recap_recipients.length > 0) {
@@ -701,7 +732,7 @@ export default function AgentsPage() {
                     toast.success(t('agents:toast.createSuccess'));
                     setShowForm(false);
                     setPhotoPreview(null);
-                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [] });
+                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, company_rag_folder_ids: [], enabled_plugins: [] });
                     loadAgents();
                   } catch (err) {
                     toast.error(t('agents:toast.createError'));
@@ -756,7 +787,7 @@ export default function AgentsPage() {
                 <p className="text-gray-500 mb-6">{t('agents:empty.subtitle')}</p>
                 <button
                   onClick={() => {
-                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, enabled_plugins: [] });
+                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, company_rag_folder_ids: [], enabled_plugins: [] });
                     setPhotoPreview(null);
                     setSelectedTemplate(null);
                     setCreationStep(templates.length > 0 ? 1 : 2);

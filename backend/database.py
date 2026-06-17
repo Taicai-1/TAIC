@@ -328,6 +328,7 @@ class Agent(Base):
 
     # Company RAG: include the organization's shared documents in this agent's retrieval
     include_company_rag = Column(Boolean, default=False, nullable=False)
+    company_rag_folder_ids = Column(Text, nullable=True)  # JSON list of CompanyFolder ids; NULL/[] = all folders (dynamic)
 
     # Actionnable plugins
     enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
@@ -532,6 +533,16 @@ class AgentShare(Base):
     shared_by = relationship("User", foreign_keys=[shared_by_user_id])
 
 
+class CompanyFolder(Base):
+    __tablename__ = "company_folders"
+    __table_args__ = (UniqueConstraint("company_id", "name", name="uq_company_folder_name"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -556,6 +567,9 @@ class Document(Base):
     is_company_rag = Column(
         Boolean, default=False, nullable=False, server_default="false", index=True
     )  # Company-shared document (agent_id is NULL); included only when an agent opts in
+    folder_id = Column(
+        Integer, ForeignKey("company_folders.id", ondelete="SET NULL"), nullable=True, index=True
+    )  # Company RAG folder (set only when is_company_rag=True; required at the app level for those)
 
     # Relations
     owner = relationship("User", back_populates="documents")
@@ -1043,6 +1057,9 @@ def ensure_columns():
         # Company RAG
         ("documents", "is_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("agents", "include_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        # Company RAG folders
+        ("documents", "folder_id", "INTEGER REFERENCES company_folders(id) ON DELETE SET NULL"),
+        ("agents", "company_rag_folder_ids", "TEXT"),
     ]
     try:
         with engine.connect() as conn:
@@ -1094,6 +1111,55 @@ def ensure_columns():
         logger.info("ensure_columns completed")
     except Exception as e:
         logger.error(f"ensure_columns failed: {e}")
+
+
+def ensure_company_rag_default_folders():
+    """Idempotent: attach orphan company-RAG docs (folder_id IS NULL) to a per-company
+    'Général' folder, creating it if needed. Runs at startup, safe to re-run."""
+    try:
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(Document.company_id)
+                .filter(
+                    Document.is_company_rag.is_(True),
+                    Document.folder_id.is_(None),
+                    Document.company_id.isnot(None),
+                )
+                .distinct()
+                .all()
+            )
+            company_ids = [r[0] for r in rows]
+            # Race-safe get-or-create: concurrent Cloud Run boots can both miss the
+            # folder; ON CONFLICT DO NOTHING makes the insert a no-op, then we re-read.
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+            for cid in company_ids:
+                db.execute(
+                    pg_insert(CompanyFolder)
+                    .values(company_id=cid, name="Général")
+                    .on_conflict_do_nothing(index_elements=["company_id", "name"])
+                )
+                db.flush()
+                folder = (
+                    db.query(CompanyFolder)
+                    .filter(CompanyFolder.company_id == cid, CompanyFolder.name == "Général")
+                    .first()
+                )
+                db.query(Document).filter(
+                    Document.is_company_rag.is_(True),
+                    Document.folder_id.is_(None),
+                    Document.company_id == cid,
+                ).update({Document.folder_id: folder.id}, synchronize_session=False)
+            db.commit()
+            if company_ids:
+                logger.info(
+                    f"ensure_company_rag_default_folders: migrated docs for {len(company_ids)} companies"
+                )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"ensure_company_rag_default_folders skipped: {e}")
 
 
 def ensure_rls_policies():
