@@ -1131,15 +1131,21 @@ def ensure_company_rag_default_folders():
             )
             company_ids = [r[0] for r in rows]
             for cid in company_ids:
+                # Race-safe get-or-create: concurrent Cloud Run boots can both miss the
+                # folder; ON CONFLICT DO NOTHING makes the insert a no-op, then we re-read.
+                from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+                db.execute(
+                    pg_insert(CompanyFolder)
+                    .values(company_id=cid, name="Général")
+                    .on_conflict_do_nothing(index_elements=["company_id", "name"])
+                )
+                db.flush()
                 folder = (
                     db.query(CompanyFolder)
                     .filter(CompanyFolder.company_id == cid, CompanyFolder.name == "Général")
                     .first()
                 )
-                if folder is None:
-                    folder = CompanyFolder(company_id=cid, name="Général")
-                    db.add(folder)
-                    db.flush()
                 db.query(Document).filter(
                     Document.is_company_rag.is_(True),
                     Document.folder_id.is_(None),
