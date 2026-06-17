@@ -10,11 +10,12 @@ import json
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, UploadFile
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, Document
+from database import get_db, Document, CompanyFolder
 from helpers.tenant import _get_caller_company_id
 from permissions import require_role
 from rag_engine import process_document_for_user
@@ -149,5 +150,153 @@ async def delete_company_document(
         raise
     except Exception as e:
         logger.error(f"Error deleting company document {document_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# ---------------------------------------------------------------------------
+# Folder helpers + endpoints
+# ---------------------------------------------------------------------------
+
+
+def _folder_or_404(folder_id: int, company_id: int, db: Session) -> CompanyFolder:
+    folder = (
+        db.query(CompanyFolder)
+        .filter(CompanyFolder.id == folder_id, CompanyFolder.company_id == company_id)
+        .first()
+    )
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return folder
+
+
+@router.get("/api/company-rag/folders")
+async def list_company_folders(
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """List the organization's company-RAG folders with document counts (any member)."""
+    company_id = _require_company_id(user_id, db)
+    counts = dict(
+        db.query(Document.folder_id, func.count(Document.id))
+        .filter(Document.company_id == company_id, Document.is_company_rag.is_(True))
+        .group_by(Document.folder_id)
+        .all()
+    )
+    folders = (
+        db.query(CompanyFolder)
+        .filter(CompanyFolder.company_id == company_id)
+        .order_by(CompanyFolder.name.asc())
+        .all()
+    )
+    return {
+        "folders": [
+            {
+                "id": f.id,
+                "name": f.name,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+                "document_count": int(counts.get(f.id, 0)),
+            }
+            for f in folders
+        ]
+    }
+
+
+@router.post("/api/company-rag/folders")
+async def create_company_folder(
+    payload: dict = Body(...),
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Create a company-RAG folder (owner/admin only)."""
+    try:
+        require_role(int(user_id), db, "admin")
+        company_id = _require_company_id(user_id, db)
+        name = (payload.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Folder name is required")
+        exists = (
+            db.query(CompanyFolder)
+            .filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name)
+            .first()
+        )
+        if exists:
+            raise HTTPException(status_code=409, detail="A folder with this name already exists")
+        folder = CompanyFolder(company_id=company_id, name=name)
+        db.add(folder)
+        db.commit()
+        db.refresh(folder)
+        return {"id": folder.id, "name": folder.name, "document_count": 0}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating company folder: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.put("/api/company-rag/folders/{folder_id}")
+async def rename_company_folder(
+    folder_id: int,
+    payload: dict = Body(...),
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Rename a company-RAG folder (owner/admin only)."""
+    try:
+        require_role(int(user_id), db, "admin")
+        company_id = _require_company_id(user_id, db)
+        folder = _folder_or_404(folder_id, company_id, db)
+        name = (payload.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Folder name is required")
+        collision = (
+            db.query(CompanyFolder)
+            .filter(
+                CompanyFolder.company_id == company_id,
+                CompanyFolder.name == name,
+                CompanyFolder.id != folder_id,
+            )
+            .first()
+        )
+        if collision:
+            raise HTTPException(status_code=409, detail="A folder with this name already exists")
+        folder.name = name
+        db.commit()
+        return {"id": folder.id, "name": folder.name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error renaming company folder {folder_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.delete("/api/company-rag/folders/{folder_id}")
+async def delete_company_folder(
+    folder_id: int,
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Delete a company-RAG folder (owner/admin only). Blocked if the folder is not empty."""
+    try:
+        require_role(int(user_id), db, "admin")
+        company_id = _require_company_id(user_id, db)
+        folder = _folder_or_404(folder_id, company_id, db)
+        doc_count = (
+            db.query(func.count(Document.id))
+            .filter(Document.folder_id == folder_id, Document.company_id == company_id)
+            .scalar()
+        )
+        if doc_count:
+            raise HTTPException(status_code=400, detail="Folder is not empty")
+        db.delete(folder)
+        db.commit()
+        logger.info(f"Company folder {folder_id} deleted by user {user_id}")
+        return {"status": "deleted", "id": folder_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting company folder {folder_id}: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
