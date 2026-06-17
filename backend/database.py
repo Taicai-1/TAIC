@@ -328,6 +328,7 @@ class Agent(Base):
 
     # Company RAG: include the organization's shared documents in this agent's retrieval
     include_company_rag = Column(Boolean, default=False, nullable=False)
+    company_rag_folder_ids = Column(Text, nullable=True)  # JSON list of CompanyFolder ids; NULL/[] = all folders (dynamic)
 
     # Actionnable plugins
     enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
@@ -532,6 +533,16 @@ class AgentShare(Base):
     shared_by = relationship("User", foreign_keys=[shared_by_user_id])
 
 
+class CompanyFolder(Base):
+    __tablename__ = "company_folders"
+    __table_args__ = (UniqueConstraint("company_id", "name", name="uq_company_folder_name"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -556,6 +567,9 @@ class Document(Base):
     is_company_rag = Column(
         Boolean, default=False, nullable=False, server_default="false", index=True
     )  # Company-shared document (agent_id is NULL); included only when an agent opts in
+    folder_id = Column(
+        Integer, ForeignKey("company_folders.id"), nullable=True, index=True
+    )  # Company RAG folder (set only when is_company_rag=True; required at the app level for those)
 
     # Relations
     owner = relationship("User", back_populates="documents")
@@ -1043,6 +1057,9 @@ def ensure_columns():
         # Company RAG
         ("documents", "is_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("agents", "include_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        # Company RAG folders
+        ("documents", "folder_id", "INTEGER REFERENCES company_folders(id)"),
+        ("agents", "company_rag_folder_ids", "TEXT"),
     ]
     try:
         with engine.connect() as conn:
