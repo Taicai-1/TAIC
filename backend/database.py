@@ -1164,10 +1164,18 @@ def ensure_company_rag_default_folders():
 
 # Canonical list of tenant-scoped tables protected by Postgres RLS.
 # Single source of truth for ensure_rls_policies() and delete_company().
-# NOTE: missions*/questionnaires* are intentionally EXCLUDED — their public
-# token endpoints and background scheduler write without an app.company_id
-# session var, so they use stricter app-level isolation instead (see the
-# comments inside ensure_rls_policies for the full rationale).
+#
+# Intentionally EXCLUDED tenant tables (have company_id but use app-level
+# isolation instead — RLS would break a write/read path that runs without an
+# app.company_id session var):
+#   - missions*, questionnaires*: public token endpoints + background scheduler.
+#   - company_invitations: the org-join flow reads an invitation by token before
+#     the joining user is a member (no tenant context yet); the random token is
+#     the security boundary, and queries filter company_id app-side.
+#   - company_memberships: the table that RESOLVES the current tenant, so it
+#     cannot be gated by the tenant itself; access is app-level (require_role).
+#   - company_creation_requests: pre-company, reviewed by a super-admin.
+#   - users: global identity table.
 TENANT_TABLES = [
     "agents",
     "agent_shares",
@@ -1175,6 +1183,7 @@ TENANT_TABLES = [
     "document_chunks",
     "agent_actions",
     "teams",
+    "team_members",
     "conversations",
     "messages",
     "notion_links",
@@ -1184,6 +1193,7 @@ TENANT_TABLES = [
     "drive_links",
     "agent_templates",
     "company_folders",
+    "action_executions",
 ]
 
 
