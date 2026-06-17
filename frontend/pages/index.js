@@ -63,6 +63,7 @@ export default function CompanionSettings() {
     type: 'conversationnel', enabled_plugins: [],
     email_tags: [], neo4j_enabled: false, neo4j_person_name: "",
     neo4j_depth: 1, date_awareness_enabled: false, include_company_rag: false,
+    company_rag_folder_ids: [],
     weekly_recap_enabled: false, weekly_recap_prompt: "",
     weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9,
   });
@@ -132,6 +133,9 @@ export default function CompanionSettings() {
   const [showImproveModal, setShowImproveModal] = useState(false);
   const [recapRecipientInput, setRecapRecipientInput] = useState("");
 
+  // Company RAG folders
+  const [companyFolders, setCompanyFolders] = useState([]);
+
   // Neo4j
   const [neo4jPersons, setNeo4jPersons] = useState([]);
   const [userCompany, setUserCompany] = useState(null);
@@ -184,6 +188,7 @@ export default function CompanionSettings() {
         neo4j_person_name: agent.neo4j_person_name || "", neo4j_depth: agent.neo4j_depth || 1,
         date_awareness_enabled: agent.date_awareness_enabled || false,
         include_company_rag: agent.include_company_rag || false,
+        company_rag_folder_ids: agent.company_rag_folder_ids || [],
         weekly_recap_enabled: agent.weekly_recap_enabled || false,
         weekly_recap_prompt: agent.weekly_recap_prompt || "",
         weekly_recap_recipients: agent.weekly_recap_recipients ? JSON.parse(agent.weekly_recap_recipients) : [],
@@ -476,6 +481,9 @@ export default function CompanionSettings() {
       loadNeo4jData();
       loadSlackConfig(urlAgentId);
       loadRecaps(urlAgentId);
+      api.get('/api/company-rag/folders')
+        .then(res => setCompanyFolders(res.data.folders || []))
+        .catch(() => setCompanyFolders([]));
     } else if (authenticated && router.isReady) {
       router.push("/agents");
     }
@@ -503,6 +511,7 @@ export default function CompanionSettings() {
       formData.append("neo4j_depth", String(f.neo4j_depth || 1));
       formData.append("date_awareness_enabled", f.date_awareness_enabled ? "true" : "false");
       formData.append("include_company_rag", f.include_company_rag ? "true" : "false");
+      formData.append("company_rag_folder_ids", JSON.stringify(f.company_rag_folder_ids || []));
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -1241,6 +1250,32 @@ export default function CompanionSettings() {
               <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.include_company_rag ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
             </button>
           </div>
+          {form.include_company_rag && companyFolders.length > 0 && (
+            <div className="mt-3 ml-1 space-y-2">
+              <p className="text-xs text-gray-500">{t('agents:companyRagFolders.label')}</p>
+              <div className="flex flex-wrap gap-2">
+                {companyFolders.map(f => {
+                  const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
+                  const checked = all || form.company_rag_folder_ids.includes(f.id);
+                  return (
+                    <label key={f.id}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
+                      <input type="checkbox" checked={checked}
+                        onChange={() => setForm(prev => {
+                          const base = (!prev.company_rag_folder_ids || prev.company_rag_folder_ids.length === 0)
+                            ? companyFolders.map(x => x.id)
+                            : [...prev.company_rag_folder_ids];
+                          const next = base.includes(f.id) ? base.filter(id => id !== f.id) : [...base, f.id];
+                          return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
+                        })} />
+                      {f.name}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-400">{t('agents:companyRagFolders.allHint')}</p>
+            </div>
+          )}
         </Section>
 
         {/* RAG Documents */}
