@@ -1219,7 +1219,10 @@ def ensure_rls_policies():
 
                     # service_bypass (SELECT-only escape hatch for background jobs)
                     sb = conn.execute(
-                        text("SELECT 1 FROM pg_policy WHERE polname = 'service_bypass' AND polrelid = :t::regclass"),
+                        text(
+                            "SELECT 1 FROM pg_policy "
+                            "WHERE polname = 'service_bypass' AND polrelid = CAST(:t AS regclass)"
+                        ),
                         {"t": table},
                     ).first()
                     if sb is None:
@@ -1234,7 +1237,7 @@ def ensure_rls_policies():
                     row = conn.execute(
                         text(
                             "SELECT polqual::text FROM pg_policy "
-                            "WHERE polname = 'tenant_isolation' AND polrelid = :t::regclass"
+                            "WHERE polname = 'tenant_isolation' AND polrelid = CAST(:t AS regclass)"
                         ),
                         {"t": table},
                     ).first()

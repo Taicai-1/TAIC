@@ -51,7 +51,7 @@ def test_both_policies_present(rls_applied, table):
         names = {
             r[0]
             for r in conn.execute(
-                text("SELECT polname FROM pg_policy WHERE polrelid = :t::regclass"),
+                text("SELECT polname FROM pg_policy WHERE polrelid = CAST(:t AS regclass)"),
                 {"t": table},
             ).fetchall()
         }
