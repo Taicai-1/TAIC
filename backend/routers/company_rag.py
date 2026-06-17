@@ -176,30 +176,36 @@ async def list_company_folders(
     db: Session = Depends(get_db),
 ):
     """List the organization's company-RAG folders with document counts (any member)."""
-    company_id = _require_company_id(user_id, db)
-    counts = dict(
-        db.query(Document.folder_id, func.count(Document.id))
-        .filter(Document.company_id == company_id, Document.is_company_rag.is_(True))
-        .group_by(Document.folder_id)
-        .all()
-    )
-    folders = (
-        db.query(CompanyFolder)
-        .filter(CompanyFolder.company_id == company_id)
-        .order_by(CompanyFolder.name.asc())
-        .all()
-    )
-    return {
-        "folders": [
-            {
-                "id": f.id,
-                "name": f.name,
-                "created_at": f.created_at.isoformat() if f.created_at else None,
-                "document_count": int(counts.get(f.id, 0)),
-            }
-            for f in folders
-        ]
-    }
+    try:
+        company_id = _require_company_id(user_id, db)
+        counts = dict(
+            db.query(Document.folder_id, func.count(Document.id))
+            .filter(Document.company_id == company_id, Document.is_company_rag.is_(True))
+            .group_by(Document.folder_id)
+            .all()
+        )
+        folders = (
+            db.query(CompanyFolder)
+            .filter(CompanyFolder.company_id == company_id)
+            .order_by(CompanyFolder.name.asc())
+            .all()
+        )
+        return {
+            "folders": [
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "created_at": f.created_at.isoformat() if f.created_at else None,
+                    "document_count": int(counts.get(f.id, 0)),
+                }
+                for f in folders
+            ]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing company folders: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/api/company-rag/folders")
@@ -210,11 +216,11 @@ async def create_company_folder(
 ):
     """Create a company-RAG folder (owner/admin only)."""
     try:
-        require_role(int(user_id), db, "admin")
-        company_id = _require_company_id(user_id, db)
+        company_id = require_role(int(user_id), db, "admin").company_id
         name = (payload.get("name") or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="Folder name is required")
+        # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
         exists = (
             db.query(CompanyFolder)
             .filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name)
@@ -244,12 +250,12 @@ async def rename_company_folder(
 ):
     """Rename a company-RAG folder (owner/admin only)."""
     try:
-        require_role(int(user_id), db, "admin")
-        company_id = _require_company_id(user_id, db)
+        company_id = require_role(int(user_id), db, "admin").company_id
         folder = _folder_or_404(folder_id, company_id, db)
         name = (payload.get("name") or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="Folder name is required")
+        # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
         collision = (
             db.query(CompanyFolder)
             .filter(
@@ -280,8 +286,7 @@ async def delete_company_folder(
 ):
     """Delete a company-RAG folder (owner/admin only). Blocked if the folder is not empty."""
     try:
-        require_role(int(user_id), db, "admin")
-        company_id = _require_company_id(user_id, db)
+        company_id = require_role(int(user_id), db, "admin").company_id
         folder = _folder_or_404(folder_id, company_id, db)
         doc_count = (
             db.query(func.count(Document.id))
@@ -289,7 +294,7 @@ async def delete_company_folder(
             .scalar()
         )
         if doc_count:
-            raise HTTPException(status_code=400, detail="Folder is not empty")
+            raise HTTPException(status_code=409, detail="Folder is not empty")
         db.delete(folder)
         db.commit()
         logger.info(f"Company folder {folder_id} deleted by user {user_id}")
