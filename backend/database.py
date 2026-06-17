@@ -568,7 +568,7 @@ class Document(Base):
         Boolean, default=False, nullable=False, server_default="false", index=True
     )  # Company-shared document (agent_id is NULL); included only when an agent opts in
     folder_id = Column(
-        Integer, ForeignKey("company_folders.id"), nullable=True, index=True
+        Integer, ForeignKey("company_folders.id", ondelete="SET NULL"), nullable=True, index=True
     )  # Company RAG folder (set only when is_company_rag=True; required at the app level for those)
 
     # Relations
@@ -1058,7 +1058,7 @@ def ensure_columns():
         ("documents", "is_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("agents", "include_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
         # Company RAG folders
-        ("documents", "folder_id", "INTEGER REFERENCES company_folders(id)"),
+        ("documents", "folder_id", "INTEGER REFERENCES company_folders(id) ON DELETE SET NULL"),
         ("agents", "company_rag_folder_ids", "TEXT"),
     ]
     try:
