@@ -101,16 +101,30 @@ from unittest.mock import patch
 
 @pytest.mark.asyncio
 async def test_member_cannot_upload_company_doc(client, member_cookies):
+    # folder_id is a required form field (validated before the handler); supply
+    # one so the request reaches the role check, which is what we assert (403).
     files = {"file": ("policy.txt", b"hello company", "text/plain")}
-    resp = await client.post("/api/company-rag/documents", files=files, cookies=member_cookies)
+    resp = await client.post(
+        "/api/company-rag/documents", files=files, data={"folder_id": "1"}, cookies=member_cookies
+    )
     assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_admin_uploads_company_doc(client, admin_cookies, test_admin_user, mock_redis_none, mock_event_tracker):
+async def test_admin_uploads_company_doc(
+    client, admin_cookies, test_admin_user, db_session, mock_redis_none, mock_event_tracker
+):
+    from database import CompanyFolder
+
+    folder = CompanyFolder(company_id=test_admin_user.company_id, name="Général")
+    db_session.add(folder)
+    db_session.flush()
+
     with patch("routers.company_rag.process_document_for_user", return_value=777) as mock_proc:
         files = {"file": ("policy.txt", b"hello company", "text/plain")}
-        resp = await client.post("/api/company-rag/documents", files=files, cookies=admin_cookies)
+        resp = await client.post(
+            "/api/company-rag/documents", files=files, data={"folder_id": str(folder.id)}, cookies=admin_cookies
+        )
     assert resp.status_code == 200
     body = resp.json()
     assert body["document_id"] == 777
