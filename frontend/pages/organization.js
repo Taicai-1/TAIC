@@ -208,8 +208,9 @@ export default function Organization() {
     try {
       setCreatingFolder(true);
       const res = await api.post('/api/company-rag/folders', { name });
-      await loadFolders();
+      // Select first so loadFolders keeps it (avoids a second docs fetch from auto-select).
       setSelectedFolderId(res.data.id);
+      await loadFolders();
     } catch (e) {
       toast.error(e.response?.data?.detail || t('organization:companyRag.folderCreateError'));
     } finally {
@@ -240,17 +241,21 @@ export default function Organization() {
     }
   };
 
+  // Polls the async upload task and resolves true on completion, false on failure/timeout.
+  // The success toast is deliberately deferred to here so it only fires once the document
+  // actually exists (the background task creates the row) — not right after the POST.
   const pollCompanyUpload = async (taskId) => {
     for (let i = 0; i < 150; i++) {
       await new Promise(r => setTimeout(r, 1500));
       try {
         const res = await api.get(`/upload-status/${taskId}`);
         const { status, error } = res.data;
-        if (status === 'completed') { await loadCompanyDocs(); await loadFolders(); return; }
-        if (status === 'failed') { toast.error(error || t('organization:companyRag.uploadError')); return; }
+        if (status === 'completed') { await loadCompanyDocs(); await loadFolders(); return true; }
+        if (status === 'failed') { toast.error(error || t('organization:companyRag.uploadError')); return false; }
       } catch { /* keep polling */ }
     }
     toast.error(t('organization:companyRag.uploadError'));
+    return false;
   };
 
   const handleCompanyDocUpload = async (e) => {
@@ -265,12 +270,14 @@ export default function Organization() {
       const res = await api.post('/api/company-rag/documents', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      toast.success(t('organization:companyRag.uploadSuccess'));
+      // Async path: keep the uploading indicator until polling confirms completion, then toast.
       if (res.data.task_id) {
-        await pollCompanyUpload(res.data.task_id);
+        const ok = await pollCompanyUpload(res.data.task_id);
+        if (ok) toast.success(t('organization:companyRag.uploadSuccess'));
       } else {
         await loadCompanyDocs();
         await loadFolders();
+        toast.success(t('organization:companyRag.uploadSuccess'));
       }
     } catch (error) {
       toast.error(error.response?.data?.detail || t('organization:companyRag.uploadError'));
@@ -830,7 +837,8 @@ export default function Organization() {
                                   onChange={(e) => handleMoveDoc(doc.id, Number(e.target.value))}
                                   onClick={(e) => e.stopPropagation()}
                                   className="text-xs border border-gray-200 rounded-button px-2 py-1 bg-white text-gray-600"
-                                  title={t('organization:companyRag.moveTo')}>
+                                  title={t('organization:companyRag.moveTo')}
+                                  aria-label={t('organization:companyRag.moveTo')}>
                                   {folders.map(f => (
                                     <option key={f.id} value={f.id}>{f.name}</option>
                                   ))}
