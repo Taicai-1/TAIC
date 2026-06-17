@@ -334,7 +334,11 @@ async def move_company_document(
         target_folder_id = payload.get("folder_id")
         if target_folder_id is None:
             raise HTTPException(status_code=400, detail="folder_id is required")
-        _folder_or_404(int(target_folder_id), company_id, db)
+        try:
+            target_folder_id = int(target_folder_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="folder_id must be an integer")
+        _folder_or_404(target_folder_id, company_id, db)
         doc = (
             db.query(Document)
             .filter(
@@ -346,7 +350,7 @@ async def move_company_document(
         )
         if not doc:
             raise HTTPException(status_code=404, detail="Company document not found")
-        doc.folder_id = int(target_folder_id)
+        doc.folder_id = target_folder_id
         db.commit()
         return {"status": "moved", "id": document_id, "folder_id": doc.folder_id}
     except HTTPException:
