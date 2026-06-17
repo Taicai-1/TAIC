@@ -1113,6 +1113,49 @@ def ensure_columns():
         logger.error(f"ensure_columns failed: {e}")
 
 
+def ensure_company_rag_default_folders():
+    """Idempotent: attach orphan company-RAG docs (folder_id IS NULL) to a per-company
+    'Général' folder, creating it if needed. Runs at startup, safe to re-run."""
+    try:
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(Document.company_id)
+                .filter(
+                    Document.is_company_rag.is_(True),
+                    Document.folder_id.is_(None),
+                    Document.company_id.isnot(None),
+                )
+                .distinct()
+                .all()
+            )
+            company_ids = [r[0] for r in rows]
+            for cid in company_ids:
+                folder = (
+                    db.query(CompanyFolder)
+                    .filter(CompanyFolder.company_id == cid, CompanyFolder.name == "Général")
+                    .first()
+                )
+                if folder is None:
+                    folder = CompanyFolder(company_id=cid, name="Général")
+                    db.add(folder)
+                    db.flush()
+                db.query(Document).filter(
+                    Document.is_company_rag.is_(True),
+                    Document.folder_id.is_(None),
+                    Document.company_id == cid,
+                ).update({Document.folder_id: folder.id}, synchronize_session=False)
+            db.commit()
+            if company_ids:
+                logger.info(
+                    f"ensure_company_rag_default_folders: migrated docs for {len(company_ids)} companies"
+                )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"ensure_company_rag_default_folders skipped: {e}")
+
+
 def ensure_rls_policies():
     """Create RLS bypass policies and fix tenant_isolation policies.
 

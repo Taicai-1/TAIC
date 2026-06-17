@@ -359,6 +359,9 @@ async def startup_event():
         # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
         ensure_columns()
         logger.info("ensure_columns done (%s)", _elapsed())
+        from database import ensure_company_rag_default_folders
+        ensure_company_rag_default_folders()
+        logger.info("ensure_company_rag_default_folders done (%s)", _elapsed())
         # Add RLS bypass policies for service operations (email ingestion, etc.)
         ensure_rls_policies()
         logger.info("ensure_rls_policies done (%s)", _elapsed())
