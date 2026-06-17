@@ -29,6 +29,21 @@ def _sanitize_prompt_text(text: str) -> str:
     return SCRIPT_PATTERN.sub("", text)
 
 
+def _agent_folder_ids(agent):
+    """Return the agent's selected company-RAG folder ids as a list, or None for 'all'."""
+    raw = getattr(agent, "company_rag_folder_ids", None)
+    if not raw:
+        return None
+    try:
+        ids = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(ids, list) or not ids:
+        return None
+    cleaned = [int(x) for x in ids if isinstance(x, int) and not isinstance(x, bool) and x > 0]
+    return cleaned or None
+
+
 # In-memory fallback cache (used when Redis is unavailable)
 _answer_cache = {}
 
@@ -245,6 +260,7 @@ def get_answer(
         # Resolve the per-agent company-RAG opt-in early so it can scope doc listing + search.
         agent = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
         include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
+        company_rag_folder_ids = _agent_folder_ids(agent) if include_company_rag else None
         company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
 
         # Get documents to consider for RAG
@@ -267,14 +283,15 @@ def get_answer(
         else:
             # If we're in an agent context, prefer documents attached to that agent only
             if agent_id:
+                _ga_company_clause = and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
+                if company_rag_folder_ids:
+                    _ga_company_clause = and_(_ga_company_clause, Document.folder_id.in_(company_rag_folder_ids))
                 user_docs = (
                     db.query(Document)
                     .filter(
                         or_(
                             Document.agent_id == agent_id,
-                            and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
-                            if include_company_rag
-                            else False,
+                            _ga_company_clause if include_company_rag else False,
                         ),
                         Document.document_type != "traceability",
                     )
@@ -438,6 +455,7 @@ def get_answer(
             agent_id=agent_id,
             company_id=company_id,
             include_company_rag=include_company_rag,
+            company_rag_folder_ids=company_rag_folder_ids,
         )
 
         # Build sources metadata for the frontend
@@ -545,6 +563,7 @@ def get_answer_stream(
         # Resolve the per-agent company-RAG opt-in early so it can scope doc listing + search.
         agent = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
         include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
+        company_rag_folder_ids = _agent_folder_ids(agent) if include_company_rag else None
         company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
 
         # --- Document retrieval (same as get_answer) ---
@@ -561,14 +580,15 @@ def get_answer_stream(
             user_docs = q.all()
         else:
             if agent_id:
+                _gas_company_clause = and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
+                if company_rag_folder_ids:
+                    _gas_company_clause = and_(_gas_company_clause, Document.folder_id.in_(company_rag_folder_ids))
                 user_docs = (
                     db.query(Document)
                     .filter(
                         or_(
                             Document.agent_id == agent_id,
-                            and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
-                            if include_company_rag
-                            else False,
+                            _gas_company_clause if include_company_rag else False,
                         ),
                         Document.document_type != "traceability",
                     )
@@ -706,6 +726,7 @@ def get_answer_stream(
                 agent_id=agent_id,
                 company_id=company_id,
                 include_company_rag=include_company_rag,
+                company_rag_folder_ids=company_rag_folder_ids,
             )
 
             # Build sources metadata for the frontend
@@ -810,6 +831,7 @@ def search_similar_texts_for_user(
     company_id: int = None,
     mission_id: int = None,
     include_company_rag: bool = False,
+    company_rag_folder_ids: list = None,
 ) -> List[dict]:
     """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context.
 
@@ -875,7 +897,10 @@ def search_similar_texts_for_user(
             # Agent-scoped docs; optionally union the company-shared docs
             agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))
             if include_company_rag:
-                query = query.filter(or_(agent_scope, Document.is_company_rag.is_(True)))
+                company_scope = Document.is_company_rag.is_(True)
+                if company_rag_folder_ids:
+                    company_scope = and_(company_scope, Document.folder_id.in_(company_rag_folder_ids))
+                query = query.filter(or_(agent_scope, company_scope))
             else:
                 query = query.filter(agent_scope, Document.is_company_rag.is_(False))
         else:
