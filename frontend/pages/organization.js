@@ -96,6 +96,9 @@ export default function Organization() {
   const [companyDocs, setCompanyDocs] = useState([]);
   const [companyDocsLoading, setCompanyDocsLoading] = useState(false);
   const [companyDocUploading, setCompanyDocUploading] = useState(false);
+  const [folders, setFolders] = useState([]);
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -122,7 +125,7 @@ export default function Organization() {
       }
 
       if (data.company) {
-        loadCompanyDocs();
+        loadFolders();
         if (['admin', 'owner'].includes(data.company.role)) {
           loadMembers();
           loadOrgAgents();
@@ -169,10 +172,22 @@ export default function Organization() {
   };
 
   // ---- Company RAG documents ----
-  const loadCompanyDocs = async () => {
+  const loadFolders = async () => {
+    try {
+      const res = await api.get('/api/company-rag/folders');
+      const list = res.data.folders || [];
+      setFolders(list);
+      setSelectedFolderId(prev => (prev && list.some(f => f.id === prev) ? prev : (list[0]?.id ?? null)));
+    } catch {
+      toast.error(t('organization:companyRag.loadError'));
+    }
+  };
+
+  const loadCompanyDocs = async (folderId = selectedFolderId) => {
     try {
       setCompanyDocsLoading(true);
-      const res = await api.get('/api/company-rag/documents');
+      const url = folderId ? `/api/company-rag/documents?folder_id=${folderId}` : '/api/company-rag/documents';
+      const res = await api.get(url);
       setCompanyDocs(res.data.documents || []);
     } catch {
       toast.error(t('organization:companyRag.loadError'));
@@ -181,23 +196,98 @@ export default function Organization() {
     }
   };
 
+  useEffect(() => {
+    if (selectedFolderId) loadCompanyDocs(selectedFolderId);
+    else setCompanyDocs([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFolderId]);
+
+  const handleCreateFolder = async () => {
+    const name = (window.prompt(t('organization:companyRag.folderNamePrompt')) || '').trim();
+    if (!name) return;
+    try {
+      setCreatingFolder(true);
+      const res = await api.post('/api/company-rag/folders', { name });
+      await loadFolders();
+      setSelectedFolderId(res.data.id);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || t('organization:companyRag.folderCreateError'));
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
+
+  const handleRenameFolder = async (folder) => {
+    const name = (window.prompt(t('organization:companyRag.folderNamePrompt'), folder.name) || '').trim();
+    if (!name || name === folder.name) return;
+    try {
+      await api.put(`/api/company-rag/folders/${folder.id}`, { name });
+      await loadFolders();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || t('organization:companyRag.folderRenameError'));
+    }
+  };
+
+  const handleDeleteFolder = async (folder) => {
+    if (!confirm(t('organization:companyRag.folderDeleteConfirm'))) return;
+    try {
+      await api.delete(`/api/company-rag/folders/${folder.id}`);
+      const remaining = folders.filter(f => f.id !== folder.id);
+      setFolders(remaining);
+      if (selectedFolderId === folder.id) setSelectedFolderId(remaining[0]?.id ?? null);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || t('organization:companyRag.folderDeleteError'));
+    }
+  };
+
+  const pollCompanyUpload = async (taskId) => {
+    for (let i = 0; i < 150; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const res = await api.get(`/upload-status/${taskId}`);
+        const { status, error } = res.data;
+        if (status === 'completed') { await loadCompanyDocs(); await loadFolders(); return; }
+        if (status === 'failed') { toast.error(error || t('organization:companyRag.uploadError')); return; }
+      } catch { /* keep polling */ }
+    }
+    toast.error(t('organization:companyRag.uploadError'));
+  };
+
   const handleCompanyDocUpload = async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    if (!selectedFolderId) { toast.error(t('organization:companyRag.pickFolderFirst')); e.target.value = ''; return; }
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('folder_id', selectedFolderId);
     try {
       setCompanyDocUploading(true);
-      await api.post('/api/company-rag/documents', fd, {
+      const res = await api.post('/api/company-rag/documents', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       toast.success(t('organization:companyRag.uploadSuccess'));
-      await loadCompanyDocs();
+      if (res.data.task_id) {
+        await pollCompanyUpload(res.data.task_id);
+      } else {
+        await loadCompanyDocs();
+        await loadFolders();
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || t('organization:companyRag.uploadError'));
     } finally {
       setCompanyDocUploading(false);
       e.target.value = '';
+    }
+  };
+
+  const handleMoveDoc = async (docId, targetFolderId) => {
+    if (!targetFolderId || targetFolderId === selectedFolderId) return;
+    try {
+      await api.put(`/api/company-rag/documents/${docId}/folder`, { folder_id: targetFolderId });
+      await loadCompanyDocs();
+      await loadFolders();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || t('organization:companyRag.moveError'));
     }
   };
 
@@ -691,10 +781,37 @@ export default function Organization() {
                     </div>
                     <p className="text-gray-500 text-sm mb-6 ml-13">{t('organization:companyRag.description')}</p>
 
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                      {folders.map(f => (
+                        <div key={f.id}
+                          className={`group flex items-center rounded-button border px-3 py-1.5 text-sm cursor-pointer transition-colors ${selectedFolderId === f.id ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                          onClick={() => setSelectedFolderId(f.id)}>
+                          <span className="font-medium">{f.name}</span>
+                          <span className="ml-2 text-xs text-gray-400">{f.document_count}</span>
+                          {canManage && (
+                            <span className="ml-2 hidden group-hover:inline-flex items-center gap-1">
+                              <button onClick={(ev) => { ev.stopPropagation(); handleRenameFolder(f); }}
+                                className="text-gray-400 hover:text-gray-700" title={t('organization:companyRag.folderRename')}>✎</button>
+                              <button onClick={(ev) => { ev.stopPropagation(); handleDeleteFolder(f); }}
+                                className="text-red-400 hover:text-red-600" title={t('organization:companyRag.folderDelete')}>🗑</button>
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {canManage && (
+                        <button onClick={handleCreateFolder} disabled={creatingFolder}
+                          className="rounded-button border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-50">
+                          + {t('organization:companyRag.newFolder')}
+                        </button>
+                      )}
+                    </div>
+
                     {companyDocsLoading ? (
                       <p className="text-sm text-gray-400">{t('common:loading')}</p>
+                    ) : folders.length === 0 ? (
+                      <p className="text-gray-400 text-sm text-center py-8">{t('organization:companyRag.noFolders')}</p>
                     ) : companyDocs.length === 0 ? (
-                      <p className="text-gray-400 text-sm text-center py-8">{t('organization:companyRag.empty')}</p>
+                      <p className="text-gray-400 text-sm text-center py-8">{t('organization:companyRag.emptyFolder')}</p>
                     ) : (
                       <ul className="divide-y divide-gray-100">
                         {companyDocs.map(doc => (
@@ -707,6 +824,18 @@ export default function Organization() {
                               </div>
                             </div>
                             <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                              {canManage && folders.length > 1 && (
+                                <select
+                                  value={doc.folder_id || ''}
+                                  onChange={(e) => handleMoveDoc(doc.id, Number(e.target.value))}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-xs border border-gray-200 rounded-button px-2 py-1 bg-white text-gray-600"
+                                  title={t('organization:companyRag.moveTo')}>
+                                  {folders.map(f => (
+                                    <option key={f.id} value={f.id}>{f.name}</option>
+                                  ))}
+                                </select>
+                              )}
                               <button onClick={() => handleCompanyDocDownload(doc.id, doc.filename)}
                                 className="flex items-center space-x-1 px-3 py-1.5 text-xs bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-button transition-colors border border-primary-100">
                                 <Download className="w-3.5 h-3.5" />
