@@ -55,6 +55,7 @@ async def list_company_documents(
             Document.company_id == company_id, Document.is_company_rag.is_(True)
         )
         if folder_id is not None:
+            _folder_or_404(folder_id, company_id, db)  # 404 on foreign/unknown folder (no id-probing)
             q = q.filter(Document.folder_id == folder_id)
         docs = q.order_by(Document.created_at.desc()).all()
         return {

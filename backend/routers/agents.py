@@ -76,7 +76,9 @@ def _folder_ids_out(raw: "str | None"):
         return []
     if not isinstance(v, list):
         return []
-    return [x for x in v if isinstance(x, int) and not isinstance(x, bool)]
+    # Mirror _parse_folder_ids' write-side guard (positive ints only) so a manually
+    # corrupted row can't surface a "ghost" checked-but-ineffective folder in the UI.
+    return [x for x in v if isinstance(x, int) and not isinstance(x, bool) and x > 0]
 
 
 def _parse_enabled_plugins(raw: str) -> str | None:
