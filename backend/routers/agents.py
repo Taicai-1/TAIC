@@ -43,9 +43,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _parse_folder_ids(raw: str):
+def _parse_folder_ids(raw: "str | None"):
     """Parse the company_rag_folder_ids form field into a JSON string or None.
-    Empty/[]/invalid -> None (means 'all folders')."""
+    Empty/[]/invalid -> None (means 'all folders'). Only positive integer ids are kept
+    (folder ids are positive FK values; negatives/0/non-ints would silently match nothing)."""
     if not raw:
         return None
     try:
@@ -54,19 +55,28 @@ def _parse_folder_ids(raw: str):
         return None
     if not isinstance(ids, list):
         return None
-    clean = [int(x) for x in ids if str(x).strip().lstrip("-").isdigit()]
+    clean = []
+    for x in ids:
+        if isinstance(x, bool):
+            continue
+        if isinstance(x, int) and x > 0:
+            clean.append(x)
+        elif isinstance(x, str) and x.strip().isdigit() and int(x.strip()) > 0:
+            clean.append(int(x.strip()))
     return json.dumps(clean) if clean else None
 
 
-def _folder_ids_out(raw):
-    """Serialize stored JSON company_rag_folder_ids back to a list ([] = all)."""
+def _folder_ids_out(raw: "str | None"):
+    """Serialize stored JSON company_rag_folder_ids back to a list of ints ([] = all)."""
     if not raw:
         return []
     try:
         v = json.loads(raw)
-        return v if isinstance(v, list) else []
     except Exception:
         return []
+    if not isinstance(v, list):
+        return []
+    return [x for x in v if isinstance(x, int) and not isinstance(x, bool)]
 
 
 def _parse_enabled_plugins(raw: str) -> str | None:
