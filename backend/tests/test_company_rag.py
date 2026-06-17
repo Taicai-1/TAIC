@@ -66,8 +66,12 @@ async def test_company_doc_excluded_when_toggle_off(db_session, test_company):
     _seed_company_doc_with_chunk(db_session, test_company, user, vec)
 
     results = search_similar_texts_for_user(
-        query_embedding=vec, user_id=user.id, db=db_session,
-        top_k=5, agent_id=agent.id, company_id=test_company.id,
+        query_embedding=vec,
+        user_id=user.id,
+        db=db_session,
+        top_k=5,
+        agent_id=agent.id,
+        company_id=test_company.id,
         include_company_rag=False,
     )
     assert results == []
@@ -89,8 +93,12 @@ async def test_company_doc_included_when_toggle_on(db_session, test_company):
     doc = _seed_company_doc_with_chunk(db_session, test_company, user, vec)
 
     results = search_similar_texts_for_user(
-        query_embedding=vec, user_id=user.id, db=db_session,
-        top_k=5, agent_id=agent.id, company_id=test_company.id,
+        query_embedding=vec,
+        user_id=user.id,
+        db=db_session,
+        top_k=5,
+        agent_id=agent.id,
+        company_id=test_company.id,
         include_company_rag=True,
     )
     assert any(r["document_id"] == doc.id for r in results)
@@ -104,9 +112,7 @@ async def test_member_cannot_upload_company_doc(client, member_cookies):
     # folder_id is a required form field (validated before the handler); supply
     # one so the request reaches the role check, which is what we assert (403).
     files = {"file": ("policy.txt", b"hello company", "text/plain")}
-    resp = await client.post(
-        "/api/company-rag/documents", files=files, data={"folder_id": "1"}, cookies=member_cookies
-    )
+    resp = await client.post("/api/company-rag/documents", files=files, data={"folder_id": "1"}, cookies=member_cookies)
     assert resp.status_code == 403
 
 
@@ -137,9 +143,13 @@ async def test_admin_uploads_company_doc(
 @pytest.mark.asyncio
 async def test_member_can_list_company_docs(client, member_cookies, db_session, test_company, test_member_user):
     from tests.factories import DocumentFactory
+
     doc = DocumentFactory.build(
-        user_id=test_member_user.id, agent_id=None, company_id=test_company.id,
-        is_company_rag=True, filename="shared.txt",
+        user_id=test_member_user.id,
+        agent_id=None,
+        company_id=test_company.id,
+        is_company_rag=True,
+        filename="shared.txt",
     )
     db_session.add(doc)
     db_session.flush()
@@ -153,9 +163,13 @@ async def test_member_can_list_company_docs(client, member_cookies, db_session, 
 @pytest.mark.asyncio
 async def test_admin_deletes_company_doc(client, admin_cookies, db_session, test_admin_user):
     from tests.factories import DocumentFactory
+
     doc = DocumentFactory.build(
-        user_id=test_admin_user.id, agent_id=None, company_id=test_admin_user.company_id,
-        is_company_rag=True, filename="to-delete.txt",
+        user_id=test_admin_user.id,
+        agent_id=None,
+        company_id=test_admin_user.company_id,
+        is_company_rag=True,
+        filename="to-delete.txt",
     )
     db_session.add(doc)
     db_session.flush()
@@ -164,15 +178,22 @@ async def test_admin_deletes_company_doc(client, admin_cookies, db_session, test
     assert resp.status_code == 200
     assert resp.json()["status"] == "deleted"
     from database import Document
+
     assert db_session.query(Document).filter(Document.id == doc.id).first() is None
 
 
 @pytest.mark.asyncio
-async def test_member_can_get_download_url_for_company_doc(client, member_cookies, db_session, test_company, test_admin_user, mock_gcs):
+async def test_member_can_get_download_url_for_company_doc(
+    client, member_cookies, db_session, test_company, test_admin_user, mock_gcs
+):
     from tests.factories import DocumentFactory
+
     doc = DocumentFactory.build(
-        user_id=test_admin_user.id, agent_id=None, company_id=test_company.id,
-        is_company_rag=True, filename="shared.pdf",
+        user_id=test_admin_user.id,
+        agent_id=None,
+        company_id=test_company.id,
+        is_company_rag=True,
+        filename="shared.pdf",
         gcs_url="https://storage.googleapis.com/test-bucket/shared.pdf",
     )
     db_session.add(doc)

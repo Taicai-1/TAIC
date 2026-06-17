@@ -213,9 +213,7 @@ async def test_delete_empty_folder_200(client, admin_cookies, db_session, test_c
 
 
 @pytest.mark.asyncio
-async def test_delete_non_empty_folder_409(
-    client, admin_cookies, db_session, test_company, test_admin_user
-):
+async def test_delete_non_empty_folder_409(client, admin_cookies, db_session, test_company, test_admin_user):
     """Deleting a folder that still contains documents returns 409 (not 400)."""
     folder = _make_folder(db_session, test_company.id, "Not Empty")
     _make_company_doc(db_session, test_admin_user.id, test_company.id, folder.id)
@@ -246,9 +244,7 @@ async def test_upload_without_folder_id_422(client, admin_cookies):
 
 
 @pytest.mark.asyncio
-async def test_move_document_happy_path(
-    client, admin_cookies, db_session, test_company, test_admin_user
-):
+async def test_move_document_happy_path(client, admin_cookies, db_session, test_company, test_admin_user):
     """Admin can move a company-RAG document to a different folder."""
     src_folder = _make_folder(db_session, test_company.id, "Source")
     dst_folder = _make_folder(db_session, test_company.id, "Destination")
@@ -266,9 +262,7 @@ async def test_move_document_happy_path(
 
 
 @pytest.mark.asyncio
-async def test_move_document_wrong_doc_404(
-    client, admin_cookies, db_session, test_company
-):
+async def test_move_document_wrong_doc_404(client, admin_cookies, db_session, test_company):
     """Moving a non-existent document returns 404."""
     folder = _make_folder(db_session, test_company.id, "SomeFolder")
 
@@ -281,9 +275,7 @@ async def test_move_document_wrong_doc_404(
 
 
 @pytest.mark.asyncio
-async def test_move_document_missing_folder_id_400(
-    client, admin_cookies, db_session, test_company, test_admin_user
-):
+async def test_move_document_missing_folder_id_400(client, admin_cookies, db_session, test_company, test_admin_user):
     """Calling move-doc without folder_id in body returns 400."""
     folder = _make_folder(db_session, test_company.id, "AFolder")
     doc = _make_company_doc(db_session, test_admin_user.id, test_company.id, folder.id)
@@ -314,9 +306,7 @@ async def test_member_cannot_create_folder(client, member_cookies):
 
 
 @pytest.mark.asyncio
-async def test_tenant_isolation_rename_404(
-    client, db_session, test_company
-):
+async def test_tenant_isolation_rename_404(client, db_session, test_company):
     """An admin from another company gets 404 when renaming a folder they don't own."""
     from tests.factories import CompanyFactory, UserFactory, CompanyMembershipFactory
     from auth import create_access_token
@@ -333,9 +323,7 @@ async def test_tenant_isolation_rename_404(
     db_session.add(other_admin)
     db_session.flush()
 
-    membership = CompanyMembershipFactory.build(
-        user_id=other_admin.id, company_id=other_company.id, role="admin"
-    )
+    membership = CompanyMembershipFactory.build(user_id=other_admin.id, company_id=other_company.id, role="admin")
     db_session.add(membership)
     db_session.flush()
 
@@ -351,9 +339,7 @@ async def test_tenant_isolation_rename_404(
 
 
 @pytest.mark.asyncio
-async def test_tenant_isolation_delete_404(
-    client, db_session, test_company
-):
+async def test_tenant_isolation_delete_404(client, db_session, test_company):
     """An admin from another company gets 404 when deleting a folder they don't own."""
     from tests.factories import CompanyFactory, UserFactory, CompanyMembershipFactory
     from auth import create_access_token
@@ -368,9 +354,7 @@ async def test_tenant_isolation_delete_404(
     db_session.add(other_admin)
     db_session.flush()
 
-    membership = CompanyMembershipFactory.build(
-        user_id=other_admin.id, company_id=other_company.id, role="admin"
-    )
+    membership = CompanyMembershipFactory.build(user_id=other_admin.id, company_id=other_company.id, role="admin")
     db_session.add(membership)
     db_session.flush()
 

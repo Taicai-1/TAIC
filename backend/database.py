@@ -328,7 +328,9 @@ class Agent(Base):
 
     # Company RAG: include the organization's shared documents in this agent's retrieval
     include_company_rag = Column(Boolean, default=False, nullable=False)
-    company_rag_folder_ids = Column(Text, nullable=True)  # JSON list of CompanyFolder ids; NULL/[] = all folders (dynamic)
+    company_rag_folder_ids = Column(
+        Text, nullable=True
+    )  # JSON list of CompanyFolder ids; NULL/[] = all folders (dynamic)
 
     # Actionnable plugins
     enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
@@ -1153,9 +1155,7 @@ def ensure_company_rag_default_folders():
                 ).update({Document.folder_id: folder.id}, synchronize_session=False)
             db.commit()
             if company_ids:
-                logger.info(
-                    f"ensure_company_rag_default_folders: migrated docs for {len(company_ids)} companies"
-                )
+                logger.info(f"ensure_company_rag_default_folders: migrated docs for {len(company_ids)} companies")
         finally:
             db.close()
     except Exception as e:
