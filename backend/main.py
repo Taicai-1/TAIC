@@ -217,9 +217,9 @@ async def request_id_middleware(request: Request, call_next):
 async def tenant_isolation_middleware(request: Request, call_next):
     """Extract company_id from JWT and set it in contextvars for RLS."""
     set_current_company_id(None)
-    try:
-        import jwt as pyjwt
+    import jwt as pyjwt
 
+    try:
         token = request.cookies.get("token")
         if not token:
             auth_header = request.headers.get("Authorization", "")
@@ -239,8 +239,14 @@ async def tenant_isolation_middleware(request: Request, call_next):
                         set_current_company_id(user.company_id)
                 finally:
                     db.close()
-    except Exception:
-        pass  # Unauthenticated requests — company_id stays None, RLS returns empty
+    except pyjwt.PyJWTError:
+        # Expected for unauthenticated/invalid tokens — company_id stays None,
+        # RLS returns empty result sets (fail-closed).
+        pass
+    except Exception as exc:
+        # Unexpected (e.g. DB error resolving the user). Do not crash the request,
+        # but surface it: company_id stays None so RLS still fails closed.
+        logger.warning("tenant_isolation_middleware: company_id resolution failed: %s", exc)
     response = await call_next(request)
     return response
 
