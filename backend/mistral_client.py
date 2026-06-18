@@ -98,6 +98,7 @@ def generate_text(
         messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
         max_tokens=max_tokens,
+        timeout_ms=timeout * 1000,
     )
 
     if response and response.choices and len(response.choices) > 0:
@@ -162,6 +163,7 @@ def generate_with_tools(
         tool_choice="auto",
         temperature=temperature,
         max_tokens=max_tokens,
+        timeout_ms=60000,
     )
 
     if not response or not response.choices:
@@ -213,6 +215,7 @@ def generate_text_stream(
         messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
         max_tokens=max_tokens,
+        timeout_ms=60000,
     )
 
     for event in stream:

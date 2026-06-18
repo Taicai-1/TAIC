@@ -10,7 +10,7 @@ import json
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ALLOWED_TYPES = [".pdf", ".txt", ".docx", ".ics", ".json"]
+MAX_FOLDER_NAME_LENGTH = 100
 
 
 def _require_company_id(user_id: str, db: Session) -> int:
@@ -42,6 +43,8 @@ def _require_company_id(user_id: str, db: Session) -> int:
 @router.get("/api/company-rag/documents")
 async def list_company_documents(
     folder_id: int = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
@@ -55,7 +58,7 @@ async def list_company_documents(
         if folder_id is not None:
             _folder_or_404(folder_id, company_id, db)  # 404 on foreign/unknown folder (no id-probing)
             q = q.filter(Document.folder_id == folder_id)
-        docs = q.order_by(Document.created_at.desc()).all()
+        docs = q.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
         return {
             "documents": [
                 {
@@ -98,6 +101,24 @@ async def upload_company_document(
             raise HTTPException(status_code=400, detail="File type not supported")
 
         content = await file.read()
+
+        # WS5: validate real content (magic bytes) + cap PDF pages, mirroring the /upload path.
+        from validation import validate_file_content
+
+        if not validate_file_content(content, file.filename):
+            raise HTTPException(status_code=400, detail="File content does not match its type")
+        if file.filename.lower().endswith(".pdf"):
+            import io
+            import pdfplumber
+
+            try:
+                with pdfplumber.open(io.BytesIO(content)) as _pdf:
+                    if len(_pdf.pages) > 500:
+                        raise HTTPException(status_code=400, detail=f"PDF too large ({len(_pdf.pages)} pages, max 500)")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=400, detail="Unable to read PDF")
 
         r = get_redis()
         if r is not None:
@@ -250,6 +271,8 @@ async def create_company_folder(
         name = (payload.get("name") or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="Folder name is required")
+        if len(name) > MAX_FOLDER_NAME_LENGTH:
+            raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
         # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
         exists = (
             db.query(CompanyFolder).filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name).first()
@@ -283,6 +306,8 @@ async def rename_company_folder(
         name = (payload.get("name") or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="Folder name is required")
+        if len(name) > MAX_FOLDER_NAME_LENGTH:
+            raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
         # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
         collision = (
             db.query(CompanyFolder)

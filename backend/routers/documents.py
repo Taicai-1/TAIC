@@ -9,7 +9,7 @@ import mimetypes
 import traceback
 from uuid import uuid4
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -770,7 +770,13 @@ async def get_upload_status(
 
 
 @router.get("/user/documents")
-async def get_user_documents(user_id: str = Depends(verify_token), db: Session = Depends(get_db), agent_id: int = None):
+async def get_user_documents(
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+    agent_id: int = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+):
     """Get user's documents, optionally filtered by agent"""
     try:
         logger.info(f"Fetching documents for user {user_id}, agent {agent_id}")
@@ -795,6 +801,8 @@ async def get_user_documents(user_id: str = Depends(verify_token), db: Session =
         documents = (
             query.filter(Document.document_type != "traceability", Document.mission_id.is_(None))
             .order_by(Document.created_at.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
         )
         logger.info(f"Found {len(documents)} documents for user {user_id}, agent {agent_id}")
