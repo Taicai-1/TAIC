@@ -30,6 +30,15 @@ async def ask_question(
     """Ask question to RAG system (toujours avec mémoire et bon modèle)"""
     if not _check_api_rate_limit(user_id, "ask", _API_ASK_LIMIT):
         raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+    # WS2: enforce the per-company monthly LLM spend cap (429 if over) and set the
+    # usage-tracking context once, before branching — covers agent, team, no-agent,
+    # streaming and actionnable paths.
+    from helpers.tenant import _get_caller_company_id
+    from llm_usage import set_llm_context, check_company_monthly_cap
+
+    _caller_company_id = _get_caller_company_id(user_id, db)
+    check_company_monthly_cap(_caller_company_id, db)
+    set_llm_context(company_id=_caller_company_id, user_id=int(user_id), agent_id=getattr(request, "agent_id", None))
     start_time = time.time()
     try:
         logger.info(f"Processing question from user {user_id}: {request.question}")
