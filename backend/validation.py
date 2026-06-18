@@ -300,7 +300,7 @@ class AgentCreateValidated(BaseModel):
     contexte: Optional[str] = Field(None, max_length=MAX_AGENT_CONTEXTE_LENGTH)
     biographie: Optional[str] = Field(None, max_length=MAX_AGENT_BIOGRAPHIE_LENGTH)
     profile_photo: Optional[str] = Field(None, max_length=MAX_URL_LENGTH)
-    statut: Optional[str] = Field("public", pattern="^(public|private)$")
+    statut: Optional[str] = Field("privé", pattern="^(public|privé)$")
     type: Optional[str] = Field("conversationnel", pattern="^(conversationnel|recherche_live)$")
 
     @validator("name")
