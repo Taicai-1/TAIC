@@ -217,6 +217,19 @@ async def create_agent(
 ):
     """Create a new agent with optional profile photo upload"""
     try:
+        from validation import (
+            sanitize_text,
+            MAX_AGENT_NAME_LENGTH,
+            MAX_AGENT_CONTEXTE_LENGTH,
+            MAX_AGENT_BIOGRAPHIE_LENGTH,
+        )
+
+        name = sanitize_text(name, MAX_AGENT_NAME_LENGTH)
+        if not name:
+            raise HTTPException(status_code=422, detail="Agent name is required")
+        contexte = sanitize_text(contexte, MAX_AGENT_CONTEXTE_LENGTH) if contexte else contexte
+        biographie = sanitize_text(biographie, MAX_AGENT_BIOGRAPHIE_LENGTH) if biographie else biographie
+
         logger.info(
             f"[CREATE_AGENT] Champs reçus: name={name}, contexte={contexte}, biographie={biographie}, type={type}, profile_photo={profile_photo.filename if profile_photo else None}, user_id={user_id}"
         )
@@ -765,6 +778,19 @@ async def update_agent(
     """Met à jour un agent existant, y compris la photo de profil (GCS), le statut et les email_tags."""
     try:
         agent = _user_can_edit_agent(int(user_id), agent_id, db)
+
+        from validation import (
+            sanitize_text,
+            MAX_AGENT_NAME_LENGTH,
+            MAX_AGENT_CONTEXTE_LENGTH,
+            MAX_AGENT_BIOGRAPHIE_LENGTH,
+        )
+
+        name = sanitize_text(name, MAX_AGENT_NAME_LENGTH)
+        if not name:
+            raise HTTPException(status_code=422, detail="Agent name is required")
+        contexte = sanitize_text(contexte, MAX_AGENT_CONTEXTE_LENGTH) if contexte else contexte
+        biographie = sanitize_text(biographie, MAX_AGENT_BIOGRAPHIE_LENGTH) if biographie else biographie
 
         agent.name = name
         agent.contexte = contexte
