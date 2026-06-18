@@ -2,6 +2,7 @@ import os
 import logging
 import secrets
 import contextvars
+from contextlib import contextmanager
 from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, text, event
 from sqlalchemy import Index, Float
@@ -1326,6 +1327,40 @@ def ensure_llm_usage_table():
         print("ensure_llm_usage_table completed", flush=True)
     except Exception as e:
         print(f"ensure_llm_usage_table failed: {e}", flush=True)
+
+
+# App-wide advisory lock id for serializing startup schema migrations.
+MIGRATION_LOCK_KEY = 727274
+
+
+@contextmanager
+def migration_lock():
+    """Serialize startup schema migrations across concurrent Cloud Run instances.
+
+    statement_timeout bounds the wait so a stuck holder can't hang boot forever;
+    if the lock can't be acquired we proceed anyway (migrations are idempotent).
+    """
+    conn = engine.connect()
+    acquired = False
+    try:
+        try:
+            conn.execute(text("SET statement_timeout = '120s'"))
+            conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": MIGRATION_LOCK_KEY})
+            acquired = True
+            print("migration_lock: acquired", flush=True)
+        except Exception as e:
+            print(f"migration_lock: not acquired, proceeding ({e})", flush=True)
+        yield
+    finally:
+        if acquired:
+            try:
+                conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": MIGRATION_LOCK_KEY})
+            except Exception:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def migrate_existing_company_memberships():
