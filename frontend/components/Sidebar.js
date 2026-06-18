@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
-import { Bot, Users, Building2, Settings, LogOut, User, ChevronsLeft, ChevronsRight, LayoutTemplate, Zap } from 'lucide-react';
+import { Bot, Users, Building2, Settings, LogOut, User, ChevronsLeft, ChevronsRight, LayoutTemplate, Zap, Wallet } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import Image from 'next/image';
 
@@ -46,6 +46,14 @@ export default function Sidebar({ collapsed: controlledCollapsed, onToggle }) {
       ? router.pathname === '/agents' || router.pathname === '/'
       : router.pathname.startsWith(href);
 
+  // Admin-only items appended to the base nav.
+  const navItems = [
+    ...NAV_ITEMS,
+    ...(user?.role === 'admin'
+      ? [{ href: '/admin/llm-cost', labelKey: 'navigation.llmCost', labelFallback: 'Coût LLM', Icon: Wallet }]
+      : []),
+  ];
+
   return (
     <aside className={`${collapsed ? 'w-[68px]' : 'w-[220px]'} shrink-0 flex flex-col bg-white border-r border-gray-200 min-h-screen sticky top-0 transition-[width] duration-200 ease-out`}>
       {/* Brand */}
@@ -77,13 +85,14 @@ export default function Sidebar({ collapsed: controlledCollapsed, onToggle }) {
 
       {/* Nav */}
       <nav className={`flex-1 flex flex-col gap-0.5 px-2 ${collapsed ? 'mt-4' : ''}`}>
-        {NAV_ITEMS.map(({ href, labelKey, Icon }) => {
+        {navItems.map(({ href, labelKey, labelFallback, Icon }) => {
           const active = isActive(href);
+          const label = t(labelKey, { defaultValue: labelFallback });
           return (
             <button
               key={href}
               onClick={() => router.push(href)}
-              title={collapsed ? t(labelKey) : undefined}
+              title={collapsed ? label : undefined}
               className={[
                 'flex items-center w-full rounded-button text-sm font-medium transition-colors',
                 collapsed ? 'justify-center px-2 py-2.5' : 'gap-2.5 px-3 py-2.5 text-left',
@@ -95,7 +104,7 @@ export default function Sidebar({ collapsed: controlledCollapsed, onToggle }) {
               <Icon
                 className={['w-4 h-4 shrink-0', active ? 'text-primary-600' : 'text-gray-400'].join(' ')}
               />
-              {!collapsed && t(labelKey)}
+              {!collapsed && label}
             </button>
           );
         })}
