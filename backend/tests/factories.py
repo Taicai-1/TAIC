@@ -55,7 +55,7 @@ class AgentFactory(factory.Factory):
     name = factory.Sequence(lambda n: f"agent-{n}")
     contexte = "Tu es un assistant de test."
     biographie = "Agent de test"
-    statut = "public"
+    statut = "privé"
     type = "conversationnel"
     llm_provider = "mistral"
 
