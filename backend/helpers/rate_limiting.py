@@ -16,6 +16,7 @@ _api_rate_limit_fallback = {}
 _org_request_rate_limit_fallback = {}
 _2fa_rate_limit_fallback = {}
 _password_change_rate_limit_fallback = {}
+_login_lockout_fallback = {}
 
 # Rate limiting configuration
 _AUTH_LIMIT = 5  # max failed attempts per window
@@ -42,6 +43,10 @@ _2FA_WINDOW = 300  # 5 minutes in seconds
 # Password change rate limiting
 _PASSWORD_CHANGE_LIMIT = 5
 _PASSWORD_CHANGE_WINDOW = 300  # 5 minutes
+
+# Per-account login lockout (complements the per-IP auth limit above)
+_LOGIN_LOCKOUT_LIMIT = 5  # failed logins before the account is locked
+_LOGIN_LOCKOUT_WINDOW = 600  # 10 minutes in seconds
 
 
 def _check_api_rate_limit(user_id: str, action: str, limit: int) -> bool:
@@ -158,6 +163,54 @@ def _record_auth_failure(ip: str):
     attempts = [t for t in attempts if now - t < _AUTH_WINDOW]
     attempts.append(now)
     _auth_rate_limit_fallback[ip] = attempts
+
+
+def _check_login_lockout(user_id: str) -> bool:
+    """Return True if the account is NOT locked (login may proceed). Per-account,
+    complements the per-IP auth limit (which a rotating-IP attacker can evade)."""
+    key = f"rate_limit:login:{user_id}"
+    if redis_client:
+        try:
+            current = redis_client.get(key)
+            current = int(current) if current else 0
+            return current < _LOGIN_LOCKOUT_LIMIT
+        except Exception as e:
+            logger.error(f"Redis login lockout check failed: {e}. Using fallback.")
+    now = time.time()
+    attempts = _login_lockout_fallback.get(user_id, [])
+    attempts = [t for t in attempts if now - t < _LOGIN_LOCKOUT_WINDOW]
+    _login_lockout_fallback[user_id] = attempts
+    return len(attempts) < _LOGIN_LOCKOUT_LIMIT
+
+
+def _record_login_failure(user_id: str):
+    """Record a failed login for an account; locks after _LOGIN_LOCKOUT_LIMIT in the window."""
+    key = f"rate_limit:login:{user_id}"
+    if redis_client:
+        try:
+            pipe = redis_client.pipeline()
+            pipe.incr(key)
+            pipe.expire(key, _LOGIN_LOCKOUT_WINDOW)
+            pipe.execute()
+            return
+        except Exception as e:
+            logger.error(f"Redis login failure record failed: {e}. Using fallback.")
+    now = time.time()
+    attempts = _login_lockout_fallback.get(user_id, [])
+    attempts = [t for t in attempts if now - t < _LOGIN_LOCKOUT_WINDOW]
+    attempts.append(now)
+    _login_lockout_fallback[user_id] = attempts
+
+
+def _clear_login_failures(user_id: str):
+    """Reset the per-account lockout counter after a successful login."""
+    key = f"rate_limit:login:{user_id}"
+    if redis_client:
+        try:
+            redis_client.delete(key)
+        except Exception as e:
+            logger.error(f"Redis login failure clear failed: {e}. Using fallback.")
+    _login_lockout_fallback.pop(user_id, None)
 
 
 def _check_rate_limit(ip: str):

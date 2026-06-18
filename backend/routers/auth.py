@@ -28,6 +28,9 @@ from helpers.rate_limiting import (
     _check_auth_rate_limit,
     _record_auth_failure,
     _check_2fa_rate_limit,
+    _check_login_lockout,
+    _record_login_failure,
+    _clear_login_failures,
 )
 from redis_client import get_cached_user, invalidate_user_cache
 from schemas.auth import (
@@ -133,9 +136,20 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
                 status_code=400, detail="This account uses Google sign-in. Please use the Google button."
             )
 
+        # Per-account lockout: blocks targeted brute-force even across rotating IPs.
+        if not _check_login_lockout(str(db_user.id)):
+            raise HTTPException(
+                status_code=429,
+                detail="Account temporarily locked after too many failed attempts. Please try again later.",
+            )
+
         if not verify_password(user.password, db_user.hashed_password):
             _record_auth_failure(ip)
+            _record_login_failure(str(db_user.id))
             raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        # Password correct → reset the per-account failure counter.
+        _clear_login_failures(str(db_user.id))
 
         # Email verification check (before 2FA)
         if not db_user.email_verified:
