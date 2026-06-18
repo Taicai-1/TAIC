@@ -29,6 +29,28 @@ def generate_text(
     max_tokens: int = 16000,
     timeout: int = 30,
 ) -> str:
+    """Instrumented entry point: calls the Gemini impl and records estimated token usage (WS2).
+
+    Gemini's REST response is parsed through many return paths, so usage is
+    estimated with tiktoken on (prompt, result) rather than instrumenting each.
+    """
+    result = _generate_text_impl(prompt, model_name, temperature, max_tokens, timeout)
+    try:
+        from llm_usage import record_usage, count_tokens
+
+        record_usage("gemini", model_name, count_tokens(prompt), count_tokens(result or ""))
+    except Exception:
+        pass
+    return result
+
+
+def _generate_text_impl(
+    prompt: str,
+    model_name: str = "gemini-2.0-flash",
+    temperature: float = 0.0,
+    max_tokens: int = 16000,
+    timeout: int = 30,
+) -> str:
     """
     Minimal wrapper to call Vertex AI Generative Models (Gemini) REST API.
 

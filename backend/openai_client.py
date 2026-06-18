@@ -310,6 +310,15 @@ def get_chat_response(messages: list, model_id: str = None, gemini_only: bool = 
                 model=model, messages=messages, max_tokens=max_tokens, temperature=0.7
             )
             logger.info("Successfully got response from OpenAI")
+            try:
+                from llm_usage import record_usage
+
+                u = getattr(response, "usage", None)
+                record_usage(
+                    "openai", model, getattr(u, "prompt_tokens", 0) or 0, getattr(u, "completion_tokens", 0) or 0
+                )
+            except Exception:
+                pass
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"Error getting chat response (attempt {attempt + 1}/{max_retries}): {e}")
@@ -580,6 +589,15 @@ def get_chat_response_deterministic(
             logger.info(f"Calling deterministic chat (attempt {attempt + 1}) model={model} temperature={temperature}")
             response = client.chat.completions.create(**kwargs)
             logger.info("Successfully got deterministic response from OpenAI")
+            try:
+                from llm_usage import record_usage
+
+                u = getattr(response, "usage", None)
+                record_usage(
+                    "openai", model, getattr(u, "prompt_tokens", 0) or 0, getattr(u, "completion_tokens", 0) or 0
+                )
+            except Exception:
+                pass
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"Error in deterministic chat (attempt {attempt + 1}): {e}")

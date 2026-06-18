@@ -101,7 +101,20 @@ def generate_text(
     )
 
     if response and response.choices and len(response.choices) > 0:
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        try:
+            from llm_usage import record_usage, count_tokens
+
+            u = getattr(response, "usage", None)
+            if u is not None:
+                record_usage(
+                    "mistral", model_short, getattr(u, "prompt_tokens", 0) or 0, getattr(u, "completion_tokens", 0) or 0
+                )
+            else:
+                record_usage("mistral", model_short, count_tokens(prompt), count_tokens(content or ""))
+        except Exception:
+            pass
+        return content
 
     logger.warning(f"Unexpected Mistral response shape: {response}")
     return str(response)
