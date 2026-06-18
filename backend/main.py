@@ -32,6 +32,7 @@ from database import (
     engine,
     ensure_columns,
     ensure_company_rag_default_folders,
+    ensure_llm_usage_table,
     ensure_pgvector,
     ensure_rls_policies,
     migrate_existing_company_memberships,
@@ -371,6 +372,9 @@ async def startup_event():
         # Add RLS bypass policies for service operations (email ingestion, etc.)
         ensure_rls_policies()
         logger.info("ensure_rls_policies done (%s)", _elapsed())
+        # WS2: LLM usage table + per-company cap column (intentionally NOT in TENANT_TABLES)
+        ensure_llm_usage_table()
+        logger.info("ensure_llm_usage_table done (%s)", _elapsed())
         # Run Alembic migrations to apply any pending schema changes
         try:
             from alembic.config import Config as AlembicConfig
