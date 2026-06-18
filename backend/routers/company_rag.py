@@ -10,7 +10,7 @@ import json
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -42,6 +42,8 @@ def _require_company_id(user_id: str, db: Session) -> int:
 @router.get("/api/company-rag/documents")
 async def list_company_documents(
     folder_id: int = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
@@ -55,7 +57,7 @@ async def list_company_documents(
         if folder_id is not None:
             _folder_or_404(folder_id, company_id, db)  # 404 on foreign/unknown folder (no id-probing)
             q = q.filter(Document.folder_id == folder_id)
-        docs = q.order_by(Document.created_at.desc()).all()
+        docs = q.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
         return {
             "documents": [
                 {
