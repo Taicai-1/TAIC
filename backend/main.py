@@ -397,6 +397,13 @@ async def startup_event():
             logger.info("Data migrations done (%s)", _elapsed())
         logger.info("Database initialization completed successfully (%s total)", _elapsed())
 
+        # WS4: in production, refuse to start if secrets can't be encrypted.
+        if os.getenv("GOOGLE_CLOUD_PROJECT"):
+            from encryption import _get_fernet
+
+            _get_fernet()  # raises RuntimeError if ENCRYPTION_KEY is missing
+            logger.info("ENCRYPTION_KEY validation passed")
+
         # Validate GCS bucket is in EU (data sovereignty check)
         try:
             bucket_name = os.getenv("GCS_BUCKET_NAME", "applydi-documents")
