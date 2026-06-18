@@ -4,6 +4,7 @@ import secrets
 import contextvars
 from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, text, event
+from sqlalchemy import Index, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import UniqueConstraint
@@ -80,6 +81,9 @@ class Company(Base):
         Text, nullable=True
     )  # JSON: [{"id":"uuid","command":"name","prompt":"text","agent_ids":[1,2]}]
 
+    # WS2: per-company monthly LLM spend cap override (USD). NULL = use env default.
+    llm_monthly_cap_usd = Column(Float, nullable=True)
+
     # Encrypted property accessors
     @property
     def org_neo4j_uri(self):
@@ -155,6 +159,32 @@ class Company(Base):
 
     users = relationship("User", back_populates="company")
     memberships = relationship("CompanyMembership", back_populates="company", cascade="all, delete-orphan")
+
+
+class LLMUsageLog(Base):
+    """Append-only record of every LLM call's tokens + estimated cost (WS2).
+
+    Deliberately NOT in TENANT_TABLES / no RLS: usage is read app-side filtered
+    by company_id; keeping it RLS-free avoids breaking any non-request-context
+    read. Source of truth for the monthly per-company spend cap.
+    """
+
+    __tablename__ = "llm_usage_logs"
+    __table_args__ = (
+        Index("ix_llm_usage_company_created", "company_id", "created_at"),
+        Index("ix_llm_usage_agent_created", "agent_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, nullable=True)  # nullable: personal users / no org
+    user_id = Column(Integer, nullable=True)
+    agent_id = Column(Integer, nullable=True)
+    provider = Column(String(32), nullable=False)
+    model = Column(String(100), nullable=False)
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    cost_usd = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class User(Base):
@@ -1267,6 +1297,35 @@ def ensure_rls_policies():
         print("ensure_rls_policies completed", flush=True)
     except Exception as e:
         print(f"ensure_rls_policies failed: {e}", flush=True)
+
+
+def ensure_llm_usage_table():
+    """Create llm_usage_logs + Company.llm_monthly_cap_usd on existing DBs (idempotent)."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SET lock_timeout = '5s'"))
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS llm_usage_logs ("
+                    "id SERIAL PRIMARY KEY, company_id INTEGER, user_id INTEGER, agent_id INTEGER, "
+                    "provider VARCHAR(32) NOT NULL, model VARCHAR(100) NOT NULL, "
+                    "prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, "
+                    "cost_usd DOUBLE PRECISION NOT NULL DEFAULT 0.0, created_at TIMESTAMP DEFAULT NOW())"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_llm_usage_company_created ON llm_usage_logs (company_id, created_at)"
+                )
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_llm_usage_agent_created ON llm_usage_logs (agent_id, created_at)")
+            )
+            conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS llm_monthly_cap_usd DOUBLE PRECISION"))
+            conn.commit()
+        print("ensure_llm_usage_table completed", flush=True)
+    except Exception as e:
+        print(f"ensure_llm_usage_table failed: {e}", flush=True)
 
 
 def migrate_existing_company_memberships():
