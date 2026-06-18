@@ -27,6 +27,7 @@
     "organization": "Organisation",
     "templates": "Templates",
     "automations": "Automatisations",
+    "llmCost": "Coût LLM",
     "logout": "Déconnexion",
     "settings": "Paramètres",
     "expand": "Déplier",

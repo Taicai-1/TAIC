@@ -27,6 +27,7 @@
     "organization": "Organization",
     "templates": "Templates",
     "automations": "Automations",
+    "llmCost": "LLM cost",
     "logout": "Logout",
     "settings": "Settings",
     "expand": "Expand",
