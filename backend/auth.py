@@ -1,5 +1,7 @@
 import jwt
 import bcrypt
+import json
+import secrets as _secrets
 from datetime import datetime, timedelta
 from fastapi import HTTPException, Request
 import os
@@ -21,6 +23,10 @@ def get_jwt_secret():
 SECRET_KEY = get_jwt_secret()
 ALGORITHM = "HS256"
 
+# WS4: configurable session-token lifetime (default 4h, was 8h). Refresh tokens = backlog.
+ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "4"))
+ACCESS_TOKEN_MAX_AGE = ACCESS_TOKEN_EXPIRE_HOURS * 3600
+
 # Restricted token types that must NOT access application endpoints
 RESTRICTED_TOKEN_TYPES = {"pre_2fa", "needs_2fa_setup"}
 
@@ -41,10 +47,38 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(hours=8)
+        expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def generate_backup_codes(n: int = 10):
+    """Return (plaintext_codes, json_of_bcrypt_hashes). Show plaintext to the user ONCE."""
+    codes = [f"{_secrets.token_hex(4)}-{_secrets.token_hex(4)}" for _ in range(n)]
+    hashes = [hash_password(c) for c in codes]
+    return codes, json.dumps(hashes)
+
+
+def verify_and_consume_backup_code(code: str, backup_codes_json):
+    """Check `code` against stored bcrypt hashes.
+
+    On match: return (True, new_json_without_the_used_code). On no match: (False, None).
+    """
+    if not backup_codes_json:
+        return False, None
+    try:
+        hashes = json.loads(backup_codes_json)
+    except Exception:
+        return False, None
+    for h in hashes:
+        try:
+            if verify_password(code.strip(), h):
+                remaining = [x for x in hashes if x != h]
+                return True, json.dumps(remaining)
+        except Exception:
+            continue
+    return False, None
 
 
 def _extract_token(request: Request) -> str:
