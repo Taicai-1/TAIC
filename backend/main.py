@@ -35,6 +35,7 @@ from database import (
     ensure_llm_usage_table,
     ensure_pgvector,
     ensure_rls_policies,
+    migration_lock,
     migrate_existing_company_memberships,
     migrate_existing_recaps,
     migrate_teams_to_members,
@@ -358,40 +359,42 @@ async def startup_event():
 
     try:
         logger.info("Initializing database...")
-        # Create tables for brand-new databases (Alembic needs the schema to exist)
-        Base.metadata.create_all(bind=engine)
-        logger.info("create_all done (%s)", _elapsed())
-        # pgvector extension must exist before Alembic migrations touch embedding columns
-        ensure_pgvector()
-        logger.info("pgvector done (%s)", _elapsed())
-        # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
-        ensure_columns()
-        logger.info("ensure_columns done (%s)", _elapsed())
-        ensure_company_rag_default_folders()
-        logger.info("ensure_company_rag_default_folders done (%s)", _elapsed())
-        # Add RLS bypass policies for service operations (email ingestion, etc.)
-        ensure_rls_policies()
-        logger.info("ensure_rls_policies done (%s)", _elapsed())
-        # WS2: LLM usage table + per-company cap column (intentionally NOT in TENANT_TABLES)
-        ensure_llm_usage_table()
-        logger.info("ensure_llm_usage_table done (%s)", _elapsed())
-        # Run Alembic migrations to apply any pending schema changes
-        try:
-            from alembic.config import Config as AlembicConfig
-            from alembic import command as alembic_command
+        # WS3: serialize all schema work across concurrent Cloud Run instances.
+        with migration_lock():
+            # Create tables for brand-new databases (Alembic needs the schema to exist)
+            Base.metadata.create_all(bind=engine)
+            logger.info("create_all done (%s)", _elapsed())
+            # pgvector extension must exist before Alembic migrations touch embedding columns
+            ensure_pgvector()
+            logger.info("pgvector done (%s)", _elapsed())
+            # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
+            ensure_columns()
+            logger.info("ensure_columns done (%s)", _elapsed())
+            ensure_company_rag_default_folders()
+            logger.info("ensure_company_rag_default_folders done (%s)", _elapsed())
+            # Add RLS bypass policies for service operations (email ingestion, etc.)
+            ensure_rls_policies()
+            logger.info("ensure_rls_policies done (%s)", _elapsed())
+            # WS2: LLM usage table + per-company cap column (intentionally NOT in TENANT_TABLES)
+            ensure_llm_usage_table()
+            logger.info("ensure_llm_usage_table done (%s)", _elapsed())
+            # Run Alembic migrations to apply any pending schema changes
+            try:
+                from alembic.config import Config as AlembicConfig
+                from alembic import command as alembic_command
 
-            alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-            alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
-            alembic_command.upgrade(alembic_cfg, "head")
-            logger.info("Alembic migrations done (%s)", _elapsed())
-        except Exception as e:
-            # A failed migration blocks every later revision: the schema silently
-            # drifts from the models. Log loudly so it never goes unnoticed again.
-            logger.error("ALEMBIC MIGRATION FAILED (%s) — schema may be outdated: %s", _elapsed(), e, exc_info=True)
-        migrate_existing_company_memberships()
-        migrate_existing_recaps()
-        migrate_teams_to_members()
-        logger.info("Data migrations done (%s)", _elapsed())
+                alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+                alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
+                alembic_command.upgrade(alembic_cfg, "head")
+                logger.info("Alembic migrations done (%s)", _elapsed())
+            except Exception as e:
+                # A failed migration blocks every later revision: the schema silently
+                # drifts from the models. Log loudly so it never goes unnoticed again.
+                logger.error("ALEMBIC MIGRATION FAILED (%s) — schema may be outdated: %s", _elapsed(), e, exc_info=True)
+            migrate_existing_company_memberships()
+            migrate_existing_recaps()
+            migrate_teams_to_members()
+            logger.info("Data migrations done (%s)", _elapsed())
         logger.info("Database initialization completed successfully (%s total)", _elapsed())
 
         # Validate GCS bucket is in EU (data sovereignty check)
