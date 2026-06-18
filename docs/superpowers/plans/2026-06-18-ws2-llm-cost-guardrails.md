@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Track every LLM call's tokens + estimated cost per tenant, and enforce spend caps (monthly per company, daily per public agent) so no client — and especially no bot hitting the public chat endpoint — can run up an unbounded OpenAI/Mistral/Gemini bill.
+**Goal:** Track every LLM call's tokens + estimated cost per tenant, and enforce a monthly per-company spend cap so no client (or a bug/compromised account) can run up an unbounded OpenAI/Mistral/Gemini bill.
+
+> **UPDATE 2026-06-18:** The anonymous public-agent endpoints were removed entirely (separate `feature/remove-public-agents`, merged to dev) — they were the main abuse vector. So WS2 no longer needs a per-public-agent daily cap; it is now just **usage logging + a monthly per-company cap + a GCP billing budget**. Steps mentioning the public-agent cap / `routers/public.py` enforcement / `is_public` are DROPPED.
 
 **Architecture:** One append-only `LLMUsageLog` table is the source of truth. A contextvar carries (company_id, user_id, agent_id) set at the request boundary. Provider clients call `record_usage(...)` right after a successful response (best-effort, never breaks the request). Cap checks run at the endpoint BEFORE the LLM call and raise 429; they SUM `LLMUsageLog` over the current period (indexed query) — no Redis sync to get wrong. Caps are env defaults with an optional per-company override column.
 
@@ -12,7 +14,7 @@
 - **Source of truth = `LLMUsageLog` DB rows.** Cap check = `SELECT COALESCE(SUM(cost_usd),0)` over the period. Cheap (indexed), always correct, degrades fine without Redis. Redis caching is a documented backlog optimization, NOT in v1.
 - **`LLMUsageLog` is deliberately NOT in `TENANT_TABLES` (no RLS).** The public-agent daily-cap SUM runs with no auth/`company_id` GUC, so RLS would block it. Isolation is app-level: every read filters `company_id`/`agent_id` explicitly. (Same rationale as the documented `company_invitations`/questionnaire exceptions.)
 - **Token sources:** OpenAI returns exact `response.usage`; Mistral/Gemini and all streaming paths estimate via tiktoken (`cl100k_base`). Estimates are clearly acceptable for cost-guardrail purposes.
-- **Caps:** `LLM_MONTHLY_CAP_USD_DEFAULT` (per company, default 50.0) and `LLM_PUBLIC_AGENT_DAILY_CAP_USD` (per public agent, default 5.0), both env-overridable. Per-company override via nullable `Company.llm_monthly_cap_usd`.
+- **Cap:** `LLM_MONTHLY_CAP_USD_DEFAULT` (per company, default **300.0**), env-overridable, with a per-company override via nullable `Company.llm_monthly_cap_usd`. This is a generous anti-runaway ceiling (NOT a pricing tier); set each real client's value per their contract. No public-agent cap (feature removed).
 
 ---
 
