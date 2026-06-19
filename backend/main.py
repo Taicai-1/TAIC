@@ -33,6 +33,7 @@ from database import (
     ensure_columns,
     ensure_company_rag_default_folders,
     ensure_llm_usage_table,
+    ensure_support_tables,
     ensure_pgvector,
     ensure_rls_policies,
     migration_lock,
@@ -40,6 +41,7 @@ from database import (
     migrate_existing_recaps,
     migrate_teams_to_members,
     set_current_company_id,
+    set_support_session,
 )
 
 # ---------------------------------------------------------------------------
@@ -378,6 +380,9 @@ async def startup_event():
             # WS2: LLM usage table + per-company cap column (intentionally NOT in TENANT_TABLES)
             ensure_llm_usage_table()
             logger.info("ensure_llm_usage_table done (%s)", _elapsed())
+            # Support account: is_support column + support_audit_logs
+            ensure_support_tables()
+            logger.info("ensure_support_tables done (%s)", _elapsed())
             # Run Alembic migrations to apply any pending schema changes
             try:
                 from alembic.config import Config as AlembicConfig
