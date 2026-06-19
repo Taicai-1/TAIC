@@ -668,35 +668,36 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request, db: Sess
         logger.warning(f"Rate limit exceeded for forgot-password from IP: {ip}")
         raise HTTPException(status_code=429, detail="Too many password reset attempts. Please try again in 15 minutes.")
 
+    # Security: never reveal whether an account exists for this email (no account
+    # enumeration). Only do the work when the user exists; always return the same
+    # generic response. Mirrors the resend-verification endpoint.
     user = db.query(User).filter(User.email == req.email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user:
+        # Generate token and hash it before storing (prevent token theft if DB compromised)
+        token = str(uuid4())
+        token_hash = hash_reset_token(token)
+        expires_at = datetime.utcnow() + timedelta(minutes=15)
 
-    # Generate token and hash it before storing (security: prevent token theft if DB compromised)
-    token = str(uuid4())
-    token_hash = hash_reset_token(token)
-    expires_at = datetime.utcnow() + timedelta(minutes=15)
+        # Store HASHED token in DB
+        reset_token = PasswordResetToken(
+            user_id=user.id,
+            token=token_hash,  # Store hash, not plaintext
+            expires_at=expires_at,
+            used=False,
+        )
+        db.add(reset_token)
+        db.commit()
 
-    # Store HASHED token in DB
-    reset_token = PasswordResetToken(
-        user_id=user.id,
-        token=token_hash,  # Store hash, not plaintext
-        expires_at=expires_at,
-        used=False,
-    )
-    db.add(reset_token)
-    db.commit()
+        # Send PLAINTEXT token in email (user needs it to reset password)
+        frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
+        reset_link = f"{frontend_url}/reset-password?token={token}"
+        try:
+            send_password_reset_email(user.email, reset_link)
+            logger.info(f"Password reset email sent to {user.email}")
+        except Exception as e:
+            logger.error(f"Erreur lors de l'envoi de l'email: {e}")
 
-    # Send PLAINTEXT token in email (user needs it to reset password)
-    frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
-    reset_link = f"{frontend_url}/reset-password?token={token}"
-    try:
-        send_password_reset_email(user.email, reset_link)
-        logger.info(f"Password reset email sent to {user.email}")
-        return {"message": "Un lien de réinitialisation a été envoyé par email"}
-    except Exception as e:
-        logger.error(f"Erreur lors de l'envoi de l'email: {e}")
-        return {"message": "Erreur lors de l'envoi de l'email"}
+    return {"message": "Si un compte existe pour cet email, un lien de réinitialisation a été envoyé."}
 
 
 # Endpoint pour réinitialiser le mot de passe (DB version)
