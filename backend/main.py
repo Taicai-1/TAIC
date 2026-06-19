@@ -221,6 +221,7 @@ async def request_id_middleware(request: Request, call_next):
 async def tenant_isolation_middleware(request: Request, call_next):
     """Extract company_id from JWT and set it in contextvars for RLS."""
     set_current_company_id(None)
+    set_support_session(False)
     import jwt as pyjwt
 
     try:
@@ -239,8 +240,24 @@ async def tenant_isolation_middleware(request: Request, call_next):
                 db = SessionLocal()
                 try:
                     user = db.query(User).filter(User.id == int(user_id)).first()
-                    if user and user.company_id:
-                        set_current_company_id(user.company_id)
+                    if user:
+                        effective = user.company_id
+                        support_active = False
+                        if getattr(user, "is_support", False):
+                            # Support account: the active company is the JWT claim
+                            # (only honored because is_support is re-checked here).
+                            claim = payload.get("active_company_id")
+                            if claim is not None:
+                                from database import Company
+
+                                exists = db.query(Company.id).filter(Company.id == int(claim)).first()
+                                effective = int(claim) if exists else None
+                            else:
+                                effective = None
+                            support_active = effective is not None
+                        if effective is not None:
+                            set_current_company_id(effective)
+                        set_support_session(support_active)
                 finally:
                     db.close()
     except pyjwt.PyJWTError:
