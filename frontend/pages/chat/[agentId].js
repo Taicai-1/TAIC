@@ -33,64 +33,10 @@ import {
   Sparkles,
   Users
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import MarkdownRenderer from "../../components/MarkdownRenderer";
+import ActionProposal from '../../components/ActionProposal';
 
-// Image block rendered inside markdown (generated images)
-const MarkdownImage = ({ src, alt, t }) => (
-  <div className="my-3">
-    <img src={src} alt={alt} className="max-w-full rounded-button shadow-card border border-gray-200"
-         style={{ maxHeight: '512px', objectFit: 'contain' }} loading="lazy" />
-    <div className="flex gap-2 mt-2">
-      <a href={src} download className="px-3 py-1.5 bg-primary-600 text-white rounded-sm hover:bg-primary-700 text-sm">
-        {t('chat:messages.downloadImage')}
-      </a>
-      <button className="px-3 py-1.5 bg-gray-200 text-gray-800 rounded-sm hover:bg-gray-300 text-sm"
-              onClick={() => window.open(src, '_blank')}>
-        {t('chat:messages.fullSize')}
-      </button>
-    </div>
-  </div>
-);
 
-// Composant pour afficher du texte avec Markdown (safe by default, no dangerouslySetInnerHTML)
-const MarkdownText = ({ children }) => {
-  const { t } = useTranslation(['chat']);
-  if (!children) return null;
-  return (
-    <div className="leading-relaxed markdown-content">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          strong: ({ node, ...props }) => <strong {...props} />,
-          em: ({ node, ...props }) => <em {...props} />,
-          code: ({ node, ...props }) => (
-            <code className="px-1 py-0.5 bg-gray-100 rounded text-sm" {...props} />
-          ),
-          ul: ({ node, ...props }) => (
-            <ul className="list-disc list-inside my-2" style={{ lineHeight: 1.4 }} {...props} />
-          ),
-          li: ({ node, ...props }) => <li className="ml-4" {...props} />,
-          p: ({ node, ...props }) => <p className="mb-1" {...props} />,
-          a: ({ node, ...props }) => (
-            <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
-          ),
-          img: ({ node, ...props }) => <MarkdownImage {...props} t={t} />,
-          table: ({ node, ...props }) => (
-            <div className="overflow-x-auto my-3">
-              <table className="min-w-full border-collapse border border-gray-200 rounded-sm text-sm" {...props} />
-            </div>
-          ),
-          thead: ({ node, ...props }) => <thead className="bg-gray-50" {...props} />,
-          th: ({ node, ...props }) => <th className="border border-gray-200 px-3 py-2 text-left font-semibold text-gray-700" {...props} />,
-          td: ({ node, ...props }) => <td className="border border-gray-200 px-3 py-2 text-gray-700" {...props} />,
-        }}
-      >
-        {children}
-      </ReactMarkdown>
-    </div>
-  );
-};
 
 // Single source card with expand/collapse
 const SourceCard = ({ src, t }) => {
@@ -410,6 +356,7 @@ export default function AgentChatPage() {
         ...m,
         sources: m.sources || undefined,
         graph_data: m.graph_data || undefined,
+        action_proposal: m.action_proposal || undefined,
       })));
     } catch (e) {
       setMessages([]);
@@ -495,7 +442,9 @@ const handleDeleteConversation = async (convId) => {
 
       const slashSources = resAsk.data.sources || [];
       const slashGraphData = resAsk.data.graph_data || null;
-      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources, graph_data: slashGraphData };
+      const slashActionProposal = resAsk.data.action_proposal || null;
+      const slashSteps = resAsk.data.steps || [];
+      const assistantMsg = { role: 'agent', content: resAsk.data.answer, sources: slashSources, graph_data: slashGraphData, action_proposal: slashActionProposal, steps: slashSteps };
       setMessages(prev => [...prev, assistantMsg]);
       if (slashSources.length > 0) {
         setSelectedSources(slashSources);
@@ -508,6 +457,7 @@ const handleDeleteConversation = async (convId) => {
         content: resAsk.data.answer,
         sources_json: slashSources.length > 0 ? JSON.stringify(slashSources) : undefined,
         graph_data_json: slashGraphData ? JSON.stringify(slashGraphData) : undefined,
+        action_proposal_json: slashActionProposal ? JSON.stringify(slashActionProposal) : undefined,
       });
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Error');
@@ -611,6 +561,7 @@ const handleDeleteConversation = async (convId) => {
       let iaAnswer = "";
       let iaSources = [];
       let iaGraphData = null;
+      let iaActionProposal = null;
 
       try {
         const controller = new AbortController();
@@ -648,8 +599,9 @@ const handleDeleteConversation = async (convId) => {
             iaAnswer = data.full_text || iaAnswer;
             iaSources = data.sources || [];
             iaGraphData = data.graph_data || null;
+            iaActionProposal = data.action_proposal || null;
             setMessages(prev => prev.map((m, i) =>
-              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData } : m
+              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData, action_proposal: iaActionProposal } : m
             ));
             // Auto-open sources panel if sources exist
             if (iaSources.length > 0) {
@@ -681,8 +633,9 @@ const handleDeleteConversation = async (convId) => {
           iaAnswer = resAsk.data.answer || t('chat:messages.aiError');
           iaSources = resAsk.data.sources || [];
           iaGraphData = resAsk.data.graph_data || null;
+          iaActionProposal = resAsk.data.action_proposal || null;
           setMessages(prev => prev.map((m, i) =>
-            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData } : m
+            i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false, sources: iaSources, graph_data: iaGraphData, action_proposal: iaActionProposal } : m
           ));
           // Auto-open sources panel if sources exist
           if (iaSources.length > 0) {
@@ -739,7 +692,8 @@ const handleDeleteConversation = async (convId) => {
           role: "agent",
           content: iaAnswer,
           sources_json: iaSources.length > 0 ? JSON.stringify(iaSources) : undefined,
-          graph_data_json: iaGraphData ? JSON.stringify(iaGraphData) : undefined
+          graph_data_json: iaGraphData ? JSON.stringify(iaGraphData) : undefined,
+          action_proposal_json: iaActionProposal ? JSON.stringify(iaActionProposal) : undefined,
         });
         // Update with server-assigned id
         setMessages(prev => prev.map((m, i) =>
@@ -1054,7 +1008,7 @@ const handleDeleteConversation = async (convId) => {
                     <Bot className="w-3.5 h-3.5 text-primary-600" />
                   </div>
                 )}
-                <div className={`rounded-card px-5 py-3.5 shadow-subtle max-w-[70%] whitespace-pre-line overflow-hidden transition-all duration-200 ${
+                <div className={`rounded-card px-5 py-3.5 shadow-subtle max-w-[70%] overflow-hidden transition-all duration-200 ${
                   msg.role === "user"
                     ? "bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-br-none"
                     : msg.role === "system"
@@ -1097,8 +1051,24 @@ const handleDeleteConversation = async (convId) => {
                     <>
                       {msg.role === "agent" ? (
                         <>
-                          <MarkdownText>{msg.content}</MarkdownText>
+                          <MarkdownRenderer>{msg.content}</MarkdownRenderer>
                           {msg.streaming && <span className="inline-block w-2 h-5 bg-primary-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
+                          {msg.action_proposal && (
+                            <ActionProposal
+                              proposal={msg.action_proposal}
+                              onResult={(result) => {}}
+                              onContinuation={(continuation) => {
+                                if (continuation.answer) {
+                                  setMessages(prev => [...prev, {
+                                    role: 'agent',
+                                    content: continuation.answer,
+                                    sources: [],
+                                    action_proposal: continuation.action_proposal || undefined,
+                                  }]);
+                                }
+                              }}
+                            />
+                          )}
                         </>
                       ) : (
                         <div className="leading-relaxed whitespace-pre-line">{msg.content}</div>

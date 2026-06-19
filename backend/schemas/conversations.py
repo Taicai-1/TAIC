@@ -26,6 +26,8 @@ class MessageCreate(BaseModel):
     content: str
     sources_json: Optional[str] = None
     graph_data_json: Optional[str] = None
+    contributions_json: Optional[str] = None
+    action_proposal_json: Optional[str] = None
 
 
 class MessageFeedbackRequest(BaseModel):

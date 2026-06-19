@@ -118,7 +118,7 @@ def _sentence_split(text: str, max_tokens: int) -> List[str]:
             sentences = sent_tokenize(para)
         except Exception:
             # Fallback: split on ". " then " " for very broken text
-            sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', para) if s.strip()]
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", para) if s.strip()]
             if not sentences:
                 sentences = [para]
         for sent in sentences:

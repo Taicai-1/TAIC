@@ -29,6 +29,28 @@ def generate_text(
     max_tokens: int = 16000,
     timeout: int = 30,
 ) -> str:
+    """Instrumented entry point: calls the Gemini impl and records estimated token usage (WS2).
+
+    Gemini's REST response is parsed through many return paths, so usage is
+    estimated with tiktoken on (prompt, result) rather than instrumenting each.
+    """
+    result = _generate_text_impl(prompt, model_name, temperature, max_tokens, timeout)
+    try:
+        from llm_usage import record_usage, count_tokens
+
+        record_usage("gemini", model_name, count_tokens(prompt), count_tokens(result or ""))
+    except Exception:
+        pass
+    return result
+
+
+def _generate_text_impl(
+    prompt: str,
+    model_name: str = "gemini-2.0-flash",
+    temperature: float = 0.0,
+    max_tokens: int = 16000,
+    timeout: int = 30,
+) -> str:
     """
     Minimal wrapper to call Vertex AI Generative Models (Gemini) REST API.
 
@@ -396,6 +418,207 @@ def generate_text_stream(
             except Exception as e:
                 logger.debug(f"Could not parse Gemini SSE chunk: {e}")
                 continue
+
+
+def _resolve_model(model_name: str) -> str:
+    """Resolve a model name to a concrete Vertex model id."""
+    if isinstance(model_name, str) and model_name.startswith("gemini:"):
+        model_short = model_name.split(":", 1)[1]
+    else:
+        model_short = model_name or ""
+
+    ALIASES = {
+        "flash-lite": "gemini-2.0-flash",
+        "gemini-flash-lite": "gemini-2.0-flash",
+        "gemini-2.0-flash": "gemini-2.0-flash",
+        "chat-bison@001": "chat-bison@001",
+        "default": os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.0-flash"),
+        "": os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.0-flash"),
+    }
+    if isinstance(model_short, str):
+        ms_lower = model_short.lower()
+        if ms_lower in ALIASES:
+            model_short = ALIASES[ms_lower]
+
+    ALIAS_MAP = {
+        "gemini-2.0-flash-lite": "gemini-2.0-flash-lite-001",
+        "gemini-2.0-flash": "gemini-2.0-flash-001",
+        "gemini-1.5-flash": "gemini-1.5-flash@001",
+        "gemini-2.5-flash": "gemini-2.0-flash-001",
+    }
+    resolved = ALIAS_MAP.get(model_short, model_short)
+    if resolved and resolved.lower().startswith("gemini") and "@" not in resolved and "-" not in resolved:
+        resolved = f"{resolved}@001"
+    return resolved
+
+
+def _get_session_and_project():
+    """Return (AuthorizedSession, project_id) using ADC."""
+    import google.auth
+    from google.auth.transport.requests import AuthorizedSession
+
+    project, _ = _get_project_and_location()
+    credentials, proj = google.auth.default()
+    if not project:
+        project = proj
+    if not credentials:
+        raise Exception("No application default credentials available")
+    session = AuthorizedSession(credentials)
+    predict_project = project or proj or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not predict_project:
+        raise RuntimeError("Unable to determine GCP project for Vertex API")
+    return session, predict_project
+
+
+def _messages_to_gemini_contents(messages: list[dict]) -> list[dict]:
+    """Convert OpenAI-style messages to Vertex AI contents format.
+
+    Maps roles: system/user -> user, assistant -> model, tool -> user (functionResponse).
+    """
+    contents = []
+    for msg in messages:
+        role = msg.get("role", "user")
+
+        # Handle tool result messages (after a function call)
+        if role == "tool":
+            # Extract tool name from tool_call_id by looking at the preceding assistant message
+            tool_name = msg.get("name", "tool")
+            # Try to find the tool name from the preceding assistant message's tool_calls
+            if not tool_name or tool_name == "tool":
+                tc_id = msg.get("tool_call_id", "")
+                for prev in reversed(contents):
+                    if prev.get("role") == "model":
+                        for part in prev.get("parts", []):
+                            if "functionCall" in part:
+                                tool_name = part["functionCall"].get("name", "tool")
+                                break
+                        break
+            contents.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "functionResponse": {
+                                "name": tool_name,
+                                "response": {"result": msg.get("content", "")},
+                            }
+                        }
+                    ],
+                }
+            )
+            continue
+
+        # Handle assistant messages that contain tool_calls (OpenAI format)
+        if role == "assistant" and msg.get("tool_calls"):
+            tc = msg["tool_calls"][0]  # take first tool call
+            func = tc.get("function", {})
+            parts = []
+            if msg.get("content"):
+                parts.append({"text": msg["content"]})
+            args = func.get("arguments", "{}")
+            if isinstance(args, str):
+                import json as _json
+
+                try:
+                    args = _json.loads(args)
+                except Exception:
+                    args = {}
+            parts.append(
+                {
+                    "functionCall": {
+                        "name": func.get("name", ""),
+                        "args": args,
+                    }
+                }
+            )
+            contents.append({"role": "model", "parts": parts})
+            continue
+
+        # Regular text messages
+        gemini_role = "model" if role == "assistant" else "user"
+        contents.append(
+            {
+                "role": gemini_role,
+                "parts": [{"text": msg.get("content", "")}],
+            }
+        )
+    return contents
+
+
+def generate_with_tools(
+    messages: list[dict],
+    tools: list[dict],
+    model_name: str = "gemini-2.0-flash",
+    temperature: float = 0.7,
+    max_tokens: int = 16000,
+    timeout: int = 60,
+) -> dict:
+    """Call Vertex AI generateContent with function calling support.
+
+    Args:
+        messages: OpenAI-style messages list.
+        tools: List of tools in OpenAI format (type: function, function: {name, description, parameters}).
+        model_name: Gemini model name.
+
+    Returns:
+        dict with keys:
+          - "content": str | None (text content if any)
+          - "tool_call": dict | None ({"name": str, "arguments": dict} if function call)
+    """
+    resolved_model = _resolve_model(model_name)
+    session, predict_project = _get_session_and_project()
+    _, location = _get_project_and_location()
+
+    url = (
+        f"https://{location}-aiplatform.googleapis.com/v1/projects/{predict_project}"
+        f"/locations/{location}/publishers/google/models/{resolved_model}:generateContent"
+    )
+
+    # Convert messages to Gemini contents format
+    contents = _messages_to_gemini_contents(messages)
+
+    # Convert OpenAI tool format to Vertex functionDeclarations
+    function_declarations = []
+    for tool in tools:
+        func = tool.get("function", {})
+        function_declarations.append(
+            {
+                "name": func.get("name", ""),
+                "description": func.get("description", ""),
+                "parameters": func.get("parameters", {}),
+            }
+        )
+
+    body = {
+        "contents": contents,
+        "tools": [{"functionDeclarations": function_declarations}],
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
+    }
+
+    logger.info(f"Calling Vertex generateContent with tools: model={resolved_model}")
+    resp = session.post(url, json=body, timeout=timeout)
+    if resp.status_code >= 400:
+        logger.error(f"Vertex generateContent (tools) non-2xx status {resp.status_code}: {resp.text}")
+    resp.raise_for_status()
+    data = resp.json()
+
+    # Parse the response
+    candidates = data.get("candidates", [])
+    if not candidates:
+        return {"content": None, "tool_call": None}
+
+    parts = candidates[0].get("content", {}).get("parts", [])
+    text_content = None
+    tool_call = None
+
+    for part in parts:
+        if "functionCall" in part:
+            fc = part["functionCall"]
+            tool_call = {"name": fc.get("name", ""), "arguments": fc.get("args", {})}
+        elif "text" in part:
+            text_content = part["text"]
+
+    return {"content": text_content, "tool_call": tool_call}
 
 
 def generate_raw(

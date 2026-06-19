@@ -1,0 +1,18 @@
+{
+  "loading": "Loading…",
+  "notFound": "Questionnaire not found or invalid link.",
+  "alreadyCompleted": "You have already answered this questionnaire. Thank you!",
+  "form": {
+    "nameLabel": "Your name (optional)",
+    "namePlaceholder": "John Smith",
+    "required": "This question is required",
+    "openPlaceholder": "Your answer…",
+    "submit": "Submit my answers",
+    "submitting": "Submitting…"
+  },
+  "success": {
+    "title": "Thank you for your answers!",
+    "message": "Your answers have been saved. You can close this page."
+  },
+  "error": "Something went wrong. Please try again."
+}

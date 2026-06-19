@@ -12,6 +12,18 @@ from database import (
     Company,
     CompanyMembership,
     AgentShare,
+    AgentTemplate,
+    AgentTemplateDocument,
+    Team,
+    TeamMember,
+    ActionExecution,
+    UserGoogleToken,
+    Questionnaire,
+    QuestionnaireQuestion,
+    QuestionnaireResponse,
+    QuestionnaireAnswer,
+    Mission,
+    MissionEvent,
 )
 from auth import hash_password
 
@@ -43,7 +55,7 @@ class AgentFactory(factory.Factory):
     name = factory.Sequence(lambda n: f"agent-{n}")
     contexte = "Tu es un assistant de test."
     biographie = "Agent de test"
-    statut = "public"
+    statut = "privé"
     type = "conversationnel"
     llm_provider = "mistral"
 
@@ -92,3 +104,117 @@ class CompanyMembershipFactory(factory.Factory):
         model = CompanyMembership
 
     role = "member"
+
+
+class AgentTemplateFactory(factory.Factory):
+    class Meta:
+        model = AgentTemplate
+
+    name = factory.Sequence(lambda n: f"template-{n}")
+    description = "Test template description"
+    category = "Tech"
+    icon = "Monitor"
+    default_contexte = "Tu es un expert technique."
+    default_biographie = "Assistant technique"
+    default_type = "conversationnel"
+
+
+class TeamFactory(factory.Factory):
+    class Meta:
+        model = Team
+
+    name = factory.Sequence(lambda n: f"team-{n}")
+    contexte = "Equipe de test"
+
+
+class TeamMemberFactory(factory.Factory):
+    class Meta:
+        model = TeamMember
+
+    role = "member"
+    specialization = None
+    position = 0
+
+
+class AgentTemplateDocumentFactory(factory.Factory):
+    class Meta:
+        model = AgentTemplateDocument
+
+
+class ActionExecutionFactory(factory.Factory):
+    class Meta:
+        model = ActionExecution
+
+    plugin_name = "google_docs"
+    action_name = "create_doc"
+    action_params = '{"title": "Test Doc"}'
+    status = "pending_confirmation"
+
+
+class UserGoogleTokenFactory(factory.Factory):
+    class Meta:
+        model = UserGoogleToken
+
+    _access_token = "test-access-token"
+    _refresh_token = "test-refresh-token"
+    token_expiry = factory.LazyFunction(
+        lambda: __import__("datetime").datetime.utcnow() + __import__("datetime").timedelta(hours=1)
+    )
+    granted_scopes = '["https://www.googleapis.com/auth/documents"]'
+
+
+class QuestionnaireFactory(factory.Factory):
+    class Meta:
+        model = Questionnaire
+
+    title = factory.Sequence(lambda n: f"questionnaire-{n}")
+    description = "Questionnaire de test"
+
+
+class QuestionnaireQuestionFactory(factory.Factory):
+    class Meta:
+        model = QuestionnaireQuestion
+
+    question_text = "Quelle est votre couleur préférée ?"
+    question_type = "open"
+    options = None
+    position = 0
+    required = True
+
+
+class QuestionnaireResponseFactory(factory.Factory):
+    class Meta:
+        model = QuestionnaireResponse
+
+    respondent_email = factory.Sequence(lambda n: f"respondent{n}@test.com")
+    token = factory.LazyFunction(lambda: __import__("secrets").token_urlsafe(32))
+    status = "pending"
+    email_sent = False
+
+
+class QuestionnaireAnswerFactory(factory.Factory):
+    class Meta:
+        model = QuestionnaireAnswer
+
+    answer_text = "Bleu"
+
+
+class MissionFactory(factory.Factory):
+    class Meta:
+        model = Mission
+
+    name = factory.Sequence(lambda n: f"mission-{n}")
+    objective = "Réussir le lancement du produit."
+    status = "active"
+    recap_enabled = True
+    recap_weekday = 0
+    recap_hour = 8
+
+
+class MissionEventFactory(factory.Factory):
+    class Meta:
+        model = MissionEvent
+
+    title = factory.Sequence(lambda n: f"event-{n}")
+    description = "Détail de l'évènement."
+    source = "upload"

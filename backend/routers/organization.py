@@ -24,6 +24,7 @@ from database import (
     CompanyMembership,
     CompanyInvitation,
     Document,
+    TENANT_TABLES,
 )
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
@@ -698,18 +699,10 @@ async def delete_company(user_id: str = Depends(verify_token), db: Session = Dep
 
     # RLS WITH CHECK blocks writing company_id = NULL.
     # Use a raw connection to temporarily DISABLE RLS, do all cleanup, then re-enable.
-    rls_tables = [
-        "agents",
-        "agent_shares",
-        "documents",
-        "document_chunks",
-        "conversations",
-        "messages",
-        "teams",
-        "notion_links",
-        "weekly_recap_logs",
-        "agent_actions",
-    ]
+    # Source of truth: database.TENANT_TABLES. Per-table savepoints make each DDL
+    # tolerant — a table that does not exist yet (feature not deployed) is skipped,
+    # never aborting the deletion transaction.
+    rls_tables = TENANT_TABLES
 
     raw = engine.raw_connection()
     try:
@@ -717,8 +710,14 @@ async def delete_company(user_id: str = Depends(verify_token), db: Session = Dep
 
         # Disable RLS and drop NOT NULL on company_id for all tenant-scoped tables
         for table in rls_tables:
-            cur.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
-            cur.execute(f"ALTER TABLE {table} ALTER COLUMN company_id DROP NOT NULL")
+            try:
+                cur.execute("SAVEPOINT sp")
+                cur.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
+                cur.execute(f"ALTER TABLE {table} ALTER COLUMN company_id DROP NOT NULL")
+                cur.execute("RELEASE SAVEPOINT sp")
+            except Exception as e:
+                cur.execute("ROLLBACK TO SAVEPOINT sp")
+                logger.warning(f"delete_company: disable RLS on {table} skipped: {e}")
 
         # Delete org-specific junction data
         cur.execute("DELETE FROM agent_shares WHERE company_id = %s", (company_id,))
@@ -727,7 +726,25 @@ async def delete_company(user_id: str = Depends(verify_token), db: Session = Dep
 
         # Nullify company_id on all tenant-scoped tables
         for table in rls_tables:
-            cur.execute(f"UPDATE {table} SET company_id = NULL WHERE company_id = %s", (company_id,))
+            try:
+                cur.execute("SAVEPOINT sp")
+                cur.execute(f"UPDATE {table} SET company_id = NULL WHERE company_id = %s", (company_id,))
+                cur.execute("RELEASE SAVEPOINT sp")
+            except Exception as e:
+                cur.execute("ROLLBACK TO SAVEPOINT sp")
+                logger.warning(f"delete_company: nullify {table} skipped: {e}")
+
+        # Delete questionnaires (and their children via DB CASCADE) before the
+        # company row is removed — questionnaire_questions/responses/answers also
+        # hold company_id FKs; cascading the parent delete removes those rows.
+        # Savepoint-guarded: the questionnaire tables may not exist on every env.
+        try:
+            cur.execute("SAVEPOINT sp")
+            cur.execute("DELETE FROM questionnaires WHERE company_id = %s", (company_id,))
+            cur.execute("RELEASE SAVEPOINT sp")
+        except Exception as e:
+            cur.execute("ROLLBACK TO SAVEPOINT sp")
+            logger.warning(f"delete_company: delete questionnaires skipped: {e}")
 
         # Dissociate users and delete the company
         cur.execute("UPDATE users SET company_id = NULL WHERE company_id = %s", (company_id,))
@@ -735,8 +752,14 @@ async def delete_company(user_id: str = Depends(verify_token), db: Session = Dep
 
         # Re-enable RLS (NOT NULL stays dropped — aligns with SQLAlchemy model nullable=True)
         for table in rls_tables:
-            cur.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
-            cur.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+            try:
+                cur.execute("SAVEPOINT sp")
+                cur.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+                cur.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+                cur.execute("RELEASE SAVEPOINT sp")
+            except Exception as e:
+                cur.execute("ROLLBACK TO SAVEPOINT sp")
+                logger.warning(f"delete_company: re-enable RLS on {table} skipped: {e}")
 
         raw.commit()
     except Exception:
@@ -914,6 +937,12 @@ async def share_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    # Defense-in-depth: the agent must belong to the caller's company (RLS also
+    # enforces this at the DB layer, but never rely on a single control).
+    _caller_m = get_user_membership(uid, db)
+    if not _caller_m or agent.company_id != _caller_m.company_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
     # Check permission: owner of the agent OR admin+
     is_owner = agent.user_id == uid
     if not is_owner:
@@ -983,6 +1012,11 @@ async def unshare_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    # Defense-in-depth: the agent must belong to the caller's company.
+    _caller_m = get_user_membership(uid, db)
+    if not _caller_m or agent.company_id != _caller_m.company_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
     is_owner = agent.user_id == uid
     is_self = target_user_id == uid
 
@@ -1025,6 +1059,11 @@ async def update_agent_share(
 
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Defense-in-depth: the agent must belong to the caller's company.
+    _caller_m = get_user_membership(uid, db)
+    if not _caller_m or agent.company_id != _caller_m.company_id:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     is_owner = agent.user_id == uid
@@ -1071,6 +1110,11 @@ async def list_agent_shares(agent_id: int, user_id: str = Depends(verify_token),
 
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Defense-in-depth: the agent must belong to the caller's company.
+    _caller_m = get_user_membership(uid, db)
+    if not _caller_m or agent.company_id != _caller_m.company_id:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     is_owner = agent.user_id == uid

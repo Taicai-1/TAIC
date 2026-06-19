@@ -5,6 +5,7 @@ import logging
 import time
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from mistral_embeddings import get_embedding, get_embedding_fast
 from openai_client import get_chat_response, get_chat_response_stream
@@ -26,6 +27,28 @@ def _sanitize_prompt_text(text: str) -> str:
     if not text:
         return text
     return SCRIPT_PATTERN.sub("", text)
+
+
+def _agent_folder_ids(agent):
+    """Return the agent's selected company-RAG folder ids as a list, or None for 'all'.
+
+    Retrieval-side counterpart to ``routers.agents._folder_ids_out``: both read the same
+    stored JSON, which is validated on write by ``routers.agents._parse_folder_ids``
+    (positive ints only). They live in separate modules to avoid a circular import
+    (rag_engine is imported by the routers). Empty/invalid -> None so callers treat it
+    as 'all folders'.
+    """
+    raw = getattr(agent, "company_rag_folder_ids", None)
+    if not raw:
+        return None
+    try:
+        ids = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(ids, list) or not ids:
+        return None
+    cleaned = [int(x) for x in ids if isinstance(x, int) and not isinstance(x, bool) and x > 0]
+    return cleaned or None
 
 
 # In-memory fallback cache (used when Redis is unavailable)
@@ -241,8 +264,17 @@ def get_answer(
     it is resolved from agent_id or user_id inside search_similar_texts_for_user.
     """
     try:
+        # Resolve the per-agent company-RAG opt-in early so it can scope doc listing + search.
+        agent = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
+        include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
+        company_rag_folder_ids = _agent_folder_ids(agent) if include_company_rag else None
+        company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
+
         # Get documents to consider for RAG
-        # If selected_doc_ids provided, use those (and respect agent_id if present)
+        # If selected_doc_ids provided, use those (and respect agent_id if present).
+        # The company-RAG folder filter is intentionally NOT applied here: an explicit
+        # user doc selection overrides folder scoping. The company_id tenant filter below
+        # still applies, so this never crosses organization boundaries.
         if selected_doc_ids:
             q = db.query(Document).filter(Document.id.in_(selected_doc_ids))
             if agent_id:
@@ -261,16 +293,29 @@ def get_answer(
         else:
             # If we're in an agent context, prefer documents attached to that agent only
             if agent_id:
+                _ga_company_clause = and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
+                if company_rag_folder_ids:
+                    _ga_company_clause = and_(_ga_company_clause, Document.folder_id.in_(company_rag_folder_ids))
                 user_docs = (
                     db.query(Document)
-                    .filter(Document.agent_id == agent_id, Document.document_type != "traceability")
+                    .filter(
+                        or_(
+                            Document.agent_id == agent_id,
+                            _ga_company_clause if include_company_rag else False,
+                        ),
+                        Document.document_type != "traceability",
+                    )
                     .all()
                 )
                 logger.info(f"Using {len(user_docs)} documents attached to agent {agent_id}")
             else:
                 user_docs = (
                     db.query(Document)
-                    .filter(Document.user_id == user_id, Document.document_type != "traceability")
+                    .filter(
+                        Document.user_id == user_id,
+                        Document.document_type != "traceability",
+                        Document.is_company_rag.is_(False),
+                    )
                     .all()
                 )
                 logger.info(f"Using all {len(user_docs)} user documents")
@@ -292,10 +337,8 @@ def get_answer(
                 logger.info(f"User mentioned document, filtering to doc_id: {mentioned_doc_id}")
 
         # Récupérer le contexte personnalisé de l'agent par son id
-        agent = None
+        # (agent was already loaded above for the include_company_rag flag)
         contexte_agent = ""
-        if agent_id:
-            agent = db.query(Agent).filter(Agent.id == agent_id).first()
         if not agent:
             agent = db.query(Agent).filter(Agent.user_id == user_id).first()
         # Security: sanitize agent contexte to mitigate prompt injection via HTML/script tags
@@ -336,6 +379,28 @@ def get_answer(
             except Exception as e:
                 logger.warning(f"Neo4j context retrieval failed (continuing without): {e}")
 
+        # Date awareness: inject current date/time into agent context
+        if agent and getattr(agent, "date_awareness_enabled", False):
+            now = datetime.now()
+            _JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+            _MOIS = [
+                "janvier",
+                "février",
+                "mars",
+                "avril",
+                "mai",
+                "juin",
+                "juillet",
+                "août",
+                "septembre",
+                "octobre",
+                "novembre",
+                "décembre",
+            ]
+            date_str = f"{_JOURS[now.weekday()]} {now.day} {_MOIS[now.month - 1]} {now.year}, {now.strftime('%H:%M')}"
+            date_context = f"Date et heure actuelles : {date_str}\n\n"
+            contexte_agent = date_context + contexte_agent
+
         # Build list of available documents for context
         available_docs_list = ""
         if user_docs:
@@ -347,7 +412,11 @@ def get_answer(
         # Si pas de documents, fallback sur le contexte + mémoire
         if not user_docs:
             if selected_doc_ids:
-                return {"answer": "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection.", "sources": [], "graph_data": graph_data}
+                return {
+                    "answer": "Aucun des documents sélectionnés n'a été trouvé. Veuillez vérifier votre sélection.",
+                    "sources": [],
+                    "graph_data": graph_data,
+                }
             else:
                 logger.info("No documents found, using context + question + memory only")
                 # Prépare la liste messages pour OpenAI avec l'historique complet
@@ -395,12 +464,18 @@ def get_answer(
             selected_doc_ids=selected_doc_ids,
             agent_id=agent_id,
             company_id=company_id,
+            include_company_rag=include_company_rag,
+            company_rag_folder_ids=company_rag_folder_ids,
         )
 
         # Build sources metadata for the frontend
         sources = [
-            {"text": r["text"], "document_name": r["document_name"],
-             "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
+            {
+                "text": r["text"],
+                "document_name": r["document_name"],
+                "score": round(r["similarity"] * 100, 1),
+                "document_id": r["document_id"],
+            }
             for r in context_results
         ]
 
@@ -467,12 +542,7 @@ def get_answer(
         logger.info(
             "Getting response from OpenAI with structured messages (system + RAG context, full history, current question)"
         )
-        gemini_only_flag = False
-        try:
-            gemini_only_flag = bool(agent and getattr(agent, "type", "") == "actionnable")
-        except Exception:
-            gemini_only_flag = False
-        response = get_chat_response(messages, model_id=model_id, gemini_only=gemini_only_flag)
+        response = get_chat_response(messages, model_id=model_id)
         logger.info("Successfully got response from OpenAI")
         return {"answer": response, "sources": sources, "graph_data": graph_data}
     except Exception as e:
@@ -500,7 +570,15 @@ def get_answer_stream(
     from streaming_response import sse_event
 
     try:
+        # Resolve the per-agent company-RAG opt-in early so it can scope doc listing + search.
+        agent = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
+        include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
+        company_rag_folder_ids = _agent_folder_ids(agent) if include_company_rag else None
+        company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
+
         # --- Document retrieval (same as get_answer) ---
+        # Folder filter intentionally not applied to an explicit selected_doc_ids set
+        # (explicit user selection overrides folder scoping); company_id tenant filter still applies.
         if selected_doc_ids:
             q = db.query(Document).filter(Document.id.in_(selected_doc_ids))
             if agent_id:
@@ -514,15 +592,28 @@ def get_answer_stream(
             user_docs = q.all()
         else:
             if agent_id:
+                _gas_company_clause = and_(Document.is_company_rag.is_(True), Document.company_id == company_scope_id)
+                if company_rag_folder_ids:
+                    _gas_company_clause = and_(_gas_company_clause, Document.folder_id.in_(company_rag_folder_ids))
                 user_docs = (
                     db.query(Document)
-                    .filter(Document.agent_id == agent_id, Document.document_type != "traceability")
+                    .filter(
+                        or_(
+                            Document.agent_id == agent_id,
+                            _gas_company_clause if include_company_rag else False,
+                        ),
+                        Document.document_type != "traceability",
+                    )
                     .all()
                 )
             else:
                 user_docs = (
                     db.query(Document)
-                    .filter(Document.user_id == user_id, Document.document_type != "traceability")
+                    .filter(
+                        Document.user_id == user_id,
+                        Document.document_type != "traceability",
+                        Document.is_company_rag.is_(False),
+                    )
                     .all()
                 )
 
@@ -540,11 +631,8 @@ def get_answer_stream(
                 selected_doc_ids = [mentioned_doc_id]
                 user_docs = [doc for doc in user_docs if doc.id == mentioned_doc_id]
 
-        # Agent context
-        agent = None
+        # Agent context (agent was already loaded above for the include_company_rag flag)
         contexte_agent = ""
-        if agent_id:
-            agent = db.query(Agent).filter(Agent.id == agent_id).first()
         if not agent:
             agent = db.query(Agent).filter(Agent.user_id == user_id).first()
         # Security: sanitize agent contexte to mitigate prompt injection via HTML/script tags
@@ -583,6 +671,28 @@ def get_answer_stream(
                             contexte_agent += f"\n\n--- Graphe de connaissances entreprise ---\n{neo4j_context}"
             except Exception as e:
                 logger.warning(f"Neo4j context retrieval failed (continuing without): {e}")
+
+        # Date awareness: inject current date/time into agent context
+        if agent and getattr(agent, "date_awareness_enabled", False):
+            now = datetime.now()
+            _JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+            _MOIS = [
+                "janvier",
+                "février",
+                "mars",
+                "avril",
+                "mai",
+                "juin",
+                "juillet",
+                "août",
+                "septembre",
+                "octobre",
+                "novembre",
+                "décembre",
+            ]
+            date_str = f"{_JOURS[now.weekday()]} {now.day} {_MOIS[now.month - 1]} {now.year}, {now.strftime('%H:%M')}"
+            date_context = f"Date et heure actuelles : {date_str}\n\n"
+            contexte_agent = date_context + contexte_agent
 
         # Available docs list
         available_docs_list = ""
@@ -627,12 +737,18 @@ def get_answer_stream(
                 selected_doc_ids=selected_doc_ids,
                 agent_id=agent_id,
                 company_id=company_id,
+                include_company_rag=include_company_rag,
+                company_rag_folder_ids=company_rag_folder_ids,
             )
 
             # Build sources metadata for the frontend
             sources = [
-                {"text": r["text"], "document_name": r["document_name"],
-                 "score": round(r["similarity"] * 100, 1), "document_id": r["document_id"]}
+                {
+                    "text": r["text"],
+                    "document_name": r["document_name"],
+                    "score": round(r["similarity"] * 100, 1),
+                    "document_id": r["document_id"],
+                }
                 for r in context_results
             ]
 
@@ -702,14 +818,8 @@ def get_answer_stream(
             return
 
         # --- Stream from LLM ---
-        gemini_only_flag = False
-        try:
-            gemini_only_flag = bool(agent and getattr(agent, "type", "") == "actionnable")
-        except Exception:
-            pass
-
         full_text = ""
-        for chunk in get_chat_response_stream(messages, model_id=model_id, gemini_only=gemini_only_flag):
+        for chunk in get_chat_response_stream(messages, model_id=model_id):
             full_text += chunk
             yield sse_event("token", {"t": chunk})
 
@@ -731,6 +841,9 @@ def search_similar_texts_for_user(
     selected_doc_ids: List[int] = None,
     agent_id: int = None,
     company_id: int = None,
+    mission_id: int = None,
+    include_company_rag: bool = False,
+    company_rag_folder_ids: list = None,
 ) -> List[dict]:
     """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context.
 
@@ -751,6 +864,12 @@ def search_similar_texts_for_user(
                 _agent_row = db.query(Agent.company_id).filter(Agent.id == agent_id).first()
                 if _agent_row is not None:
                     company_id = _agent_row[0]
+            if company_id is None and mission_id:
+                from database import Mission
+
+                _m_row = db.query(Mission.company_id).filter(Mission.id == mission_id).first()
+                if _m_row is not None:
+                    company_id = _m_row[0]
             if company_id is None and user_id is not None:
                 _user_row = db.query(User.company_id).filter(User.id == user_id).first()
                 if _user_row is not None:
@@ -784,10 +903,25 @@ def search_similar_texts_for_user(
             )
         )
 
-        if agent_id:
-            query = query.filter(Document.agent_id == agent_id)
+        if mission_id:
+            query = query.filter(Document.mission_id == mission_id)
+        elif agent_id:
+            # Agent-scoped docs; optionally union the company-shared docs
+            agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))
+            if include_company_rag:
+                company_scope = Document.is_company_rag.is_(True)
+                if company_rag_folder_ids:
+                    company_scope = and_(company_scope, Document.folder_id.in_(company_rag_folder_ids))
+                query = query.filter(or_(agent_scope, company_scope))
+            else:
+                query = query.filter(agent_scope, Document.is_company_rag.is_(False))
         else:
-            query = query.filter(Document.user_id == user_id)
+            # User-level general RAG: never leak company docs into personal scope
+            query = query.filter(
+                Document.user_id == user_id,
+                Document.mission_id.is_(None),
+                Document.is_company_rag.is_(False),
+            )
 
         if selected_doc_ids:
             query = query.filter(Document.id.in_(selected_doc_ids))
@@ -937,6 +1071,9 @@ def ingest_text_content(
     drive_link_id: int = None,
     drive_file_id: str = None,
     progress_callback=None,
+    mission_id: int = None,
+    is_company_rag: bool = False,
+    folder_id: int = None,
 ) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
@@ -948,6 +1085,12 @@ def ingest_text_content(
             _agent = db.query(Agent.company_id).filter(Agent.id == agent_id).first()
             if _agent:
                 company_id = _agent[0]
+        if company_id is None and mission_id:
+            from database import Mission
+
+            _m = db.query(Mission.company_id).filter(Mission.id == mission_id).first()
+            if _m:
+                company_id = _m[0]
         if company_id is None and user_id:
             _user = db.query(User.company_id).filter(User.id == user_id).first()
             if _user:
@@ -967,6 +1110,9 @@ def ingest_text_content(
             notion_link_id=notion_link_id,
             drive_link_id=drive_link_id,
             drive_file_id=drive_file_id,
+            mission_id=mission_id,
+            is_company_rag=is_company_rag,
+            folder_id=folder_id,
         )
         db.add(document)
         db.commit()
@@ -1018,8 +1164,16 @@ def ingest_text_content(
 
 
 def process_document_for_user(
-    filename: str, content: bytes, user_id: int, db: Session, agent_id: int = None, company_id: int = None,
+    filename: str,
+    content: bytes,
+    user_id: int,
+    db: Session,
+    agent_id: int = None,
+    company_id: int = None,
     progress_callback=None,
+    mission_id: int = None,
+    is_company_rag: bool = False,
+    folder_id: int = None,
 ) -> int:
     import tempfile
     import os
@@ -1074,8 +1228,17 @@ def process_document_for_user(
             progress_callback("extracted", 28)
 
         return ingest_text_content(
-            text_content, filename, user_id, agent_id, db, gcs_url=gcs_url, company_id=company_id,
+            text_content,
+            filename,
+            user_id,
+            agent_id,
+            db,
+            gcs_url=gcs_url,
+            company_id=company_id,
             progress_callback=progress_callback,
+            mission_id=mission_id,
+            is_company_rag=is_company_rag,
+            folder_id=folder_id,
         )
     except Exception as e:
         logger.error(f"Error processing document: {e}")

@@ -5,17 +5,20 @@ import {
   ArrowLeft, Bot, MessageCircle, Check, Camera, Trash2, Plus,
   Upload, Loader2, FileText, Database, Link, Zap, Users, TrendingUp,
   LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive, Globe,
-  Pencil, Sparkles, AlertCircle
+  Pencil, Sparkles, AlertCircle, ImageIcon, Calendar, ClipboardList
 } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import Layout from '../components/Layout';
 import { useAuth } from '../hooks/useAuth';
 import api from '../lib/api';
+import PluginSelector from '../components/PluginSelector';
 
 const AGENT_TYPES_CONFIG = {
   conversationnel: { key: 'conversationnel', icon: Users, color: 'bg-blue-500', gradient: 'from-blue-500 to-blue-600' },
-  recherche_live: { key: 'recherche_live', icon: TrendingUp, color: 'bg-purple-500', gradient: 'from-purple-500 to-violet-600' }
+  recherche_live: { key: 'recherche_live', icon: TrendingUp, color: 'bg-purple-500', gradient: 'from-purple-500 to-violet-600' },
+  visuel: { key: 'visuel', icon: ImageIcon, color: 'bg-pink-500', gradient: 'from-pink-500 to-pink-600' },
+  actionnable: { key: 'actionnable', icon: Zap, color: 'bg-amber-500', gradient: 'from-amber-500 to-amber-600' },
 };
 
 // Collapsible section wrapper
@@ -57,10 +60,12 @@ export default function CompanionSettings() {
   // Form state
   const [form, setForm] = useState({
     name: "", contexte: "", biographie: "", profile_photo: null,
-    type: 'conversationnel',
+    type: 'conversationnel', enabled_plugins: [],
     email_tags: [], neo4j_enabled: false, neo4j_person_name: "",
-    neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "",
-    weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9
+    neo4j_depth: 1, date_awareness_enabled: false, include_company_rag: false,
+    company_rag_folder_ids: [],
+    weekly_recap_enabled: false, weekly_recap_prompt: "",
+    weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9,
   });
   const [emailTagInput, setEmailTagInput] = useState("");
 
@@ -128,6 +133,9 @@ export default function CompanionSettings() {
   const [showImproveModal, setShowImproveModal] = useState(false);
   const [recapRecipientInput, setRecapRecipientInput] = useState("");
 
+  // Company RAG folders
+  const [companyFolders, setCompanyFolders] = useState([]);
+
   // Neo4j
   const [neo4jPersons, setNeo4jPersons] = useState([]);
   const [userCompany, setUserCompany] = useState(null);
@@ -139,7 +147,9 @@ export default function CompanionSettings() {
 
   const AGENT_TYPES = useMemo(() => ({
     conversationnel: { ...AGENT_TYPES_CONFIG.conversationnel, name: t('agents:types.conversationnel.name'), description: t('agents:types.conversationnel.description') },
-    recherche_live: { ...AGENT_TYPES_CONFIG.recherche_live, name: t('agents:types.recherche_live.name'), description: t('agents:types.recherche_live.description') }
+    recherche_live: { ...AGENT_TYPES_CONFIG.recherche_live, name: t('agents:types.recherche_live.name'), description: t('agents:types.recherche_live.description') },
+    visuel: { ...AGENT_TYPES_CONFIG.visuel, name: t('agents:types.visuel.name'), description: t('agents:types.visuel.description') },
+    actionnable: { ...AGENT_TYPES_CONFIG.actionnable, name: t('agents:types.actionnable.name'), description: t('agents:types.actionnable.description') },
   }), [t]);
 
   // --- Data loading ---
@@ -164,12 +174,21 @@ export default function CompanionSettings() {
         catch { parsedEmailTags = []; }
       }
 
+      let parsedPlugins = [];
+      if (agent.enabled_plugins) {
+        try { parsedPlugins = typeof agent.enabled_plugins === 'string' ? JSON.parse(agent.enabled_plugins) : agent.enabled_plugins; }
+        catch { parsedPlugins = []; }
+      }
+
       setForm({
         name: agent.name || "", contexte: agent.contexte || "", biographie: agent.biographie || "",
         profile_photo: null,
-        type: agent.type || 'conversationnel',
+        type: agent.type || 'conversationnel', enabled_plugins: parsedPlugins,
         email_tags: parsedEmailTags, neo4j_enabled: agent.neo4j_enabled || false,
         neo4j_person_name: agent.neo4j_person_name || "", neo4j_depth: agent.neo4j_depth || 1,
+        date_awareness_enabled: agent.date_awareness_enabled || false,
+        include_company_rag: agent.include_company_rag || false,
+        company_rag_folder_ids: agent.company_rag_folder_ids || [],
         weekly_recap_enabled: agent.weekly_recap_enabled || false,
         weekly_recap_prompt: agent.weekly_recap_prompt || "",
         weekly_recap_recipients: agent.weekly_recap_recipients ? JSON.parse(agent.weekly_recap_recipients) : [],
@@ -462,6 +481,9 @@ export default function CompanionSettings() {
       loadNeo4jData();
       loadSlackConfig(urlAgentId);
       loadRecaps(urlAgentId);
+      api.get('/api/company-rag/folders')
+        .then(res => setCompanyFolders(res.data.folders || []))
+        .catch(() => setCompanyFolders([]));
     } else if (authenticated && router.isReady) {
       router.push("/agents");
     }
@@ -480,10 +502,16 @@ export default function CompanionSettings() {
       formData.append("biographie", f.biographie);
       if (f.profile_photo) formData.append("profile_photo", f.profile_photo);
       formData.append("type", f.type || 'conversationnel');
+      if (f.type === 'actionnable' && f.enabled_plugins?.length > 0) {
+        formData.append("enabled_plugins", JSON.stringify(f.enabled_plugins));
+      }
       formData.append("email_tags", f.email_tags.length > 0 ? JSON.stringify(f.email_tags) : "[]");
       formData.append("neo4j_enabled", f.neo4j_enabled ? "true" : "false");
       if (f.neo4j_person_name) formData.append("neo4j_person_name", f.neo4j_person_name);
       formData.append("neo4j_depth", String(f.neo4j_depth || 1));
+      formData.append("date_awareness_enabled", f.date_awareness_enabled ? "true" : "false");
+      formData.append("include_company_rag", f.include_company_rag ? "true" : "false");
+      formData.append("company_rag_folder_ids", JSON.stringify(f.company_rag_folder_ids || []));
 
       await api.put(`/agents/${currentAgent.id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -884,6 +912,11 @@ export default function CompanionSettings() {
                       <Database className="w-3 h-3 mr-1" /> Neo4j
                     </span>
                   )}
+                  {form.date_awareness_enabled && (
+                    <span className="inline-flex items-center px-3 py-1 bg-indigo-500 text-white text-xs font-semibold rounded-full shadow-sm">
+                      <Calendar className="w-3 h-3 mr-1" /> Date
+                    </span>
+                  )}
                   {form.weekly_recap_enabled && (
                     <span className="inline-flex items-center px-3 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full shadow-sm">
                       <Mail className="w-3 h-3 mr-1" /> Recap
@@ -1001,6 +1034,16 @@ export default function CompanionSettings() {
             </div>
 
           </div>
+
+          {/* Plugin selector for actionnable agents */}
+          {form.type === 'actionnable' && (
+            <div className="mt-4">
+              <PluginSelector
+                enabledPlugins={form.enabled_plugins}
+                onChange={(plugins) => setForm(f => ({ ...f, enabled_plugins: plugins }))}
+              />
+            </div>
+          )}
 
           {/* Email Tags */}
           <div className="mt-4">
@@ -1170,6 +1213,70 @@ export default function CompanionSettings() {
             )}
           </Section>
         )}
+
+        {/* Date Awareness */}
+        <Section
+          icon={Calendar}
+          title={t('agents:form.dateAwareness.label')}
+          subtitle={t('agents:form.dateAwareness.helpText')}
+          color="bg-indigo-500"
+        >
+          <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-button border border-indigo-200">
+            <span className="text-sm font-semibold text-gray-700">{t('agents:form.dateAwareness.label')}</span>
+            <button
+              type="button"
+              className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border-2 ${form.date_awareness_enabled ? 'bg-indigo-500 border-indigo-500' : 'bg-gray-200 border-gray-300'}`}
+              onClick={() => setForm(f => ({ ...f, date_awareness_enabled: !f.date_awareness_enabled }))}
+            >
+              <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.date_awareness_enabled ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
+            </button>
+          </div>
+        </Section>
+
+        {/* Company RAG */}
+        <Section
+          icon={FileText}
+          title={t('agents:companyRag.label')}
+          subtitle={t('agents:companyRag.help')}
+          color="bg-emerald-600"
+        >
+          <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-button border border-emerald-200">
+            <span className="text-sm font-semibold text-gray-700">{t('agents:companyRag.label')}</span>
+            <button
+              type="button"
+              className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border-2 ${form.include_company_rag ? 'bg-emerald-600 border-emerald-600' : 'bg-gray-200 border-gray-300'}`}
+              onClick={() => setForm(f => ({ ...f, include_company_rag: !f.include_company_rag }))}
+            >
+              <span className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.include_company_rag ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`} />
+            </button>
+          </div>
+          {form.include_company_rag && companyFolders.length > 0 && (
+            <div className="mt-3 ml-1 space-y-2">
+              <p className="text-xs text-gray-500">{t('agents:companyRagFolders.label')}</p>
+              <div className="flex flex-wrap gap-2">
+                {companyFolders.map(f => {
+                  const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
+                  const checked = all || form.company_rag_folder_ids.includes(f.id);
+                  return (
+                    <label key={f.id}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
+                      <input type="checkbox" checked={checked}
+                        onChange={() => setForm(prev => {
+                          const base = (!prev.company_rag_folder_ids || prev.company_rag_folder_ids.length === 0)
+                            ? companyFolders.map(x => x.id)
+                            : [...prev.company_rag_folder_ids];
+                          const next = base.includes(f.id) ? base.filter(id => id !== f.id) : [...base, f.id];
+                          return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
+                        })} />
+                      {f.name}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-400">{t('agents:companyRagFolders.allHint')}</p>
+            </div>
+          )}
+        </Section>
 
         {/* RAG Documents */}
         <Section

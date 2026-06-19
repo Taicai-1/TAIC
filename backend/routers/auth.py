@@ -17,6 +17,9 @@ from auth import (
     hash_reset_token,
     verify_pre_2fa_token,
     verify_setup_token,
+    generate_backup_codes,
+    verify_and_consume_backup_code,
+    ACCESS_TOKEN_MAX_AGE,
 )
 from database import get_db, User, Company, CompanyMembership, PasswordResetToken
 from email_service import (
@@ -28,6 +31,9 @@ from helpers.rate_limiting import (
     _check_auth_rate_limit,
     _record_auth_failure,
     _check_2fa_rate_limit,
+    _check_login_lockout,
+    _record_login_failure,
+    _clear_login_failures,
 )
 from redis_client import get_cached_user, invalidate_user_cache
 from schemas.auth import (
@@ -133,9 +139,20 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
                 status_code=400, detail="This account uses Google sign-in. Please use the Google button."
             )
 
+        # Per-account lockout: blocks targeted brute-force even across rotating IPs.
+        if not _check_login_lockout(str(db_user.id)):
+            raise HTTPException(
+                status_code=429,
+                detail="Account temporarily locked after too many failed attempts. Please try again later.",
+            )
+
         if not verify_password(user.password, db_user.hashed_password):
             _record_auth_failure(ip)
+            _record_login_failure(str(db_user.id))
             raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        # Password correct → reset the per-account failure counter.
+        _clear_login_failures(str(db_user.id))
 
         # Email verification check (before 2FA)
         if not db_user.email_verified:
@@ -199,7 +216,13 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
 
         # Security: Set HttpOnly secure cookie to prevent XSS token theft
         response.set_cookie(
-            key="token", value=access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/"
+            key="token",
+            value=access_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=ACCESS_TOKEN_MAX_AGE,
+            path="/",
         )
 
         logger.info(f"User logged in: {user.username}")
@@ -379,7 +402,13 @@ async def google_oauth(req: GoogleOAuthRequest, request: Request, response: Resp
         access_token = create_access_token(data={"sub": str(db_user.id)})
 
         response.set_cookie(
-            key="token", value=access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/"
+            key="token",
+            value=access_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=ACCESS_TOKEN_MAX_AGE,
+            path="/",
         )
 
         logger.info(f"Google OAuth login: {email}")
@@ -418,6 +447,22 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
         if not db_user:
             raise HTTPException(status_code=401, detail="User not found")
 
+        # Resolve membership role (owner/admin/member) for the user's company
+        role = None
+        if db_user.company_id:
+            from database import CompanyMembership
+
+            membership = (
+                db.query(CompanyMembership)
+                .filter(
+                    CompanyMembership.user_id == db_user.id,
+                    CompanyMembership.company_id == db_user.company_id,
+                )
+                .first()
+            )
+            if membership:
+                role = membership.role
+
         return {
             "authenticated": True,
             "user": {
@@ -426,6 +471,7 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
                 "email": db_user.email,
                 "totp_enabled": db_user.totp_enabled,
                 "company_id": db_user.company_id,
+                "role": role,
             },
         }
     except HTTPException:
@@ -507,6 +553,9 @@ async def confirm_2fa_setup(
     # Activate 2FA
     db_user.totp_enabled = True
     db_user.totp_setup_completed_at = datetime.utcnow()
+    # Generate single-use recovery backup codes (shown to the user ONCE, below).
+    plaintext_codes, hashed_json = generate_backup_codes()
+    db_user.totp_backup_codes = hashed_json
     db.commit()
     invalidate_user_cache(db_user.id)
 
@@ -514,7 +563,13 @@ async def confirm_2fa_setup(
     access_token = create_access_token(data={"sub": str(db_user.id)})
 
     response.set_cookie(
-        key="token", value=access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/"
+        key="token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_MAX_AGE,
+        path="/",
     )
     # Security: clear restricted setup cookie after successful setup
     response.delete_cookie(key="setup_token", path="/")
@@ -522,7 +577,8 @@ async def confirm_2fa_setup(
     logger.info(f"2FA setup completed for user {db_user.username}")
     event_tracker.track_user_action(db_user.id, "2fa_setup_completed")
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    # backup_codes are returned ONCE here; they are never retrievable again.
+    return {"access_token": access_token, "token_type": "bearer", "backup_codes": plaintext_codes}
 
 
 @router.post("/auth/2fa/verify")
@@ -545,17 +601,29 @@ async def verify_2fa(body: TwoFactorVerifyRequest, request: Request, response: R
     if not db_user.totp_enabled or not db_user.totp_secret:
         raise HTTPException(status_code=400, detail="2FA is not enabled")
 
-    # Verify TOTP code
+    # Verify TOTP code; fall back to a single-use backup code if TOTP doesn't match.
     secret = db_user.totp_secret
     totp = pyotp.TOTP(secret)
     if not totp.verify(body.code.strip(), valid_window=1):
-        raise HTTPException(status_code=400, detail="Invalid verification code")
+        ok, new_json = verify_and_consume_backup_code(body.code, db_user.totp_backup_codes)
+        if not ok:
+            raise HTTPException(status_code=400, detail="Invalid verification code")
+        # Consume the used backup code (single-use).
+        db_user.totp_backup_codes = new_json
+        db.commit()
+        invalidate_user_cache(db_user.id)
 
     # Issue full access token
     access_token = create_access_token(data={"sub": str(db_user.id)})
 
     response.set_cookie(
-        key="token", value=access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/"
+        key="token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_MAX_AGE,
+        path="/",
     )
     # Security: clear restricted pre_2fa cookie after successful verification
     response.delete_cookie(key="pre_2fa_token", path="/")
@@ -600,35 +668,36 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request, db: Sess
         logger.warning(f"Rate limit exceeded for forgot-password from IP: {ip}")
         raise HTTPException(status_code=429, detail="Too many password reset attempts. Please try again in 15 minutes.")
 
+    # Security: never reveal whether an account exists for this email (no account
+    # enumeration). Only do the work when the user exists; always return the same
+    # generic response. Mirrors the resend-verification endpoint.
     user = db.query(User).filter(User.email == req.email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user:
+        # Generate token and hash it before storing (prevent token theft if DB compromised)
+        token = str(uuid4())
+        token_hash = hash_reset_token(token)
+        expires_at = datetime.utcnow() + timedelta(minutes=15)
 
-    # Generate token and hash it before storing (security: prevent token theft if DB compromised)
-    token = str(uuid4())
-    token_hash = hash_reset_token(token)
-    expires_at = datetime.utcnow() + timedelta(minutes=15)
+        # Store HASHED token in DB
+        reset_token = PasswordResetToken(
+            user_id=user.id,
+            token=token_hash,  # Store hash, not plaintext
+            expires_at=expires_at,
+            used=False,
+        )
+        db.add(reset_token)
+        db.commit()
 
-    # Store HASHED token in DB
-    reset_token = PasswordResetToken(
-        user_id=user.id,
-        token=token_hash,  # Store hash, not plaintext
-        expires_at=expires_at,
-        used=False,
-    )
-    db.add(reset_token)
-    db.commit()
+        # Send PLAINTEXT token in email (user needs it to reset password)
+        frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
+        reset_link = f"{frontend_url}/reset-password?token={token}"
+        try:
+            send_password_reset_email(user.email, reset_link)
+            logger.info(f"Password reset email sent to {user.email}")
+        except Exception as e:
+            logger.error(f"Erreur lors de l'envoi de l'email: {e}")
 
-    # Send PLAINTEXT token in email (user needs it to reset password)
-    frontend_url = os.getenv("FRONTEND_URL", "https://taic.ai")
-    reset_link = f"{frontend_url}/reset-password?token={token}"
-    try:
-        send_password_reset_email(user.email, reset_link)
-        logger.info(f"Password reset email sent to {user.email}")
-        return {"message": "Un lien de réinitialisation a été envoyé par email"}
-    except Exception as e:
-        logger.error(f"Erreur lors de l'envoi de l'email: {e}")
-        return {"message": "Erreur lors de l'envoi de l'email"}
+    return {"message": "Si un compte existe pour cet email, un lien de réinitialisation a été envoyé."}
 
 
 # Endpoint pour réinitialiser le mot de passe (DB version)

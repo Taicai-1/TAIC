@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -165,3 +165,89 @@ async def admin_full_report(
         "app_stats": _collect_app_stats(db),
         "recent_errors": _collect_errors(limit=50),
     }
+
+
+@router.get("/api/admin/llm-usage")
+async def admin_llm_usage(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Current-month LLM token/cost usage.
+
+    Scope is tenant-respecting:
+    - Platform operator (valid X-Scheduler-Secret header) → ALL companies.
+    - Company admin (admin JWT) → ONLY their own company (no cross-tenant cost leak).
+    """
+    import os
+
+    from auth import verify_token
+    from permissions import require_role, get_user_membership
+    from database import LLMUsageLog
+
+    scheduler_secret = os.getenv("ROUTINE_SCHEDULER_SECRET", "").strip()
+    is_platform = bool(scheduler_secret) and request.headers.get("X-Scheduler-Secret", "") == scheduler_secret
+
+    company_id = None
+    if not is_platform:
+        user_id = verify_token(request)  # 401 if missing/invalid
+        require_role(int(user_id), db, "admin")  # 403 if not admin
+        membership = get_user_membership(int(user_id), db)
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not part of an organization")
+        company_id = membership.company_id
+
+    now = datetime.utcnow()
+    month_start = datetime(now.year, now.month, 1)
+
+    base = db.query(LLMUsageLog).filter(LLMUsageLog.created_at >= month_start)
+    if company_id is not None:
+        base = base.filter(LLMUsageLog.company_id == company_id)
+
+    totals = base.with_entities(
+        func.coalesce(func.sum(LLMUsageLog.cost_usd), 0.0),
+        func.coalesce(func.sum(LLMUsageLog.prompt_tokens), 0),
+        func.coalesce(func.sum(LLMUsageLog.completion_tokens), 0),
+        func.count(LLMUsageLog.id),
+    ).first()
+
+    by_model = (
+        base.with_entities(
+            LLMUsageLog.provider,
+            LLMUsageLog.model,
+            func.coalesce(func.sum(LLMUsageLog.cost_usd), 0.0),
+            func.count(LLMUsageLog.id),
+        )
+        .group_by(LLMUsageLog.provider, LLMUsageLog.model)
+        .order_by(func.sum(LLMUsageLog.cost_usd).desc())
+        .all()
+    )
+
+    result = {
+        "scope": "platform" if is_platform else "company",
+        "company_id": company_id,
+        "month": month_start.strftime("%Y-%m"),
+        "total_cost_usd": round(float(totals[0]), 4),
+        "total_prompt_tokens": int(totals[1]),
+        "total_completion_tokens": int(totals[2]),
+        "total_calls": int(totals[3]),
+        "by_model": [
+            {"provider": p, "model": m, "cost_usd": round(float(c), 4), "calls": int(n)} for p, m, c, n in by_model
+        ],
+    }
+
+    if is_platform:
+        by_company = (
+            base.with_entities(
+                LLMUsageLog.company_id,
+                func.coalesce(func.sum(LLMUsageLog.cost_usd), 0.0),
+                func.count(LLMUsageLog.id),
+            )
+            .group_by(LLMUsageLog.company_id)
+            .order_by(func.sum(LLMUsageLog.cost_usd).desc())
+            .all()
+        )
+        result["by_company"] = [
+            {"company_id": cid, "cost_usd": round(float(c), 4), "calls": int(n)} for cid, c, n in by_company
+        ]
+
+    return result

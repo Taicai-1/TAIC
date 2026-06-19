@@ -9,12 +9,12 @@ import mimetypes
 import traceback
 from uuid import uuid4
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, Document, DocumentChunk, AgentShare, SessionLocal
+from database import get_db, Document, DocumentChunk, AgentShare, SessionLocal, User
 from helpers.agent_helpers import _user_can_access_agent, _user_can_edit_agent
 from helpers.tenant import _get_caller_company_id
 from helpers.rate_limiting import _check_api_rate_limit, _API_UPLOAD_LIMIT
@@ -563,7 +563,15 @@ async def upload_file(
 
 
 def _process_document_background(
-    task_id: str, filename: str, content: bytes, user_id: int, agent_id: int, company_id: int = None
+    task_id: str,
+    filename: str,
+    content: bytes,
+    user_id: int,
+    agent_id: int,
+    company_id: int = None,
+    mission_id: int = None,
+    is_company_rag: bool = False,
+    folder_id: int = None,
 ):
     """Background worker for async document processing. Uses its own DB session."""
     db = SessionLocal()
@@ -610,8 +618,16 @@ def _process_document_background(
                 )
 
         doc_id = process_document_for_user(
-            filename, content, user_id, db, agent_id, company_id=company_id,
+            filename,
+            content,
+            user_id,
+            db,
+            agent_id,
+            company_id=company_id,
             progress_callback=_report_progress,
+            mission_id=mission_id,
+            is_company_rag=is_company_rag,
+            folder_id=folder_id,
         )
 
         logger.info(f"Background processing completed: {filename} -> doc_id={doc_id}")
@@ -754,7 +770,13 @@ async def get_upload_status(
 
 
 @router.get("/user/documents")
-async def get_user_documents(user_id: str = Depends(verify_token), db: Session = Depends(get_db), agent_id: int = None):
+async def get_user_documents(
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+    agent_id: int = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+):
     """Get user's documents, optionally filtered by agent"""
     try:
         logger.info(f"Fetching documents for user {user_id}, agent {agent_id}")
@@ -776,7 +798,13 @@ async def get_user_documents(user_id: str = Depends(verify_token), db: Session =
         else:
             query = db.query(Document).filter(Document.user_id == uid)
 
-        documents = query.filter(Document.document_type != "traceability").order_by(Document.created_at.desc()).all()
+        documents = (
+            query.filter(Document.document_type != "traceability", Document.mission_id.is_(None))
+            .order_by(Document.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
         logger.info(f"Found {len(documents)} documents for user {user_id}, agent {agent_id}")
 
         result = []
@@ -851,7 +879,11 @@ async def get_signed_download_url(
             raise HTTPException(status_code=404, detail="Document non trouvé ou pas de fichier GCS")
         # Owner or has access to the agent
         if document.user_id != int(user_id):
-            if document.agent_id:
+            if getattr(document, "is_company_rag", False) and document.company_id:
+                caller_company_id = db.query(User.company_id).filter(User.id == int(user_id)).scalar()
+                if caller_company_id != document.company_id:
+                    raise HTTPException(status_code=403, detail="Access denied")
+            elif document.agent_id:
                 _user_can_access_agent(int(user_id), document.agent_id, db)
             else:
                 raise HTTPException(status_code=403, detail="Access denied")
@@ -941,7 +973,11 @@ async def proxy_download_document(
         raise HTTPException(status_code=404, detail="Document non trouvé ou pas de fichier GCS")
     # Owner or has access to the agent
     if document.user_id != int(user_id):
-        if document.agent_id:
+        if getattr(document, "is_company_rag", False) and document.company_id:
+            caller_company_id = db.query(User.company_id).filter(User.id == int(user_id)).scalar()
+            if caller_company_id != document.company_id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif document.agent_id:
             _user_can_access_agent(int(user_id), document.agent_id, db)
         else:
             raise HTTPException(status_code=403, detail="Access denied")

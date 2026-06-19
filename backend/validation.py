@@ -300,7 +300,7 @@ class AgentCreateValidated(BaseModel):
     contexte: Optional[str] = Field(None, max_length=MAX_AGENT_CONTEXTE_LENGTH)
     biographie: Optional[str] = Field(None, max_length=MAX_AGENT_BIOGRAPHIE_LENGTH)
     profile_photo: Optional[str] = Field(None, max_length=MAX_URL_LENGTH)
-    statut: Optional[str] = Field("public", pattern="^(public|private)$")
+    statut: Optional[str] = Field("privé", pattern="^(public|privé)$")
     type: Optional[str] = Field("conversationnel", pattern="^(conversationnel|recherche_live)$")
 
     @validator("name")
@@ -467,6 +467,67 @@ class TeamCreateValidated(BaseModel):
         if len(v) > 50:
             raise ValueError("Too many agents (max 50)")
         return v
+
+
+class TeamMemberSchema(BaseModel):
+    """Schema for a team member in create/update requests."""
+
+    agent_id: int = Field(..., gt=0)
+    role: str = Field(..., pattern="^(leader|member)$")
+    specialization: Optional[str] = Field(None, max_length=MAX_TEAM_CONTEXTE_LENGTH)
+
+    @validator("specialization")
+    def sanitize_specialization(cls, v):
+        if not v:
+            return v
+        v = SCRIPT_PATTERN.sub("", v)
+        return sanitize_text(v, MAX_TEAM_CONTEXTE_LENGTH)
+
+
+class TeamCreateV2Validated(BaseModel):
+    """Team creation V2 with members array."""
+
+    name: str = Field(..., min_length=1, max_length=MAX_TEAM_NAME_LENGTH)
+    contexte: Optional[str] = Field(None, max_length=MAX_TEAM_CONTEXTE_LENGTH)
+    orchestration_prompt: Optional[str] = Field(None, max_length=MAX_TEAM_CONTEXTE_LENGTH)
+    members: list[TeamMemberSchema] = Field(...)
+
+    @validator("name")
+    def validate_name(cls, v):
+        v = sanitize_text(v, MAX_TEAM_NAME_LENGTH)
+        if not v:
+            raise ValueError("Team name cannot be empty")
+        return v
+
+    @validator("contexte", "orchestration_prompt")
+    def sanitize_text_field(cls, v):
+        if not v:
+            return v
+        v = SCRIPT_PATTERN.sub("", v)
+        return sanitize_text(v, MAX_TEAM_CONTEXTE_LENGTH)
+
+    @validator("members")
+    def validate_members(cls, v):
+        if len(v) < 2:
+            raise ValueError("Team must have at least a leader and one member")
+        if len(v) > 51:
+            raise ValueError("Too many members (max 51)")
+        leaders = [m for m in v if m.role == "leader"]
+        if len(leaders) != 1:
+            raise ValueError("Team must have exactly one leader")
+        members = [m for m in v if m.role == "member"]
+        if len(members) < 1:
+            raise ValueError("Team must have at least one member")
+        agent_ids = [m.agent_id for m in v]
+        if len(agent_ids) != len(set(agent_ids)):
+            raise ValueError("Duplicate agent IDs in members")
+        return v
+
+
+class SuggestSpecializationRequest(BaseModel):
+    """Request to suggest specialization for an agent."""
+
+    agent_id: int = Field(..., gt=0)
 
 
 class CompanyRequestCreateValidated(BaseModel):

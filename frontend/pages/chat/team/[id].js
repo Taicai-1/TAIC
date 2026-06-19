@@ -2,14 +2,15 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { Pencil, Trash2, Plus, Users, ArrowLeft, Send, ThumbsUp, MessageCircle, Sparkles, Bot } from "lucide-react";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownRenderer from '../../../components/MarkdownRenderer';
 import toast, { Toaster } from "react-hot-toast";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useAuth } from '../../../hooks/useAuth';
 import api from '../../../lib/api';
 import { streamAsk } from '../../../lib/streamingFetch';
+import TeamRoutingBanner from '../../../components/TeamRoutingBanner';
+import TeamContributions from '../../../components/TeamContributions';
 
 export default function TeamChatPage() {
   const { t } = useTranslation(['chat', 'teams', 'common', 'errors']);
@@ -32,6 +33,8 @@ export default function TeamChatPage() {
   const [creatingConv, setCreatingConv] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState(null);
   const [editedTitle, setEditedTitle] = useState("");
+  const [routingAgents, setRoutingAgents] = useState([]);
+  const [showRoutingBanner, setShowRoutingBanner] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -77,7 +80,11 @@ export default function TeamChatPage() {
       if (pendingUserMessage && res.data.length === 0) {
         setMessages([pendingUserMessage]);
       } else {
-        setMessages(res.data);
+        const loadedMessages = res.data.map(m => ({
+          ...m,
+          contributions: m.contributions_json ? JSON.parse(m.contributions_json) : null,
+        }));
+        setMessages(loadedMessages);
       }
       setPendingUserMessage(null);
     } catch (e) {
@@ -189,6 +196,7 @@ export default function TeamChatPage() {
 
       let streamSuccess = false;
       let iaAnswer = "";
+      let streamContributions = null;
 
       try {
         const controller = new AbortController();
@@ -199,7 +207,23 @@ export default function TeamChatPage() {
           team_id: teamId,
           history: history
         }, {
+          onRouting: (data) => {
+            const agents = (data.agents || []).map(a => ({
+              ...a, status: 'pending'
+            }));
+            setRoutingAgents(agents);
+            setShowRoutingBanner(true);
+          },
+          onContribution: (data) => {
+            setRoutingAgents(prev => prev.map(a =>
+              a.id === data.agent_id
+                ? { ...a, status: data.status === 'ok' ? 'done' : 'error' }
+                : a
+            ));
+          },
           onToken: (text) => {
+            // Hide routing banner once synthesis starts
+            setShowRoutingBanner(false);
             tokenBufferRef.current += text;
             if (!flushRafRef.current) {
               flushRafRef.current = requestAnimationFrame(() => {
@@ -214,6 +238,7 @@ export default function TeamChatPage() {
             }
           },
           onDone: (data) => {
+            setShowRoutingBanner(false);
             if (flushRafRef.current) {
               cancelAnimationFrame(flushRafRef.current);
               flushRafRef.current = null;
@@ -221,8 +246,12 @@ export default function TeamChatPage() {
             iaAnswer += tokenBufferRef.current;
             tokenBufferRef.current = '';
             iaAnswer = data.full_text || iaAnswer;
+            const contribs = data.contributions || null;
+            streamContributions = contribs;
             setMessages(prev => prev.map((m, i) =>
-              i === streamingMsgIdx.current ? { ...m, content: iaAnswer, streaming: false } : m
+              i === streamingMsgIdx.current
+                ? { ...m, content: iaAnswer, streaming: false, contributions: contribs }
+                : m
             ));
             streamSuccess = true;
           },
@@ -286,7 +315,8 @@ export default function TeamChatPage() {
         await api.post(`/conversations/${selectedConv}/messages`, {
           conversation_id: selectedConv,
           role: "agent",
-          content: iaAnswer
+          content: iaAnswer,
+          contributions_json: streamContributions ? JSON.stringify(streamContributions) : null,
         });
       } catch (e) {}
 
@@ -492,37 +522,15 @@ export default function TeamChatPage() {
                         : "bg-white text-gray-900 rounded-bl-none border border-gray-100 shadow-subtle"
                     }`}
                   >
-                    <div className="prose prose-sm max-w-none">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          p: ({ node, ...props }) => <p className={msg.role === "user" ? "text-white mb-2 last:mb-0" : "text-gray-900 mb-2 last:mb-0"} {...props} />,
-                          strong: ({ node, ...props }) => <strong className={msg.role === "user" ? "text-white font-bold" : "text-gray-900 font-bold"} {...props} />,
-                          em: ({ node, ...props }) => <em className={msg.role === "user" ? "text-white italic" : "text-gray-700 italic"} {...props} />,
-                          ul: ({ node, ...props }) => <ul className={`${msg.role === "user" ? "text-white" : "text-gray-900"} list-disc ml-4 mb-2`} {...props} />,
-                          ol: ({ node, ...props }) => <ol className={`${msg.role === "user" ? "text-white" : "text-gray-900"} list-decimal ml-4 mb-2`} {...props} />,
-                          li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                          code: ({ node, inline, ...props }) =>
-                            inline ? (
-                              <code className={`${msg.role === "user" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-900"} px-1.5 py-0.5 rounded text-sm`} {...props} />
-                            ) : (
-                              <code className={`block ${msg.role === "user" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-900"} p-3 rounded-sm text-sm overflow-x-auto`} {...props} />
-                            ),
-                          a: ({ node, ...props }) => <a className={msg.role === "user" ? "text-blue-200 underline hover:text-blue-100" : "text-blue-600 underline hover:text-blue-800"} target="_blank" rel="noopener noreferrer" {...props} />,
-                          table: ({ node, ...props }) => (
-                            <div className="overflow-x-auto my-3">
-                              <table className="min-w-full border-collapse border border-gray-200 rounded-sm text-sm" {...props} />
-                            </div>
-                          ),
-                          thead: ({ node, ...props }) => <thead className="bg-gray-50" {...props} />,
-                          th: ({ node, ...props }) => <th className="border border-gray-200 px-3 py-2 text-left font-semibold text-gray-700" {...props} />,
-                          td: ({ node, ...props }) => <td className="border border-gray-200 px-3 py-2 text-gray-700" {...props} />,
-                        }}
-                      >
+                    <div>
+                      <MarkdownRenderer variant={msg.role === "user" ? "user" : "agent"}>
                         {msg.content}
-                      </ReactMarkdown>
+                      </MarkdownRenderer>
                       {msg.streaming && <span className="inline-block w-2 h-5 bg-primary-500 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
                     </div>
+                    {msg.contributions && msg.contributions.length > 0 && (
+                      <TeamContributions contributions={msg.contributions} />
+                    )}
                     {isLastAgentMsg && (
                       <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
                         <button
@@ -550,6 +558,11 @@ export default function TeamChatPage() {
                 </div>
               );
             })
+          )}
+          {showRoutingBanner && (
+            <div className="px-4 md:px-0">
+              <TeamRoutingBanner agents={routingAgents} visible={showRoutingBanner} />
+            </div>
           )}
           {loading && !messages.some(m => m.streaming) && ((messages.length > 0 && messages[messages.length - 1].role === "user") || (messages.length === 1 && messages[0].role === "user")) && (
             <div className="flex justify-start animate-fade-in">

@@ -27,6 +27,7 @@
     "fileCreated": "file created",
     "openButton": "Open",
     "copyButton": "Copy",
+    "copied": "Copied!",
     "usefulButton": "Useful",
     "thinking": "{{agentName}} is thinking",
     "thinkingImage": "{{agentName}} is generating an image",
@@ -78,5 +79,16 @@
   },
   "voiceRecognition": {
     "notSupportedAlert": "Your browser does not support voice recognition"
+  },
+  "actions": {
+    "confirm": "Execute",
+    "cancel": "Cancel",
+    "pendingConfirmation": "Awaiting confirmation",
+    "executing": "Executing...",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "connectGooglePrompt": "Connect your Google account to enable actions",
+    "actionProposed": "Action proposed"
   }
 }

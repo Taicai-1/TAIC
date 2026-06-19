@@ -21,6 +21,7 @@ from database import (
     Agent,
     AgentShare,
     Team,
+    TeamMember,
     Company,
 )
 from helpers.agent_helpers import (
@@ -40,6 +41,57 @@ from validation import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _parse_folder_ids(raw: "str | None"):
+    """Parse the company_rag_folder_ids form field into a JSON string or None.
+    Empty/[]/invalid -> None (means 'all folders'). Only positive integer ids are kept
+    (folder ids are positive FK values; negatives/0/non-ints would silently match nothing)."""
+    if not raw:
+        return None
+    try:
+        ids = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(ids, list):
+        return None
+    clean = []
+    for x in ids:
+        if isinstance(x, bool):
+            continue
+        if isinstance(x, int) and x > 0:
+            clean.append(x)
+        elif isinstance(x, str) and x.strip().isdigit() and int(x.strip()) > 0:
+            clean.append(int(x.strip()))
+    return json.dumps(clean) if clean else None
+
+
+def _folder_ids_out(raw: "str | None"):
+    """Serialize stored JSON company_rag_folder_ids back to a list of ints ([] = all)."""
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(v, list):
+        return []
+    # Mirror _parse_folder_ids' write-side guard (positive ints only) so a manually
+    # corrupted row can't surface a "ghost" checked-but-ineffective folder in the UI.
+    return [x for x in v if isinstance(x, int) and not isinstance(x, bool) and x > 0]
+
+
+def _parse_enabled_plugins(raw: str) -> str | None:
+    """Parse enabled_plugins from a JSON array string or CSV string.
+
+    Returns a JSON-encoded list string, or None if input is empty/invalid.
+    """
+    if not raw:
+        return None
+    try:
+        return json.dumps(json.loads(raw))
+    except json.JSONDecodeError:
+        return json.dumps([p.strip() for p in raw.split(",") if p.strip()])
 
 
 @router.get("/api/agent-photo/{agent_id}")
@@ -88,6 +140,9 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                 "profile_photo": a.profile_photo,
                 "llm_provider": a.llm_provider,
                 "neo4j_enabled": a.neo4j_enabled,
+                "date_awareness_enabled": getattr(a, "date_awareness_enabled", False),
+                "include_company_rag": getattr(a, "include_company_rag", False),
+                "company_rag_folder_ids": _folder_ids_out(getattr(a, "company_rag_folder_ids", None)),
                 "email_tags": a.email_tags,
                 "weekly_recap_enabled": a.weekly_recap_enabled,
                 "recap_frequency": a.recap_frequency,
@@ -117,6 +172,9 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
                     "profile_photo": a.profile_photo,
                     "llm_provider": a.llm_provider,
                     "neo4j_enabled": a.neo4j_enabled,
+                    "date_awareness_enabled": a.date_awareness_enabled,
+                    "include_company_rag": getattr(a, "include_company_rag", False),
+                    "company_rag_folder_ids": _folder_ids_out(getattr(a, "company_rag_folder_ids", None)),
                     "email_tags": a.email_tags,
                     "weekly_recap_enabled": a.weekly_recap_enabled,
                     "recap_frequency": a.recap_frequency,
@@ -149,12 +207,29 @@ async def create_agent(
     weekly_recap_recipients: str = Form(None),
     recap_frequency: str = Form("weekly"),
     recap_hour: str = Form("9"),
+    date_awareness_enabled: str = Form("false"),
+    include_company_rag: str = Form("false"),
+    company_rag_folder_ids: str = Form(None),
+    enabled_plugins: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
     """Create a new agent with optional profile photo upload"""
     try:
+        from validation import (
+            sanitize_text,
+            MAX_AGENT_NAME_LENGTH,
+            MAX_AGENT_CONTEXTE_LENGTH,
+            MAX_AGENT_BIOGRAPHIE_LENGTH,
+        )
+
+        name = sanitize_text(name, MAX_AGENT_NAME_LENGTH)
+        if not name:
+            raise HTTPException(status_code=422, detail="Agent name is required")
+        contexte = sanitize_text(contexte, MAX_AGENT_CONTEXTE_LENGTH) if contexte else contexte
+        biographie = sanitize_text(biographie, MAX_AGENT_BIOGRAPHIE_LENGTH) if biographie else biographie
+
         logger.info(
             f"[CREATE_AGENT] Champs reçus: name={name}, contexte={contexte}, biographie={biographie}, type={type}, profile_photo={profile_photo.filename if profile_photo else None}, user_id={user_id}"
         )
@@ -200,6 +275,9 @@ async def create_agent(
                 parsed_email_tags = [f"@{t.lstrip('@').lower()}" for t in tags_list]
             parsed_email_tags = json.dumps(parsed_email_tags) if parsed_email_tags else None
 
+        # Parse enabled_plugins for actionnable agents
+        parsed_plugins = _parse_enabled_plugins(enabled_plugins) if type == "actionnable" else None
+
         # Auto-calculate llm_provider from type
         effective_llm_provider = resolve_llm_provider(type)
         caller_company_id = _get_caller_company_id(user_id, db)
@@ -222,6 +300,10 @@ async def create_agent(
             else None,
             recap_frequency=recap_frequency if recap_frequency in ("daily", "weekly", "monthly") else "weekly",
             recap_hour=max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9,
+            date_awareness_enabled=date_awareness_enabled.lower() in ("true", "1", "yes"),
+            include_company_rag=include_company_rag.lower() in ("true", "1", "yes"),
+            company_rag_folder_ids=_parse_folder_ids(company_rag_folder_ids),
+            enabled_plugins=parsed_plugins,
             user_id=int(user_id),
             company_id=caller_company_id,
         )
@@ -301,6 +383,10 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
             "profile_photo": agent.profile_photo,
             "llm_provider": agent.llm_provider,
             "neo4j_enabled": agent.neo4j_enabled,
+            "date_awareness_enabled": agent.date_awareness_enabled,
+            "include_company_rag": getattr(agent, "include_company_rag", False),
+            "company_rag_folder_ids": _folder_ids_out(getattr(agent, "company_rag_folder_ids", None)),
+            "enabled_plugins": agent.enabled_plugins,
             "created_at": agent.created_at.isoformat() if agent.created_at else None,
             "shared": not is_owner,
             "can_edit": can_edit,
@@ -335,45 +421,52 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
 
 @router.get("/teams")
 async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
-    """List teams for the current user."""
+    """List teams for the current user, including members."""
     try:
         teams = db.query(Team).filter(Team.user_id == int(user_id)).order_by(Team.created_at.desc()).all()
+        team_ids = [t.id for t in teams]
 
-        # Batch-load all referenced agent IDs across all teams (avoids N+1)
-        all_agent_ids = set()
-        for t in teams:
-            all_agent_ids.add(t.leader_agent_id)
-            try:
-                ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
-                all_agent_ids.update(int(aid) for aid in ids)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
+        # Batch-load all members
+        members_by_team = {}
+        if team_ids:
+            all_members = (
+                db.query(TeamMember).filter(TeamMember.team_id.in_(team_ids)).order_by(TeamMember.position).all()
+            )
+            all_agent_ids = {m.agent_id for m in all_members}
+            agent_lookup = {}
+            if all_agent_ids:
+                agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
+                agent_lookup = {a.id: a for a in agents}
 
-        agent_lookup = {}
-        if all_agent_ids:
-            agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
-            agent_lookup = {a.id: a.name for a in agents}
+            for m in all_members:
+                members_by_team.setdefault(m.team_id, []).append(
+                    {
+                        "agent_id": m.agent_id,
+                        "role": m.role,
+                        "name": agent_lookup[m.agent_id].name if m.agent_id in agent_lookup else None,
+                        "specialization": m.specialization,
+                        "auto_specialization": m.auto_specialization,
+                        "position": m.position,
+                    }
+                )
 
         out = []
         for t in teams:
-            leader_name = agent_lookup.get(t.leader_agent_id)
-            action_ids = []
-            action_agent_names = []
-            try:
-                action_ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
-                action_agent_names = [agent_lookup[int(aid)] for aid in action_ids if int(aid) in agent_lookup]
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
-
+            t_members = members_by_team.get(t.id, [])
+            leader = next((m for m in t_members if m["role"] == "leader"), None)
+            action_members = [m for m in t_members if m["role"] == "member"]
             out.append(
                 {
                     "id": t.id,
                     "name": t.name,
                     "contexte": t.contexte,
-                    "leader_agent_id": t.leader_agent_id,
-                    "leader_name": leader_name,
-                    "action_agent_ids": action_ids,
-                    "action_agent_names": action_agent_names,
+                    "orchestration_prompt": t.orchestration_prompt,
+                    "members": t_members,
+                    # Legacy fields for backward compat
+                    "leader_agent_id": leader["agent_id"] if leader else t.leader_agent_id,
+                    "leader_name": leader["name"] if leader else None,
+                    "action_agent_ids": [m["agent_id"] for m in action_members],
+                    "action_agent_names": [m["name"] for m in action_members if m["name"]],
                     "created_at": t.created_at.isoformat() if t.created_at else None,
                 }
             )
@@ -384,104 +477,166 @@ async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends
 
 
 @router.post("/teams")
-async def create_team(
-    payload: TeamCreateValidated, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
-):
-    """Create a team. Expected payload: {name, contexte (opt), leader_agent_id, action_agent_ids: [id,id,id]}"""
+async def create_team(payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+    """Create a team. Supports V2 (members array) and legacy (leader_agent_id) formats."""
+    from pydantic import ValidationError
+
     try:
-        name = payload.name
-        contexte = payload.contexte
-        leader_agent_id = payload.leader_agent_id
-        member_agent_ids = payload.action_agent_ids
-        # On accepte n'importe quel nombre d'agents
+        # Detect format
+        is_v2 = "members" in payload
 
-        # Valider le chef (doit être conversationnel)
-        leader = db.query(Agent).filter(Agent.id == int(leader_agent_id), Agent.user_id == int(user_id)).first()
-        if not leader or getattr(leader, "type", "conversationnel") != "conversationnel":
-            raise HTTPException(status_code=400, detail="Leader agent must be a conversationnel agent belonging to you")
+        if is_v2:
+            from validation import TeamCreateV2Validated
 
-        # Valider les membres (uniquement conversationnels)
-        member_agents = []
-        for aid in member_agent_ids:
-            a = db.query(Agent).filter(Agent.id == int(aid), Agent.user_id == int(user_id)).first()
-            if not a or getattr(a, "type", "") != "conversationnel":
+            validated = TeamCreateV2Validated(**payload)
+            name = validated.name
+            contexte = validated.contexte
+            orchestration_prompt = validated.orchestration_prompt
+            members_data = validated.members
+        else:
+            from validation import TeamCreateValidated
+
+            validated = TeamCreateValidated(**payload)
+            name = validated.name
+            contexte = validated.contexte
+            orchestration_prompt = None
+            # Convert legacy to V2 member format
+            from validation import TeamMemberSchema
+
+            members_data = [TeamMemberSchema(agent_id=validated.leader_agent_id, role="leader")]
+            for aid in validated.action_agent_ids:
+                members_data.append(TeamMemberSchema(agent_id=aid, role="member"))
+
+        # Validate all agents belong to user and are conversationnel
+        uid = int(user_id)
+        for m in members_data:
+            a = db.query(Agent).filter(Agent.id == m.agent_id, Agent.user_id == uid).first()
+            if not a or getattr(a, "type", "conversationnel") != "conversationnel":
                 raise HTTPException(
-                    status_code=400, detail=f"Agent {aid} doit être un agent conversationnel appartenant à vous"
+                    status_code=400, detail=f"Agent {m.agent_id} doit etre un agent conversationnel appartenant a vous"
                 )
-            member_agents.append(a)
+
+        caller_company_id = _get_caller_company_id(user_id, db)
+        leader_data = next(m for m in members_data if m.role == "leader")
 
         team = Team(
             name=name,
             contexte=contexte,
-            leader_agent_id=int(leader_agent_id),
-            action_agent_ids=json.dumps([int(x) for x in member_agent_ids]),
-            user_id=int(user_id),
-            company_id=_get_caller_company_id(user_id, db),
+            orchestration_prompt=orchestration_prompt,
+            leader_agent_id=leader_data.agent_id,
+            action_agent_ids=json.dumps([m.agent_id for m in members_data if m.role == "member"]),
+            user_id=uid,
+            company_id=caller_company_id,
         )
         db.add(team)
+        db.flush()
+
+        # Create TeamMember entries
+        for i, m in enumerate(members_data):
+            tm = TeamMember(
+                team_id=team.id,
+                agent_id=m.agent_id,
+                role=m.role,
+                specialization=m.specialization,
+                position=i,
+                company_id=caller_company_id,
+            )
+            db.add(tm)
+
         db.commit()
         db.refresh(team)
 
-        # Préparer la réponse avec les noms
-        resp = {
+        # Build response
+        all_agent_ids = [m.agent_id for m in members_data]
+        agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
+        agent_lookup = {a.id: a.name for a in agents}
+
+        resp_members = []
+        for i, m in enumerate(members_data):
+            resp_members.append(
+                {
+                    "agent_id": m.agent_id,
+                    "role": m.role,
+                    "name": agent_lookup.get(m.agent_id),
+                    "specialization": m.specialization,
+                    "position": i,
+                }
+            )
+
+        leader = next(m for m in resp_members if m["role"] == "leader")
+        action_members = [m for m in resp_members if m["role"] == "member"]
+
+        return {
             "team": {
                 "id": team.id,
                 "name": team.name,
                 "contexte": team.contexte,
-                "leader_agent_id": team.leader_agent_id,
-                "leader_name": leader.name,
-                "member_agent_ids": [int(x) for x in member_agent_ids],
-                "member_agent_names": [a.name for a in member_agents],
+                "orchestration_prompt": team.orchestration_prompt,
+                "members": resp_members,
+                # Legacy compat
+                "leader_agent_id": leader["agent_id"],
+                "leader_name": leader["name"],
+                "member_agent_ids": [m["agent_id"] for m in action_members],
+                "member_agent_names": [m["name"] for m in action_members],
                 "created_at": team.created_at.isoformat() if team.created_at else None,
             }
         }
-        return resp
     except HTTPException:
         raise
+    except ValidationError as e:
+        msgs = "; ".join(err.get("msg", "invalid") for err in e.errors())
+        raise HTTPException(status_code=422, detail=msgs or "Invalid team data")
     except Exception as e:
         logger.exception(f"Error creating team: {e}")
-        # If the teams table does not exist, provide a helpful message
         if 'relation "teams"' in str(e) or "does not exist" in str(e):
-            raise HTTPException(
-                status_code=500,
-                detail="teams table not found in database. Please create the table before using this endpoint.",
-            )
+            raise HTTPException(status_code=500, detail="teams table not found in database.")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/teams/{team_id}")
 async def get_team(team_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
+    """Get a single team with members."""
     try:
         t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
         if not t:
             raise HTTPException(status_code=404, detail="Team not found")
 
-        # Batch-load leader + action agents in one query (avoids N+1)
-        all_agent_ids = {t.leader_agent_id}
-        action_ids = []
-        try:
-            action_ids = json.loads(t.action_agent_ids) if t.action_agent_ids else []
-            all_agent_ids.update(int(aid) for aid in action_ids)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            pass
-
+        members = db.query(TeamMember).filter(TeamMember.team_id == t.id).order_by(TeamMember.position).all()
+        agent_ids = {m.agent_id for m in members}
         agent_lookup = {}
-        if all_agent_ids:
-            agents = db.query(Agent).filter(Agent.id.in_(all_agent_ids)).all()
-            agent_lookup = {a.id: a.name for a in agents}
+        if agent_ids:
+            agents = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
+            agent_lookup = {a.id: a for a in agents}
 
-        leader_name = agent_lookup.get(t.leader_agent_id)
-        action_agent_names = [agent_lookup[int(aid)] for aid in action_ids if int(aid) in agent_lookup]
+        resp_members = []
+        for m in members:
+            a = agent_lookup.get(m.agent_id)
+            resp_members.append(
+                {
+                    "agent_id": m.agent_id,
+                    "role": m.role,
+                    "name": a.name if a else None,
+                    "specialization": m.specialization,
+                    "auto_specialization": m.auto_specialization,
+                    "position": m.position,
+                }
+            )
+
+        leader = next((m for m in resp_members if m["role"] == "leader"), None)
+        action_members = [m for m in resp_members if m["role"] == "member"]
 
         return {
             "team": {
                 "id": t.id,
                 "name": t.name,
                 "contexte": t.contexte,
-                "leader_agent_id": t.leader_agent_id,
-                "leader_name": leader_name,
-                "action_agent_ids": action_ids,
-                "action_agent_names": action_agent_names,
+                "orchestration_prompt": t.orchestration_prompt,
+                "members": resp_members,
+                # Legacy compat
+                "leader_agent_id": leader["agent_id"] if leader else t.leader_agent_id,
+                "leader_name": leader["name"] if leader else None,
+                "action_agent_ids": [m["agent_id"] for m in action_members],
+                "action_agent_names": [m["name"] for m in action_members if m["name"]],
                 "created_at": t.created_at.isoformat() if t.created_at else None,
             }
         }
@@ -490,6 +645,109 @@ async def get_team(team_id: int, user_id: str = Depends(verify_token), db: Sessi
     except Exception as e:
         logger.exception(f"Error fetching team {team_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/teams/suggest-specialization")
+async def suggest_specialization_endpoint(
+    payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Auto-detect specialization for an agent."""
+    from validation import SuggestSpecializationRequest
+
+    validated = SuggestSpecializationRequest(**payload)
+
+    agent = db.query(Agent).filter(Agent.id == validated.agent_id, Agent.user_id == int(user_id)).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    from database import Document
+
+    docs = db.query(Document).filter(Document.agent_id == agent.id).limit(10).all()
+    doc_names = [d.filename for d in docs if d.filename]
+
+    from orchestrator import suggest_specialization
+
+    spec = suggest_specialization(
+        agent_name=agent.name,
+        agent_contexte=agent.contexte or "",
+        agent_biographie=agent.biographie or "",
+        document_names=doc_names,
+    )
+    return {"specialization": spec}
+
+
+@router.put("/teams/{team_id}/members")
+async def update_team_members(
+    team_id: int, payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Replace full team composition."""
+    from validation import TeamMemberSchema
+
+    t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    members_raw = payload.get("members", [])
+    members_data = [TeamMemberSchema(**m) for m in members_raw]
+
+    # Validate
+    leaders = [m for m in members_data if m.role == "leader"]
+    if len(leaders) != 1:
+        raise HTTPException(status_code=400, detail="Must have exactly one leader")
+    non_leaders = [m for m in members_data if m.role == "member"]
+    if len(non_leaders) < 1:
+        raise HTTPException(status_code=400, detail="Must have at least one member")
+
+    uid = int(user_id)
+    for m in members_data:
+        a = db.query(Agent).filter(Agent.id == m.agent_id, Agent.user_id == uid).first()
+        if not a or getattr(a, "type", "conversationnel") != "conversationnel":
+            raise HTTPException(status_code=400, detail=f"Agent {m.agent_id} invalid")
+
+    # Delete old members
+    db.query(TeamMember).filter(TeamMember.team_id == team_id).delete()
+
+    caller_company_id = _get_caller_company_id(user_id, db)
+    for i, m in enumerate(members_data):
+        tm = TeamMember(
+            team_id=team_id,
+            agent_id=m.agent_id,
+            role=m.role,
+            specialization=m.specialization,
+            position=i,
+            company_id=caller_company_id,
+        )
+        db.add(tm)
+
+    # Update legacy fields on Team
+    leader = next(m for m in members_data if m.role == "leader")
+    t.leader_agent_id = leader.agent_id
+    t.action_agent_ids = json.dumps([m.agent_id for m in members_data if m.role == "member"])
+
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.patch("/teams/{team_id}/members/{agent_id}")
+async def patch_team_member(
+    team_id: int, agent_id: int, payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Update specialization or position of a team member."""
+    t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    member = db.query(TeamMember).filter(TeamMember.team_id == team_id, TeamMember.agent_id == agent_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    if "specialization" in payload:
+        member.specialization = payload["specialization"]
+    if "position" in payload:
+        member.position = payload["position"]
+
+    db.commit()
+    return {"status": "ok"}
 
 
 # Endpoint pour modifier un agent existant
@@ -509,6 +767,10 @@ async def update_agent(
     weekly_recap_recipients: str = Form(None),
     recap_frequency: str = Form("weekly"),
     recap_hour: str = Form("9"),
+    date_awareness_enabled: str = Form("false"),
+    include_company_rag: str = Form("false"),
+    company_rag_folder_ids: str = Form(None),
+    enabled_plugins: str = Form(None),
     profile_photo: UploadFile = File(None),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
@@ -517,12 +779,29 @@ async def update_agent(
     try:
         agent = _user_can_edit_agent(int(user_id), agent_id, db)
 
+        from validation import (
+            sanitize_text,
+            MAX_AGENT_NAME_LENGTH,
+            MAX_AGENT_CONTEXTE_LENGTH,
+            MAX_AGENT_BIOGRAPHIE_LENGTH,
+        )
+
+        name = sanitize_text(name, MAX_AGENT_NAME_LENGTH)
+        if not name:
+            raise HTTPException(status_code=422, detail="Agent name is required")
+        contexte = sanitize_text(contexte, MAX_AGENT_CONTEXTE_LENGTH) if contexte else contexte
+        biographie = sanitize_text(biographie, MAX_AGENT_BIOGRAPHIE_LENGTH) if biographie else biographie
+
         agent.name = name
         agent.contexte = contexte
         agent.biographie = biographie
         agent.statut = "privé"
         agent.type = type
-        agent.llm_provider = "perplexity" if type == "recherche_live" else "mistral"
+        agent.llm_provider = resolve_llm_provider(type)
+
+        # Update enabled_plugins for actionnable agents
+        if enabled_plugins is not None:
+            agent.enabled_plugins = _parse_enabled_plugins(enabled_plugins) if agent.type == "actionnable" else None
 
         # Parser et mettre à jour les email_tags
         if email_tags is not None:
@@ -549,6 +828,13 @@ async def update_agent(
         )
         agent.recap_frequency = recap_frequency if recap_frequency in ("daily", "weekly", "monthly") else "weekly"
         agent.recap_hour = max(0, min(23, int(recap_hour))) if recap_hour.isdigit() else 9
+
+        # Update Date Awareness
+        agent.date_awareness_enabled = date_awareness_enabled.lower() in ("true", "1", "yes")
+
+        # Update Company RAG inclusion
+        agent.include_company_rag = include_company_rag.lower() in ("true", "1", "yes")
+        agent.company_rag_folder_ids = _parse_folder_ids(company_rag_folder_ids)
 
         GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "applydi-agent-photos")
 

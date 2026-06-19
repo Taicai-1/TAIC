@@ -1,0 +1,42 @@
+<h2>Approche pour le rendu Markdown</h2>
+<p class="subtitle">3 niveaux d'investissement — quel style veux-tu pour les réponses IA ?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Clean & Minimal (Recommandé)</h3>
+      <p>Un composant <code>MarkdownRenderer</code> partagé avec tous les éléments bien stylés : titres, listes, tables, blockquotes, code blocks avec fond gris. Pas de librairie externe supplémentaire. Rendu propre, cohérent entre agent et team chat.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Avantages</h4><ul><li>Aucune dépendance ajoutée</li><li>Cohérence agent/team/contributions</li><li>Rapide à implémenter</li><li>Léger en bundle</li></ul></div>
+        <div class="cons"><h4>Limites</h4><ul><li>Pas de coloration syntaxique dans les blocs de code</li><li>Style manuel pour chaque élément</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Premium avec Syntax Highlighting</h3>
+      <p>Comme A, mais avec <code>react-syntax-highlighter</code> (ou <code>rehype-highlight</code>) pour coloriser les blocs de code. Style inspiré de ChatGPT/Notion — titres bien marqués, blockquotes élégantes, tables zebra-striped.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Avantages</h4><ul><li>Rendu professionnel/premium</li><li>Code colorisé = lisibilité ++</li><li>Style complet pour tous les éléments</li></ul></div>
+        <div class="cons"><h4>Limites</h4><ul><li>+30-50KB de bundle (highlight.js)</li><li>Une dépendance de plus à maintenir</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Tailwind Typography (prose)</h3>
+      <p>Utiliser <code>@tailwindcss/typography</code> (plugin <code>prose</code>) au lieu de styler chaque élément manuellement. Le plugin gère tous les éléments HTML automatiquement avec un style éditorial cohérent.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Avantages</h4><ul><li>Tous les éléments stylés automatiquement</li><li>Très peu de CSS custom</li><li>Bien maintenu par Tailwind Labs</li></ul></div>
+        <div class="cons"><h4>Limites</h4><ul><li>Moins de contrôle fin sur chaque élément</li><li>Besoin d'overrides pour les couleurs user/agent</li><li>Pas de syntax highlighting natif</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top: 2rem;">💡 Les options B et C sont combinables : prose pour la base + syntax highlighter pour le code.</p>

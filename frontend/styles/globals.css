@@ -60,20 +60,5 @@
 .animation-delay-100  { animation-delay: 100ms; }
 .animation-delay-200  { animation-delay: 200ms; }
 
-/* ── Markdown inside chat bubbles ──────── */
-.markdown-content strong { font-weight: 700; }
-.markdown-content em     { font-style: italic; }
-.markdown-content code {
-  font-family: 'Courier New', Courier, monospace;
-  background-color: rgba(0,0,0,.06);
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-size: 0.875em;
-}
-.markdown-content ul { list-style: disc inside; margin: 6px 0; }
-.markdown-content li { margin-left: 1rem; }
-.markdown-content p  { margin-bottom: 4px; }
-.markdown-content a  { color: #4f46e5; text-decoration: underline; }
-
 /* ── Sidebar nav active transition ─────── */
 .bg-navy { background-color: #0f1c3f; }

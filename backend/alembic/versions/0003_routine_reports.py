@@ -17,6 +17,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # create_all() runs before Alembic at startup, so the table may already
+    # exist — guard to keep the migration chain unblocked.
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("routine_reports"):
+        return
+
     op.create_table(
         "routine_reports",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),

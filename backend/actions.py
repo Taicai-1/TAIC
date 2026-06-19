@@ -1,3 +1,6 @@
+"""DEPRECATED: Legacy action implementations. New actions use the plugin system (backend/plugins/).
+This file is kept for backward compatibility with existing AgentAction records."""
+
 import os
 import json
 import logging

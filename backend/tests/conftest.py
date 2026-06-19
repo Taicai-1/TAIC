@@ -182,6 +182,201 @@ def test_conversation(db_session, test_user, test_agent):
     return conv
 
 
+@pytest.fixture
+def test_company(db_session):
+    """Create a test company."""
+    from tests.factories import CompanyFactory
+
+    company = CompanyFactory.build()
+    db_session.add(company)
+    db_session.flush()
+    return company
+
+
+@pytest.fixture
+def test_admin_user(db_session, test_company):
+    """Create an admin user in the test company."""
+    from tests.factories import UserFactory, CompanyMembershipFactory
+
+    user = UserFactory.build(company_id=test_company.id)
+    db_session.add(user)
+    db_session.flush()
+    membership = CompanyMembershipFactory.build(user_id=user.id, company_id=test_company.id, role="admin")
+    db_session.add(membership)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def test_admin_token(test_admin_user):
+    """Return a valid JWT token for the admin user."""
+    return create_access_token(data={"sub": str(test_admin_user.id)})
+
+
+@pytest.fixture
+def admin_cookies(test_admin_token):
+    """Return cookies dict for authenticated admin requests."""
+    return {"token": test_admin_token}
+
+
+@pytest.fixture
+def test_member_user(db_session, test_company):
+    """Create a member user in the test company."""
+    from tests.factories import UserFactory, CompanyMembershipFactory
+
+    user = UserFactory.build(company_id=test_company.id)
+    db_session.add(user)
+    db_session.flush()
+    membership = CompanyMembershipFactory.build(user_id=user.id, company_id=test_company.id, role="member")
+    db_session.add(membership)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def test_member_token(test_member_user):
+    """Return a valid JWT token for the member user."""
+    return create_access_token(data={"sub": str(test_member_user.id)})
+
+
+@pytest.fixture
+def member_cookies(test_member_token):
+    """Return cookies dict for authenticated member requests."""
+    return {"token": test_member_token}
+
+
+@pytest.fixture
+def test_questionnaire(db_session, test_member_user, test_company):
+    """Create a questionnaire with 2 questions (open + single_choice) in test_company."""
+    from tests.factories import QuestionnaireFactory, QuestionnaireQuestionFactory
+
+    questionnaire = QuestionnaireFactory.build(company_id=test_company.id, user_id=test_member_user.id)
+    db_session.add(questionnaire)
+    db_session.flush()
+
+    q1 = QuestionnaireQuestionFactory.build(questionnaire_id=questionnaire.id, company_id=test_company.id, position=0)
+    q2 = QuestionnaireQuestionFactory.build(
+        questionnaire_id=questionnaire.id,
+        company_id=test_company.id,
+        position=1,
+        question_text="Êtes-vous satisfait ?",
+        question_type="single_choice",
+        options='["Oui", "Non"]',
+    )
+    db_session.add(q1)
+    db_session.add(q2)
+    db_session.flush()
+    return questionnaire
+
+
+@pytest.fixture
+def test_mission(db_session, test_member_user, test_company, test_agent):
+    """Create an active mission owned by test_member_user with one upcoming event."""
+    from datetime import date, timedelta
+    from tests.factories import MissionFactory, MissionEventFactory
+
+    mission = MissionFactory.build(
+        company_id=test_company.id,
+        user_id=test_member_user.id,
+        agent_id=test_agent.id,
+    )
+    db_session.add(mission)
+    db_session.flush()
+
+    event = MissionEventFactory.build(
+        mission_id=mission.id,
+        company_id=test_company.id,
+        event_date=date.today() + timedelta(days=2),
+    )
+    db_session.add(event)
+    db_session.flush()
+    return mission
+
+
+@pytest.fixture
+def test_team(db_session, test_user):
+    """Create a test team owned by test_user with a leader agent."""
+    from tests.factories import AgentFactory, TeamFactory, TeamMemberFactory
+    import json
+
+    leader = AgentFactory.build(
+        user_id=test_user.id, name="Leader Agent", company_id=getattr(test_user, "company_id", None)
+    )
+    db_session.add(leader)
+    db_session.flush()
+
+    team = TeamFactory.build(
+        user_id=test_user.id,
+        leader_agent_id=leader.id,
+        action_agent_ids="[]",
+        company_id=getattr(test_user, "company_id", None),
+    )
+    db_session.add(team)
+    db_session.flush()
+
+    leader_member = TeamMemberFactory.build(
+        team_id=team.id,
+        agent_id=leader.id,
+        role="leader",
+        position=0,
+        company_id=getattr(test_user, "company_id", None),
+    )
+    db_session.add(leader_member)
+    db_session.flush()
+
+    return team
+
+
+@pytest.fixture
+def test_team_with_members(db_session, test_user):
+    """Create a team with a leader + 2 member agents."""
+    from tests.factories import AgentFactory, TeamFactory, TeamMemberFactory
+    import json
+
+    company_id = getattr(test_user, "company_id", None)
+
+    leader = AgentFactory.build(
+        user_id=test_user.id, name="Leader", contexte="Coordinateur general", company_id=company_id
+    )
+    member1 = AgentFactory.build(
+        user_id=test_user.id, name="Expert Finance", contexte="Expert en comptabilite", company_id=company_id
+    )
+    member2 = AgentFactory.build(
+        user_id=test_user.id, name="Analyste Marche", contexte="Veille concurrentielle", company_id=company_id
+    )
+    for a in [leader, member1, member2]:
+        db_session.add(a)
+    db_session.flush()
+
+    team = TeamFactory.build(
+        user_id=test_user.id,
+        leader_agent_id=leader.id,
+        action_agent_ids=json.dumps([member1.id, member2.id]),
+        company_id=company_id,
+    )
+    db_session.add(team)
+    db_session.flush()
+
+    members_data = [
+        (leader, "leader", 0),
+        (member1, "member", 1),
+        (member2, "member", 2),
+    ]
+    for agent, role, pos in members_data:
+        m = TeamMemberFactory.build(
+            team_id=team.id,
+            agent_id=agent.id,
+            role=role,
+            position=pos,
+            specialization=agent.contexte,
+            company_id=company_id,
+        )
+        db_session.add(m)
+    db_session.flush()
+
+    return {"team": team, "leader": leader, "members": [member1, member2]}
+
+
 # ---------------------------------------------------------------------------
 # Mock fixtures for external services
 # ---------------------------------------------------------------------------

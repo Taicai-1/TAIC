@@ -1,0 +1,95 @@
+<h2>Placement dans la sidebar</h2>
+<p class="subtitle">Ou placer "Templates" dans la navigation ?</p>
+
+<div class="cards">
+  <!-- Option A -->
+  <div class="card" data-choice="after-agents" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding: 20px; background: #f8fafc; border-radius: 8px;">
+        <div style="width: 200px; background: white; border-right: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; min-height: 360px;">
+          <!-- Brand -->
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px;">
+            <div style="width: 28px; height: 28px; background: #4f46e5; border-radius: 6px;"></div>
+            <span style="font-weight: 800; font-size: 15px; color: #1e293b;">TAIC</span>
+          </div>
+          <!-- Nav items -->
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #f1f5f9;">
+              <div style="width: 16px; height: 16px; background: #4f46e5; border-radius: 3px;"></div>
+              <span style="font-size: 13px; font-weight: 600; color: #4f46e5;">Companions</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #faf5ff; border: 1.5px solid #c084fc;">
+              <div style="width: 16px; height: 16px; background: #a855f7; border-radius: 3px;"></div>
+              <span style="font-size: 13px; font-weight: 600; color: #7c3aed;">Templates</span>
+              <span style="font-size: 9px; background: #f3e8ff; color: #7c3aed; padding: 1px 6px; border-radius: 8px; margin-left: auto;">NEW</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;">
+              <div style="width: 16px; height: 16px; background: #cbd5e1; border-radius: 3px;"></div>
+              <span style="font-size: 13px; color: #64748b;">Teams</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;">
+              <div style="width: 16px; height: 16px; background: #cbd5e1; border-radius: 3px;"></div>
+              <span style="font-size: 13px; color: #64748b;">Organization</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;">
+              <div style="width: 16px; height: 16px; background: #cbd5e1; border-radius: 3px;"></div>
+              <span style="font-size: 13px; color: #64748b;">Profile</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A - Juste apres Companions</h3>
+      <p>Templates se place entre Companions et Teams. Logique : les templates sont directement lies aux companions. Groupement semantique naturel.</p>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="before-org" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding: 20px; background: #f8fafc; border-radius: 8px;">
+        <div style="width: 200px; background: white; border-right: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; min-height: 360px;">
+          <!-- Brand -->
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px;">
+            <div style="width: 28px; height: 28px; background: #4f46e5; border-radius: 6px;"></div>
+            <span style="font-weight: 800; font-size: 15px; color: #1e293b;">TAIC</span>
+          </div>
+          <!-- Nav items -->
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #f1f5f9;">
+              <div style="width: 16px; height: 16px; background: #4f46e5; border-radius: 3px;"></div>
+              <span style="font-size: 13px; font-weight: 600; color: #4f46e5;">Companions</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;">
+              <div style="width: 16px; height: 16px; background: #cbd5e1; border-radius: 3px;"></div>
+              <span style="font-size: 13px; color: #64748b;">Teams</span>
+            </div>
+
+            <!-- Separator -->
+            <div style="height: 1px; background: #e2e8f0; margin: 8px 0;"></div>
+            <div style="font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 12px; margin-bottom: 2px;">Administration</div>
+
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #faf5ff; border: 1.5px solid #c084fc;">
+              <div style="width: 16px; height: 16px; background: #a855f7; border-radius: 3px;"></div>
+              <span style="font-size: 13px; font-weight: 600; color: #7c3aed;">Templates</span>
+              <span style="font-size: 9px; background: #f3e8ff; color: #7c3aed; padding: 1px 6px; border-radius: 8px; margin-left: auto;">NEW</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;">
+              <div style="width: 16px; height: 16px; background: #cbd5e1; border-radius: 3px;"></div>
+              <span style="font-size: 13px; color: #64748b;">Organization</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;">
+              <div style="width: 16px; height: 16px; background: #cbd5e1; border-radius: 3px;"></div>
+              <span style="font-size: 13px; color: #64748b;">Profile</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B - Section "Administration" separee</h3>
+      <p>Un separateur visuel avec label "Administration" regroupe Templates + Organization. Marque bien que c'est une feature admin. Plus structure si d'autres features admin arrivent.</p>
+    </div>
+  </div>
+</div>

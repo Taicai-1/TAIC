@@ -98,13 +98,94 @@ def generate_text(
         messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
         max_tokens=max_tokens,
+        timeout_ms=timeout * 1000,
     )
 
     if response and response.choices and len(response.choices) > 0:
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        try:
+            from llm_usage import record_usage, count_tokens
+
+            u = getattr(response, "usage", None)
+            if u is not None:
+                record_usage(
+                    "mistral", model_short, getattr(u, "prompt_tokens", 0) or 0, getattr(u, "completion_tokens", 0) or 0
+                )
+            else:
+                record_usage("mistral", model_short, count_tokens(prompt), count_tokens(content or ""))
+        except Exception:
+            pass
+        return content
 
     logger.warning(f"Unexpected Mistral response shape: {response}")
     return str(response)
+
+
+def _resolve_model(model_name: str) -> str:
+    """Resolve a model name to a concrete Mistral model id."""
+    if isinstance(model_name, str) and model_name.startswith("mistral:"):
+        model_short = model_name.split(":", 1)[1]
+    else:
+        model_short = model_name or ""
+    ms_lower = model_short.lower() if isinstance(model_short, str) else ""
+    if ms_lower in ALIASES:
+        model_short = ALIASES[ms_lower]
+    return model_short
+
+
+def generate_with_tools(
+    messages: list[dict],
+    tools: list[dict],
+    model_name: str = "mistral-small-latest",
+    temperature: float = 0.7,
+    max_tokens: int = 16000,
+) -> dict:
+    """Call Mistral chat with function calling support.
+
+    Args:
+        messages: OpenAI-style messages list.
+        tools: List of tools in OpenAI format (type: function, function: {name, description, parameters}).
+        model_name: Mistral model name.
+
+    Returns:
+        dict with keys:
+          - "content": str | None (text content if any)
+          - "tool_call": dict | None ({"name": str, "arguments": dict} if function call)
+    """
+    model_short = _resolve_model(model_name)
+    client = _get_client()
+    logger.info(f"Calling Mistral chat with tools: model={model_short}")
+
+    response = client.chat.complete(
+        model=model_short,
+        messages=messages,
+        tools=tools,
+        tool_choice="auto",
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout_ms=60000,
+    )
+
+    if not response or not response.choices:
+        return {"content": None, "tool_call": None}
+
+    message = response.choices[0].message
+    text_content = message.content if message.content else None
+    tool_call = None
+
+    if message.tool_calls and len(message.tool_calls) > 0:
+        tc = message.tool_calls[0]
+        import json
+
+        args = tc.function.arguments
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                args = {}
+        tool_call = {"name": tc.function.name, "arguments": args, "id": getattr(tc, "id", "") or ""}
+
+    return {"content": text_content, "tool_call": tool_call}
 
 
 def generate_text_stream(
@@ -134,6 +215,7 @@ def generate_text_stream(
         messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
         max_tokens=max_tokens,
+        timeout_ms=60000,
     )
 
     for event in stream:

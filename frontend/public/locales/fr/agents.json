@@ -2,6 +2,14 @@
   "pageTitle": "TAIC Companion",
   "pageSubtitle": "Créez un jumeau expert.",
   "logout": "Se déconnecter",
+  "companyRag": {
+    "label": "Inclure le RAG entreprise",
+    "help": "Donne à ce companion accès aux documents partagés de l'entreprise."
+  },
+  "companyRagFolders": {
+    "label": "Dossiers du RAG Entreprise inclus",
+    "allHint": "Tout coché = tous les dossiers (y compris les futurs)"
+  },
   "types": {
     "conversationnel": {
       "name": "Conversationnel",
@@ -14,6 +22,10 @@
     "visuel": {
       "name": "Visuel",
       "description": "Génération d'images par IA"
+    },
+    "actionnable": {
+      "name": "Actionnable",
+      "description": "Exécuter des tâches dans Google Workspace"
     }
   },
   "buttons": {
@@ -89,6 +101,13 @@
     "photo": {
       "preview": "Aperçu"
     },
+    "plugins": {
+      "label": "Plugins activés",
+      "description": "Sélectionnez les intégrations Google Workspace que ce companion peut utiliser",
+      "connectGoogle": "Connecter un compte Google",
+      "googleConnected": "Compte Google connecté",
+      "scopesMissing": "Permissions supplémentaires requises"
+    },
     "weeklyRecap": {
       "label": "Recap Hebdomadaire",
       "helpText": "Recevez par email un résumé IA basé sur les conversations et documents de traçabilité.",
@@ -106,6 +125,10 @@
       },
       "hourLabel": "Heure d'envoi",
       "hourSuffix": "h"
+    },
+    "dateAwareness": {
+      "label": "Conscience de la date",
+      "helpText": "Le companion connaîtra la date et l'heure actuelles, utile pour les roadmaps et plannings."
     }
   },
   "slack": {

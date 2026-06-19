@@ -1,0 +1,207 @@
+{
+  "title": "Automations",
+  "subtitle": "Automate recurring tasks for your organization",
+  "tabs": {
+    "questionnaires": "Questionnaires",
+    "missions": "Missions"
+  },
+  "list": {
+    "empty": "No questionnaires yet",
+    "emptyHint": "Create your first questionnaire to collect answers by email.",
+    "create": "New questionnaire",
+    "questionCount": "{{count}} question(s)",
+    "responseCount": "{{completed}}/{{invited}} response(s)",
+    "deleteConfirm": "Delete this questionnaire and all its responses?",
+    "deleted": "Questionnaire deleted"
+  },
+  "editor": {
+    "createTitle": "New questionnaire",
+    "titleLabel": "Title",
+    "titlePlaceholder": "E.g. Customer satisfaction survey",
+    "descriptionLabel": "Description (visible to respondents)",
+    "descriptionPlaceholder": "Describe the purpose of this questionnaire…",
+    "questionsTitle": "Questions",
+    "addQuestion": "Add a question",
+    "noQuestions": "No questions yet. Add one to get started.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saved": "Questionnaire saved",
+    "titleRequired": "Title is required",
+    "questionTextRequired": "Every question needs a label",
+    "lockedByResponses": "Responses have been received: this questionnaire can no longer be edited."
+  },
+  "builder": {
+    "questionPlaceholder": "Question label…",
+    "questionType": "Type",
+    "required": "Required",
+    "addOption": "Add an option",
+    "optionPlaceholder": "Option {{n}}",
+    "ratingMin": "Min",
+    "ratingMax": "Max",
+    "types": {
+      "open": "Free text",
+      "single_choice": "Single choice",
+      "multiple_choice": "Multiple choice",
+      "rating": "Rating"
+    }
+  },
+  "detail": {
+    "back": "Back to questionnaires",
+    "tabs": {
+      "questions": "Questions",
+      "invitations": "Invitations",
+      "responses": "Responses"
+    }
+  },
+  "invitations": {
+    "title": "Invite respondents",
+    "hint": "One address per line. Optional format: email, Name",
+    "placeholder": "marie@example.com\njohn@example.com, John Smith",
+    "send": "Send invitations",
+    "sent": "{{count}} invitation(s) sent",
+    "skipped": "{{count}} address(es) already invited",
+    "noEmails": "Enter at least one valid email address",
+    "listTitle": "Invitations",
+    "empty": "No invitations sent",
+    "resend": "Resend",
+    "resent": "Invitation resent",
+    "emailFailed": "Email not sent",
+    "status": {
+      "pending": "Pending",
+      "completed": "Completed"
+    }
+  },
+  "responses": {
+    "empty": "No responses yet",
+    "filterAll": "All",
+    "filterCompleted": "Completed",
+    "filterPending": "Pending",
+    "loadMore": "Load more",
+    "export": "Export to a companion",
+    "selectHint": "Select completed responses to export them",
+    "deleteConfirm": "Delete this invitation and its answers?",
+    "deleted": "Response deleted"
+  },
+  "export": {
+    "title": "Export to a companion's RAG",
+    "description": "Selected responses will be added to the chosen companion's knowledge base.",
+    "targetLabel": "Target companion",
+    "selectAgent": "Choose a companion…",
+    "confirm": "Export {{count}} response(s)",
+    "cancel": "Cancel",
+    "success": "{{count}} response(s) exported",
+    "partialFail": "{{count}} response(s) could not be exported",
+    "error": "Export failed"
+  },
+  "missions": {
+    "list": {
+      "empty": "No missions yet",
+      "emptyHint": "Create a mission: an objective, a planning, documents and a companion that summarizes your week.",
+      "create": "New mission",
+      "count": "{{count}} mission(s)",
+      "noCompanion": "No companion",
+      "lastRecap": "Last recap: {{date}}",
+      "neverRecap": "No recap yet",
+      "deleteConfirm": "Delete this mission, its events, documents and recaps?",
+      "deleted": "Mission deleted"
+    },
+    "editor": {
+      "createTitle": "New mission",
+      "nameLabel": "Mission name",
+      "namePlaceholder": "e.g. Q3 product launch",
+      "objectiveLabel": "Precise objective",
+      "objectivePlaceholder": "Describe the objective the companion should keep in mind…",
+      "companionLabel": "Connected companion",
+      "selectCompanion": "Choose a companion…",
+      "save": "Create mission",
+      "saved": "Mission created",
+      "nameRequired": "Name is required",
+      "objectiveRequired": "Objective is required"
+    },
+    "detail": {
+      "back": "Back to missions",
+      "tabs": {
+        "planning": "Planning",
+        "documents": "Documents",
+        "recaps": "Recaps",
+        "chat": "Chat",
+        "settings": "Settings"
+      }
+    },
+    "planning": {
+      "upload": "Import a planning",
+      "uploadHint": "PDF, Excel, CSV, Word… Events are extracted then reviewed before saving.",
+      "parsing": "Analyzing planning…",
+      "reviewTitle": "Review the extracted events",
+      "reviewHint": "{{skipped}} line(s) skipped. Correct or remove before saving.",
+      "replaceUpload": "Replace previously imported events",
+      "confirm": "Save events",
+      "saved": "Events saved",
+      "addManual": "Add an event",
+      "empty": "No events. Import a planning or add one.",
+      "upcoming": "Upcoming",
+      "past": "Past",
+      "dateLabel": "Date",
+      "titleLabel": "Title",
+      "descriptionLabel": "Description",
+      "deleteConfirm": "Delete this event?",
+      "parseFailed": "No events could be extracted. Enter them manually.",
+      "cancel": "Cancel"
+    },
+    "documents": {
+      "upload": "Add a source document",
+      "uploading": "Uploading…",
+      "empty": "No source documents",
+      "deleteConfirm": "Delete this document?",
+      "uploaded": "Document added"
+    },
+    "recaps": {
+      "generate": "Generate now",
+      "generating": "Generating…",
+      "empty": "No recaps yet",
+      "period": "Week of {{start}} to {{end}}",
+      "noData": "No upcoming events",
+      "error": "Generation failed",
+      "generated": "Recap generated",
+      "noCompanion": "Connect a companion to generate a recap."
+    },
+    "chat": {
+      "placeholder": "Ask a question about the mission…",
+      "send": "Send",
+      "empty": "Start the conversation with your companion.",
+      "noCompanion": "Connect a companion to chat."
+    },
+    "settings": {
+      "recapEnabled": "Automatic recap enabled",
+      "weekday": "Send day",
+      "hour": "Send time",
+      "companion": "Connected companion",
+      "archive": "Archive mission",
+      "unarchive": "Reactivate mission",
+      "delete": "Delete mission",
+      "save": "Save",
+      "saved": "Settings saved",
+      "recapSchedules": {
+        "title": "Scheduled recaps",
+        "add": "Add a recap",
+        "empty": "No scheduled recap yet.",
+        "recurring": "Recurring",
+        "once": "One-shot",
+        "weekday": "Day",
+        "date": "Date",
+        "hour": "Hour",
+        "enabled": "Enabled",
+        "saved": "Scheduled recap saved",
+        "deleted": "Scheduled recap deleted"
+      },
+      "weekdays": {
+        "0": "Monday", "1": "Tuesday", "2": "Wednesday", "3": "Thursday",
+        "4": "Friday", "5": "Saturday", "6": "Sunday"
+      }
+    }
+  },
+  "errors": {
+    "loadFailed": "Failed to load",
+    "saveFailed": "Failed to save"
+  }
+}

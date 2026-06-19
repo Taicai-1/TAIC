@@ -2,6 +2,14 @@
   "pageTitle": "TAIC Companion",
   "pageSubtitle": "Create an expert twin.",
   "logout": "Logout",
+  "companyRag": {
+    "label": "Include company RAG",
+    "help": "Gives this companion access to the organization's shared documents."
+  },
+  "companyRagFolders": {
+    "label": "Included Company RAG folders",
+    "allHint": "All checked = all folders (including future ones)"
+  },
   "types": {
     "conversationnel": {
       "name": "Conversational",
@@ -14,6 +22,10 @@
     "visuel": {
       "name": "Visual",
       "description": "AI image generation"
+    },
+    "actionnable": {
+      "name": "Actionable",
+      "description": "Execute tasks in Google Workspace"
     }
   },
   "buttons": {
@@ -89,6 +101,13 @@
     "photo": {
       "preview": "Preview"
     },
+    "plugins": {
+      "label": "Enabled plugins",
+      "description": "Select which Google Workspace integrations this companion can use",
+      "connectGoogle": "Connect Google Account",
+      "googleConnected": "Google Account Connected",
+      "scopesMissing": "Additional permissions required"
+    },
     "weeklyRecap": {
       "label": "Weekly Recap",
       "helpText": "Receive a weekly AI-generated summary every Monday by email based on conversations and traceability documents.",
@@ -106,6 +125,10 @@
       },
       "hourLabel": "Send time",
       "hourSuffix": "h"
+    },
+    "dateAwareness": {
+      "label": "Date Awareness",
+      "helpText": "The companion will know the current date and time, useful for roadmaps and schedules."
     }
   },
   "slack": {

@@ -1,0 +1,123 @@
+<h2>Page /templates - Layout de la page principale</h2>
+<p class="subtitle">Comment organiser la page de gestion des templates dans la sidebar</p>
+
+<div class="cards">
+  <!-- Option A -->
+  <div class="card" data-choice="grid" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding: 16px; background: #f8fafc; border-radius: 8px;">
+        <!-- Mockup: Grid layout -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <div style="font-weight: 700; font-size: 18px; color: #1e293b;">Templates</div>
+            <div style="font-size: 12px; color: #94a3b8;">6 templates disponibles</div>
+          </div>
+          <div style="background: #4f46e5; color: white; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;">+ Nouveau template</div>
+        </div>
+        <!-- Category filter -->
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+          <span style="background: #4f46e5; color: white; padding: 4px 12px; border-radius: 16px; font-size: 11px;">Tous</span>
+          <span style="background: #f1f5f9; color: #64748b; padding: 4px 12px; border-radius: 16px; font-size: 11px;">Tech</span>
+          <span style="background: #f1f5f9; color: #64748b; padding: 4px 12px; border-radius: 16px; font-size: 11px;">RH</span>
+          <span style="background: #f1f5f9; color: #64748b; padding: 4px 12px; border-radius: 16px; font-size: 11px;">Sales</span>
+        </div>
+        <!-- Grid of template cards -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="width: 32px; height: 32px; background: #ede9fe; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px;">💻</div>
+              <div style="font-weight: 600; font-size: 13px; color: #1e293b;">CTO</div>
+            </div>
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">Expert technique qui connait vos stacks et architectures</div>
+            <div style="display: flex; gap: 4px;">
+              <span style="background: #f0fdf4; color: #16a34a; padding: 2px 8px; border-radius: 8px; font-size: 10px;">Tech</span>
+              <span style="font-size: 10px; color: #94a3b8;">3 docs</span>
+            </div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="width: 32px; height: 32px; background: #fce7f3; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🎯</div>
+              <div style="font-weight: 600; font-size: 13px; color: #1e293b;">Sales Rep</div>
+            </div>
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">Assistant commercial avec vos fiches produits</div>
+            <div style="display: flex; gap: 4px;">
+              <span style="background: #fefce8; color: #ca8a04; padding: 2px 8px; border-radius: 8px; font-size: 10px;">Sales</span>
+              <span style="font-size: 10px; color: #94a3b8;">5 docs</span>
+            </div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="width: 32px; height: 32px; background: #e0f2fe; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛟</div>
+              <div style="font-weight: 600; font-size: 13px; color: #1e293b;">Support</div>
+            </div>
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">Agent support client avec FAQ et procedures</div>
+            <div style="display: flex; gap: 4px;">
+              <span style="background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 8px; font-size: 10px;">Support</span>
+              <span style="font-size: 10px; color: #94a3b8;">8 docs</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A - Grille de cartes avec filtres</h3>
+      <p>Cards visuelles avec icone, description, categorie et nombre de docs. Filtre par categorie en haut. Coherent avec le design des agent cards existantes.</p>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="list" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding: 16px; background: #f8fafc; border-radius: 8px;">
+        <!-- Mockup: List/table layout -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <div style="font-weight: 700; font-size: 18px; color: #1e293b;">Templates</div>
+            <div style="font-size: 12px; color: #94a3b8;">6 templates disponibles</div>
+          </div>
+          <div style="background: #4f46e5; color: white; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;">+ Nouveau template</div>
+        </div>
+        <!-- Table-like list -->
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 80px; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #64748b; font-weight: 600;">
+            <div>Nom</div>
+            <div>Categorie</div>
+            <div>Documents</div>
+            <div>Actions</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 80px; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 28px; height: 28px; background: #ede9fe; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px;">💻</div>
+              <div><div style="font-weight: 600; font-size: 13px; color: #1e293b;">CTO</div><div style="font-size: 10px; color: #94a3b8;">Expert technique</div></div>
+            </div>
+            <div><span style="background: #f0fdf4; color: #16a34a; padding: 2px 8px; border-radius: 8px; font-size: 10px;">Tech</span></div>
+            <div style="font-size: 12px; color: #64748b;">3 documents</div>
+            <div style="font-size: 11px; color: #4f46e5; cursor: pointer;">Editer</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 80px; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 28px; height: 28px; background: #fce7f3; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px;">🎯</div>
+              <div><div style="font-weight: 600; font-size: 13px; color: #1e293b;">Sales Rep</div><div style="font-size: 10px; color: #94a3b8;">Assistant commercial</div></div>
+            </div>
+            <div><span style="background: #fefce8; color: #ca8a04; padding: 2px 8px; border-radius: 8px; font-size: 10px;">Sales</span></div>
+            <div style="font-size: 12px; color: #64748b;">5 documents</div>
+            <div style="font-size: 11px; color: #4f46e5; cursor: pointer;">Editer</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 80px; padding: 12px 16px; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 28px; height: 28px; background: #e0f2fe; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px;">🛟</div>
+              <div><div style="font-weight: 600; font-size: 13px; color: #1e293b;">Support</div><div style="font-size: 10px; color: #94a3b8;">Agent support client</div></div>
+            </div>
+            <div><span style="background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 8px; font-size: 10px;">Support</span></div>
+            <div style="font-size: 12px; color: #64748b;">8 documents</div>
+            <div style="font-size: 11px; color: #4f46e5; cursor: pointer;">Editer</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B - Liste tabulaire</h3>
+      <p>Vue en liste avec colonnes (nom, categorie, docs, actions). Plus dense, meilleure pour un grand nombre de templates. Moins visuel mais plus pratique pour la gestion admin.</p>
+    </div>
+  </div>
+</div>

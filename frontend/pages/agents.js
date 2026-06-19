@@ -15,18 +15,20 @@ import {
   MessageSquarePlus,
   Send,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Calendar
 } from "lucide-react";
 import Layout from '../components/Layout';
 import AgentCard from '../components/AgentCard';
+import PluginSelector from '../components/PluginSelector';
 
 export default function AgentsPage() {
-  const { t } = useTranslation(['agents', 'common', 'errors']);
+  const { t } = useTranslation(['agents', 'common', 'errors', 'templates']);
   const { user, loading: authLoading, authenticated, logout: authLogout } = useAuth();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9 });
+  const [form, setForm] = useState({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, company_rag_folder_ids: [], enabled_plugins: [] });
   const [emailTagInput, setEmailTagInput] = useState("");
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoPreviewError, setPhotoPreviewError] = useState(false);
@@ -41,11 +43,19 @@ export default function AgentsPage() {
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [sendingFeedback, setSendingFeedback] = useState(false);
   const router = useRouter();
+  const [templates, setTemplates] = useState([]);
+  const [creationStep, setCreationStep] = useState(1);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [companyFolders, setCompanyFolders] = useState([]);
 
   useEffect(() => {
     if (!authenticated) return;
     loadAgents();
     loadNeo4jData();
+    loadTemplates();
+    api.get('/api/company-rag/folders')
+      .then(res => setCompanyFolders(res.data.folders || []))
+      .catch(() => setCompanyFolders([]));
   }, [authenticated]);
 
   // Lock body scroll when modal is open
@@ -60,6 +70,17 @@ export default function AgentsPage() {
       document.body.style.overflow = previous || '';
     };
   }, [showForm]);
+
+  useEffect(() => {
+    const templateId = router.query.template_id;
+    if (templateId && templates.length > 0) {
+      const tmpl = templates.find(t => t.id === parseInt(templateId));
+      if (tmpl) {
+        handleSelectTemplate(tmpl);
+      }
+      router.replace('/agents', undefined, { shallow: true });
+    }
+  }, [router.query.template_id, templates]);
 
   const hasNoOrg = user && !user.company_id;
 
@@ -88,6 +109,43 @@ export default function AgentsPage() {
       setNeo4jPersons(personsRes.data.persons || []);
     } catch (error) {
       // Neo4j data is optional, silent fail
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const resp = await api.get('/api/templates');
+      setTemplates(resp.data.templates || []);
+    } catch {
+      // Templates are optional, silent fail
+    }
+  };
+
+  const handleSelectTemplate = async (template) => {
+    try {
+      const resp = await api.get(`/api/templates/${template.id}`);
+      const tmpl = resp.data.template;
+      setForm(f => ({
+        ...f,
+        name: "",
+        contexte: tmpl.default_contexte || "",
+        biographie: tmpl.default_biographie || "",
+        type: tmpl.default_type || "conversationnel",
+        email_tags: tmpl.default_email_tags || [],
+        neo4j_enabled: tmpl.default_neo4j_enabled || false,
+        neo4j_person_name: tmpl.default_neo4j_person_name || "",
+        neo4j_depth: tmpl.default_neo4j_depth || 1,
+        weekly_recap_enabled: tmpl.default_weekly_recap_enabled || false,
+        weekly_recap_prompt: tmpl.default_weekly_recap_prompt || "",
+        weekly_recap_recipients: tmpl.default_weekly_recap_recipients || [],
+        recap_frequency: tmpl.default_recap_frequency || "weekly",
+        recap_hour: tmpl.default_recap_hour != null ? tmpl.default_recap_hour : 9,
+      }));
+      setSelectedTemplate(tmpl);
+      setCreationStep(2);
+      setShowForm(true);
+    } catch {
+      toast.error(t('errors:generic'));
     }
   };
 
@@ -204,8 +262,10 @@ export default function AgentsPage() {
         <div className="flex justify-end mb-6">
           <button
             onClick={() => {
-              setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9 });
+              setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, company_rag_folder_ids: [], enabled_plugins: [] });
               setPhotoPreview(null);
+              setSelectedTemplate(null);
+              setCreationStep(templates.length > 0 ? 1 : 2);
               setShowForm(true);
             }}
             className="group flex items-center justify-center px-8 py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-button transition-all font-semibold shadow-card hover:shadow-elevated"
@@ -223,7 +283,62 @@ export default function AgentsPage() {
                   {t('agents:modal.titleCreate')}
                 </h2>
               </div>
-              <div className="space-y-4">
+              {creationStep === 1 ? (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => {
+                      setSelectedTemplate(null);
+                      setCreationStep(2);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 border-2 border-gray-200 rounded-button hover:border-primary-500 hover:bg-primary-50 transition-all text-left"
+                  >
+                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <Plus className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900 text-sm">{t('templates:agentCreation.fromScratch')}</div>
+                      <div className="text-xs text-gray-500">{t('templates:agentCreation.fromScratchDescription')}</div>
+                    </div>
+                  </button>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-gray-200"></div>
+                    <span className="text-xs text-gray-400">{t('templates:agentCreation.orFromTemplate')}</span>
+                    <div className="flex-1 h-px bg-gray-200"></div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {templates.map((tmpl) => (
+                      <button
+                        key={tmpl.id}
+                        onClick={() => handleSelectTemplate(tmpl)}
+                        className="flex flex-col items-start p-3 border-2 border-gray-200 rounded-button hover:border-primary-500 hover:bg-primary-50 transition-all text-left"
+                      >
+                        <div className="w-8 h-8 bg-primary-50 rounded-lg flex items-center justify-center mb-2">
+                          <Bot className="w-4 h-4 text-primary-600" />
+                        </div>
+                        <div className="font-semibold text-sm text-gray-900">{tmpl.name}</div>
+                        <div className="text-xs text-gray-400">{t('templates:card.documents', { count: tmpl.document_count })}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => { setShowForm(false); }}
+                    className="w-full px-6 py-3 text-gray-700 bg-white border border-gray-200 rounded-button hover:bg-gray-50 transition-all font-medium mt-4"
+                  >
+                    {t('agents:buttons.cancel')}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {selectedTemplate && (
+                    <div className="mb-4 px-3 py-2 bg-primary-50 border border-primary-200 rounded-button text-sm text-primary-700 flex items-center gap-2">
+                      <Bot className="w-4 h-4" />
+                      {t('templates:agentCreation.basedOn')} <strong>{selectedTemplate.name}</strong>
+                    </div>
+                  )}
+                  <div className="space-y-4">
               <input
                 type="text"
                 className="w-full px-4 py-3 border border-gray-200 rounded-input focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none bg-white"
@@ -261,8 +376,15 @@ export default function AgentsPage() {
                   <option value="conversationnel">{t('agents:types.conversationnel.name')} - {t('agents:types.conversationnel.description')}</option>
                   <option value="recherche_live">{t('agents:types.recherche_live.name')} - {t('agents:types.recherche_live.description')}</option>
                   <option value="visuel">{t('agents:types.visuel.name')} - {t('agents:types.visuel.description')}</option>
+                  <option value="actionnable">{t('agents:types.actionnable.name')} - {t('agents:types.actionnable.description')}</option>
                 </select>
               </div>
+              {form.type === 'actionnable' && (
+                <PluginSelector
+                  enabledPlugins={form.enabled_plugins}
+                  onChange={(plugins) => setForm(f => ({ ...f, enabled_plugins: plugins }))}
+                />
+              )}
               <div>
                 <label className="text-sm font-medium mb-2 block text-gray-700 flex items-center">
                   <MessageCircle className="w-4 h-4 mr-2 text-purple-600" />
@@ -418,6 +540,25 @@ export default function AgentsPage() {
                   )}
                 </div>
               )}
+              {/* Date Awareness Section */}
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-button border border-indigo-200">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700 flex items-center">
+                    <Calendar className="w-4 h-4 mr-2 text-indigo-600" />
+                    {t('agents:form.dateAwareness.label')}
+                  </label>
+                  <button
+                    type="button"
+                    className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border border-indigo-500 ${form.date_awareness_enabled ? 'bg-indigo-500' : 'bg-gray-200'}`}
+                    onClick={() => setForm(f => ({ ...f, date_awareness_enabled: !f.date_awareness_enabled }))}
+                  >
+                    <span
+                      className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.date_awareness_enabled ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`}
+                    />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">{t('agents:form.dateAwareness.helpText')}</p>
+              </div>
               {/* Weekly Recap Section */}
               <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-button border border-amber-200">
                 <div className="flex items-center justify-between mb-1">
@@ -436,6 +577,51 @@ export default function AgentsPage() {
                   </button>
                 </div>
                 <p className="text-xs text-gray-500">{t('agents:form.weeklyRecap.helpText')}</p>
+              </div>
+              {/* Company RAG Section */}
+              <div className="p-4 bg-gradient-to-br from-emerald-50 to-green-50 rounded-button border border-emerald-200">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700 flex items-center">
+                    <FileText className="w-4 h-4 mr-2 text-emerald-600" />
+                    {t('agents:companyRag.label')}
+                  </label>
+                  <button
+                    type="button"
+                    className={`w-14 h-7 flex items-center rounded-full px-1 transition-colors duration-200 focus:outline-none border border-emerald-600 ${form.include_company_rag ? 'bg-emerald-600' : 'bg-gray-200'}`}
+                    onClick={() => setForm(f => ({ ...f, include_company_rag: !f.include_company_rag }))}
+                  >
+                    <span
+                      className={`h-5 w-5 rounded-full shadow transition-transform duration-200 ${form.include_company_rag ? 'bg-white translate-x-7' : 'bg-gray-400 translate-x-0'}`}
+                    />
+                  </button>
+                </div>
+                {form.include_company_rag && companyFolders.length > 0 && (
+                  <div className="mt-3 ml-1 space-y-2">
+                    <p className="text-xs text-gray-500">{t('agents:companyRagFolders.label')}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {companyFolders.map(f => {
+                        const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
+                        const checked = all || form.company_rag_folder_ids.includes(f.id);
+                        return (
+                          <label key={f.id}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
+                            <input type="checkbox" checked={checked}
+                              onChange={() => setForm(prev => {
+                                const base = (!prev.company_rag_folder_ids || prev.company_rag_folder_ids.length === 0)
+                                  ? companyFolders.map(x => x.id)
+                                  : [...prev.company_rag_folder_ids];
+                                const next = base.includes(f.id) ? base.filter(id => id !== f.id) : [...base, f.id];
+                                return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
+                              })} />
+                            {f.name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-400">{t('agents:companyRagFolders.allHint')}</p>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500">{t('agents:companyRag.help')}</p>
               </div>
 
               <div className="flex flex-col items-center space-y-4 p-6 bg-gray-50 rounded-card border border-dashed border-gray-300">
@@ -505,6 +691,9 @@ export default function AgentsPage() {
                     formData.append("neo4j_enabled", form.neo4j_enabled ? "true" : "false");
                     if (form.neo4j_person_name) formData.append("neo4j_person_name", form.neo4j_person_name);
                     formData.append("neo4j_depth", String(form.neo4j_depth || 1));
+                    formData.append("date_awareness_enabled", form.date_awareness_enabled ? "true" : "false");
+                    formData.append("include_company_rag", form.include_company_rag ? "true" : "false");
+                    formData.append("company_rag_folder_ids", JSON.stringify(form.company_rag_folder_ids || []));
                     formData.append("weekly_recap_enabled", form.weekly_recap_enabled ? "true" : "false");
                     if (form.weekly_recap_prompt) formData.append("weekly_recap_prompt", form.weekly_recap_prompt);
                     if (form.weekly_recap_recipients && form.weekly_recap_recipients.length > 0) {
@@ -512,15 +701,38 @@ export default function AgentsPage() {
                     }
                     formData.append("recap_frequency", form.recap_frequency);
                     formData.append("recap_hour", String(form.recap_hour));
-                    await api.post('/agents', formData, {
-                      headers: {
-                        "Content-Type": "multipart/form-data"
-                      }
-                    });
+                    if (form.type === 'actionnable' && form.enabled_plugins?.length > 0) {
+                      formData.append('enabled_plugins', JSON.stringify(form.enabled_plugins));
+                    }
+                    if (selectedTemplate) {
+                      await api.post(`/api/templates/${selectedTemplate.id}/create-agent`, {
+                        name: form.name,
+                        contexte: form.contexte || undefined,
+                        biographie: form.biographie || undefined,
+                        type: form.type || undefined,
+                        email_tags: form.email_tags?.length > 0 ? form.email_tags : undefined,
+                        neo4j_enabled: form.neo4j_enabled,
+                        neo4j_person_name: form.neo4j_person_name || undefined,
+                        neo4j_depth: form.neo4j_depth,
+                        date_awareness_enabled: form.date_awareness_enabled,
+                        include_company_rag: form.include_company_rag,
+                        weekly_recap_enabled: form.weekly_recap_enabled,
+                        weekly_recap_prompt: form.weekly_recap_prompt || undefined,
+                        weekly_recap_recipients: form.weekly_recap_recipients?.length > 0 ? form.weekly_recap_recipients : undefined,
+                        recap_frequency: form.recap_frequency,
+                        recap_hour: form.recap_hour,
+                      });
+                    } else {
+                      await api.post('/agents', formData, {
+                        headers: {
+                          "Content-Type": "multipart/form-data"
+                        }
+                      });
+                    }
                     toast.success(t('agents:toast.createSuccess'));
                     setShowForm(false);
                     setPhotoPreview(null);
-                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9 });
+                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, company_rag_folder_ids: [], enabled_plugins: [] });
                     loadAgents();
                   } catch (err) {
                     toast.error(t('agents:toast.createError'));
@@ -544,6 +756,8 @@ export default function AgentsPage() {
                 )}
               </button>
             </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -573,8 +787,10 @@ export default function AgentsPage() {
                 <p className="text-gray-500 mb-6">{t('agents:empty.subtitle')}</p>
                 <button
                   onClick={() => {
-                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9 });
+                    setForm({ name: "", contexte: "", biographie: "", profile_photo: null, email: "", password: "", type: 'conversationnel', email_tags: [], neo4j_enabled: false, neo4j_person_name: "", neo4j_depth: 1, weekly_recap_enabled: false, weekly_recap_prompt: "", weekly_recap_recipients: [], recap_frequency: "weekly", recap_hour: 9, date_awareness_enabled: false, include_company_rag: false, company_rag_folder_ids: [], enabled_plugins: [] });
                     setPhotoPreview(null);
+                    setSelectedTemplate(null);
+                    setCreationStep(templates.length > 0 ? 1 : 2);
                     setShowForm(true);
                   }}
                   className="group inline-flex items-center justify-center px-8 py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-button transition-all font-semibold shadow-card hover:shadow-elevated"
@@ -684,7 +900,7 @@ export async function getServerSideProps({ locale }) {
   // Cannot check cookies server-side because backend and frontend are on different domains
   return {
     props: {
-      ...(await serverSideTranslations(locale, ['agents', 'common', 'errors'])),
+      ...(await serverSideTranslations(locale, ['agents', 'common', 'errors', 'templates'])),
     },
   };
 }

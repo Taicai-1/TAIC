@@ -31,10 +31,14 @@ from database import (
     User,
     engine,
     ensure_columns,
+    ensure_company_rag_default_folders,
+    ensure_llm_usage_table,
     ensure_pgvector,
     ensure_rls_policies,
+    migration_lock,
     migrate_existing_company_memberships,
     migrate_existing_recaps,
+    migrate_teams_to_members,
     set_current_company_id,
 )
 
@@ -152,13 +156,14 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         request.url.path,
         exc.detail,
     )
+    detail_str = str(exc.detail) if exc.detail else "Error"
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": True,
             "status_code": exc.status_code,
-            "message": str(exc.detail) if exc.detail else "Error",
-            "detail": None,
+            "message": detail_str,
+            "detail": detail_str,
         },
     )
 
@@ -214,9 +219,9 @@ async def request_id_middleware(request: Request, call_next):
 async def tenant_isolation_middleware(request: Request, call_next):
     """Extract company_id from JWT and set it in contextvars for RLS."""
     set_current_company_id(None)
-    try:
-        import jwt as pyjwt
+    import jwt as pyjwt
 
+    try:
         token = request.cookies.get("token")
         if not token:
             auth_header = request.headers.get("Authorization", "")
@@ -236,8 +241,14 @@ async def tenant_isolation_middleware(request: Request, call_next):
                         set_current_company_id(user.company_id)
                 finally:
                     db.close()
-    except Exception:
-        pass  # Unauthenticated requests — company_id stays None, RLS returns empty
+    except pyjwt.PyJWTError:
+        # Expected for unauthenticated/invalid tokens — company_id stays None,
+        # RLS returns empty result sets (fail-closed).
+        pass
+    except Exception as exc:
+        # Unexpected (e.g. DB error resolving the user). Do not crash the request,
+        # but surface it: company_id stays None so RLS still fails closed.
+        logger.warning("tenant_isolation_middleware: company_id resolution failed: %s", exc)
     response = await call_next(request)
     return response
 
@@ -339,27 +350,59 @@ app.mount("/profile_photos", StaticFiles(directory="profile_photos"), name="prof
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and run Alembic migrations on startup."""
+    import time as _time
+
+    t0 = _time.monotonic()
+
+    def _elapsed():
+        return f"{_time.monotonic() - t0:.1f}s"
+
     try:
         logger.info("Initializing database...")
-        # Create tables for brand-new databases (Alembic needs the schema to exist)
-        Base.metadata.create_all(bind=engine)
-        # pgvector extension must exist before Alembic migrations touch embedding columns
-        ensure_pgvector()
-        # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
-        ensure_columns()
-        # Add RLS bypass policies for service operations (email ingestion, etc.)
-        ensure_rls_policies()
-        # Run Alembic migrations to apply any pending schema changes
-        from alembic.config import Config as AlembicConfig
-        from alembic import command as alembic_command
+        # WS3: serialize all schema work across concurrent Cloud Run instances.
+        with migration_lock():
+            # Create tables for brand-new databases (Alembic needs the schema to exist)
+            Base.metadata.create_all(bind=engine)
+            logger.info("create_all done (%s)", _elapsed())
+            # pgvector extension must exist before Alembic migrations touch embedding columns
+            ensure_pgvector()
+            logger.info("pgvector done (%s)", _elapsed())
+            # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
+            ensure_columns()
+            logger.info("ensure_columns done (%s)", _elapsed())
+            ensure_company_rag_default_folders()
+            logger.info("ensure_company_rag_default_folders done (%s)", _elapsed())
+            # Add RLS bypass policies for service operations (email ingestion, etc.)
+            ensure_rls_policies()
+            logger.info("ensure_rls_policies done (%s)", _elapsed())
+            # WS2: LLM usage table + per-company cap column (intentionally NOT in TENANT_TABLES)
+            ensure_llm_usage_table()
+            logger.info("ensure_llm_usage_table done (%s)", _elapsed())
+            # Run Alembic migrations to apply any pending schema changes
+            try:
+                from alembic.config import Config as AlembicConfig
+                from alembic import command as alembic_command
 
-        alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-        alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
-        alembic_command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic migrations applied successfully")
-        migrate_existing_company_memberships()
-        migrate_existing_recaps()
-        logger.info("Database initialization completed successfully")
+                alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+                alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
+                alembic_command.upgrade(alembic_cfg, "head")
+                logger.info("Alembic migrations done (%s)", _elapsed())
+            except Exception as e:
+                # A failed migration blocks every later revision: the schema silently
+                # drifts from the models. Log loudly so it never goes unnoticed again.
+                logger.error("ALEMBIC MIGRATION FAILED (%s) — schema may be outdated: %s", _elapsed(), e, exc_info=True)
+            migrate_existing_company_memberships()
+            migrate_existing_recaps()
+            migrate_teams_to_members()
+            logger.info("Data migrations done (%s)", _elapsed())
+        logger.info("Database initialization completed successfully (%s total)", _elapsed())
+
+        # WS4: in production, refuse to start if secrets can't be encrypted.
+        if os.getenv("GOOGLE_CLOUD_PROJECT"):
+            from encryption import _get_fernet
+
+            _get_fernet()  # raises RuntimeError if ENCRYPTION_KEY is missing
+            logger.info("ENCRYPTION_KEY validation passed")
 
         # Validate GCS bucket is in EU (data sovereignty check)
         try:
@@ -389,8 +432,10 @@ async def startup_event():
             logger.info("Recap scheduler started")
         except Exception as e:
             logger.warning(f"Recap scheduler failed to start: {e}")
+
+        logger.info("Startup event completed (%s total)", _elapsed())
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
+        logger.error("Database initialization failed (%s): %s", _elapsed(), e)
 
 
 @app.on_event("shutdown")
@@ -495,6 +540,18 @@ from routers.monitoring import router as monitoring_router  # noqa: E402
 from routers.routines import router as routines_router  # noqa: E402
 from routers.graph import router as graph_router  # noqa: E402
 from routers.recaps import router as recaps_router  # noqa: E402
+from routers.templates import router as templates_router  # noqa: E402
+from routers.google_auth import router as google_auth_router  # noqa: E402
+from routers.plugins import router as plugins_router  # noqa: E402
+from routers.action_executions import router as action_executions_router  # noqa: E402
+from routers.automations import router as automations_router  # noqa: E402
+from routers.missions import router as missions_router  # noqa: E402
+from routers.company_rag import router as company_rag_router  # noqa: E402
+
+# Discover and register all plugins
+from plugins import discover_plugins  # noqa: E402
+
+discover_plugins()
 
 app.include_router(auth_router)
 app.include_router(ask_router)
@@ -511,3 +568,10 @@ app.include_router(monitoring_router)
 app.include_router(routines_router)
 app.include_router(graph_router)
 app.include_router(recaps_router)
+app.include_router(templates_router)
+app.include_router(google_auth_router)
+app.include_router(plugins_router)
+app.include_router(action_executions_router)
+app.include_router(automations_router)
+app.include_router(missions_router)
+app.include_router(company_rag_router)

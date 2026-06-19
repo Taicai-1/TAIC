@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 from alembic import context
 
 # Ensure the backend package is importable (alembic runs from backend/)
@@ -19,7 +19,9 @@ from database import Base, get_database_url  # noqa: E402
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: alembic runs inside the app at startup;
+    # the default (True) silenced every application logger after migrations.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
@@ -53,6 +55,15 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Prevent hanging on table locks during startup (e.g. ALTER TABLE on busy tables).
+        # SET is session-scoped, so the timeouts survive the commit below.
+        connection.execute(text("SET lock_timeout = '5s'"))
+        connection.execute(text("SET statement_timeout = '30s'"))
+        # CRITICAL: end the implicit (autobegin) transaction opened by the SET
+        # statements. When alembic finds a transaction already active, it assumes
+        # the caller owns it and never commits — every migration then silently
+        # rolls back when the connection closes.
+        connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

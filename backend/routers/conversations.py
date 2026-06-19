@@ -48,6 +48,8 @@ async def create_conversation(
 async def list_conversations(
     agent_id: int = Query(None),
     team_id: int = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     user_id: str = Depends(verify_token),
 ):
@@ -63,6 +65,8 @@ async def list_conversations(
             db.query(Conversation)
             .filter(Conversation.agent_id == agent_id, or_(*user_filter))
             .order_by(Conversation.created_at.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
         )
     elif team_id is not None:
@@ -73,6 +77,8 @@ async def list_conversations(
             db.query(Conversation)
             .filter(Conversation.team_id == team_id)
             .order_by(Conversation.created_at.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
         )
     else:
@@ -91,6 +97,8 @@ async def add_message(
         content=msg.content,
         sources_json=msg.sources_json,
         graph_data_json=msg.graph_data_json,
+        contributions_json=msg.contributions_json,
+        action_proposal_json=msg.action_proposal_json,
         company_id=_get_caller_company_id(user_id, db),
     )
     db.add(message)
@@ -100,11 +108,22 @@ async def add_message(
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[dict])
-async def get_messages(conversation_id: int, db: Session = Depends(get_db), user_id: str = Depends(verify_token)):
+async def get_messages(
+    conversation_id: int,
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    user_id: str = Depends(verify_token),
+):
     _verify_conversation_owner(conversation_id, user_id, db)
-    messages = (
-        db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.timestamp.asc()).all()
+    # Bound to the most recent `limit` messages, returned oldest-first for display.
+    recent = (
+        db.query(Message)
+        .filter(Message.conversation_id == conversation_id)
+        .order_by(Message.timestamp.desc())
+        .limit(limit)
+        .all()
     )
+    messages = list(reversed(recent))
     return [
         {
             "id": m.id,
@@ -113,6 +132,8 @@ async def get_messages(conversation_id: int, db: Session = Depends(get_db), user
             "timestamp": m.timestamp,
             "sources": json.loads(m.sources_json) if m.sources_json else None,
             "graph_data": json.loads(m.graph_data_json) if m.graph_data_json else None,
+            "action_proposal": json.loads(m.action_proposal_json) if m.action_proposal_json else None,
+            "contributions_json": m.contributions_json,
         }
         for m in messages
     ]

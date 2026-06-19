@@ -2,8 +2,10 @@ import os
 import logging
 import secrets
 import contextvars
+from contextlib import contextmanager
 from typing import List, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Boolean, text, event
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, text, event
+from sqlalchemy import Index, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import UniqueConstraint
@@ -80,6 +82,9 @@ class Company(Base):
         Text, nullable=True
     )  # JSON: [{"id":"uuid","command":"name","prompt":"text","agent_ids":[1,2]}]
 
+    # WS2: per-company monthly LLM spend cap override (USD). NULL = use env default.
+    llm_monthly_cap_usd = Column(Float, nullable=True)
+
     # Encrypted property accessors
     @property
     def org_neo4j_uri(self):
@@ -155,6 +160,32 @@ class Company(Base):
 
     users = relationship("User", back_populates="company")
     memberships = relationship("CompanyMembership", back_populates="company", cascade="all, delete-orphan")
+
+
+class LLMUsageLog(Base):
+    """Append-only record of every LLM call's tokens + estimated cost (WS2).
+
+    Deliberately NOT in TENANT_TABLES / no RLS: usage is read app-side filtered
+    by company_id; keeping it RLS-free avoids breaking any non-request-context
+    read. Source of truth for the monthly per-company spend cap.
+    """
+
+    __tablename__ = "llm_usage_logs"
+    __table_args__ = (
+        Index("ix_llm_usage_company_created", "company_id", "created_at"),
+        Index("ix_llm_usage_agent_created", "agent_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, nullable=True)  # nullable: personal users / no org
+    user_id = Column(Integer, nullable=True)
+    agent_id = Column(Integer, nullable=True)
+    provider = Column(String(32), nullable=False)
+    model = Column(String(100), nullable=False)
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    cost_usd = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class User(Base):
@@ -313,6 +344,9 @@ class Agent(Base):
     neo4j_person_name = Column(String(200), nullable=True)
     neo4j_depth = Column(Integer, default=1, nullable=False)
 
+    # Template reference
+    template_id = Column(Integer, ForeignKey("agent_templates.id", ondelete="SET NULL"), nullable=True)
+
     # Weekly Recap
     weekly_recap_enabled = Column(Boolean, default=False, nullable=False)
     weekly_recap_prompt = Column(Text, nullable=True)
@@ -320,9 +354,199 @@ class Agent(Base):
     recap_frequency = Column(String(20), default="weekly", nullable=False)
     recap_hour = Column(Integer, default=9, nullable=False)
 
+    # Date awareness: inject current date/time into system prompt
+    date_awareness_enabled = Column(Boolean, default=False, nullable=False)
+
+    # Company RAG: include the organization's shared documents in this agent's retrieval
+    include_company_rag = Column(Boolean, default=False, nullable=False)
+    company_rag_folder_ids = Column(
+        Text, nullable=True
+    )  # JSON list of CompanyFolder ids; NULL/[] = all folders (dynamic)
+
+    # Actionnable plugins
+    enabled_plugins = Column(Text, nullable=True)  # JSON array: ["google_docs", "gmail", ...]
+
     # Relations
     owner = relationship("User", back_populates="agents")
     documents = relationship("Document", back_populates="agent", cascade="all, delete-orphan")
+
+
+class Questionnaire(Base):
+    __tablename__ = "questionnaires"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)  # créateur
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    questions = relationship(
+        "QuestionnaireQuestion",
+        back_populates="questionnaire",
+        cascade="all, delete-orphan",
+        order_by="QuestionnaireQuestion.position",
+    )
+    responses = relationship("QuestionnaireResponse", back_populates="questionnaire", cascade="all, delete-orphan")
+
+
+class QuestionnaireQuestion(Base):
+    __tablename__ = "questionnaire_questions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    questionnaire_id = Column(Integer, ForeignKey("questionnaires.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    question_text = Column(Text, nullable=False)
+    question_type = Column(String(20), nullable=False, default="open")  # open, single_choice, multiple_choice, rating
+    options = Column(Text, nullable=True)  # JSON: ["Oui","Non"] ou {"min":1,"max":5}
+    position = Column(Integer, nullable=False, default=0)
+    required = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    questionnaire = relationship("Questionnaire", back_populates="questions")
+
+
+class QuestionnaireResponse(Base):
+    __tablename__ = "questionnaire_responses"
+    __table_args__ = (UniqueConstraint("questionnaire_id", "respondent_email", name="uq_response_questionnaire_email"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    questionnaire_id = Column(Integer, ForeignKey("questionnaires.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    respondent_email = Column(String(255), nullable=False)
+    respondent_name = Column(String(255), nullable=True)
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="pending")  # pending, completed
+    email_sent = Column(Boolean, default=False, nullable=False)
+    invited_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    questionnaire = relationship("Questionnaire", back_populates="responses")
+    answers = relationship("QuestionnaireAnswer", back_populates="response", cascade="all, delete-orphan")
+
+
+class QuestionnaireAnswer(Base):
+    __tablename__ = "questionnaire_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    response_id = Column(
+        Integer, ForeignKey("questionnaire_responses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    question_id = Column(
+        Integer, ForeignKey("questionnaire_questions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    answer_text = Column(Text, nullable=True)  # texte libre, JSON array pour multiple_choice, note en texte pour rating
+    answered_at = Column(DateTime, default=datetime.utcnow)
+
+    response = relationship("QuestionnaireResponse", back_populates="answers")
+    question = relationship("QuestionnaireQuestion", foreign_keys=[question_id])
+
+
+class UserGoogleToken(Base):
+    __tablename__ = "user_google_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    _access_token = Column("access_token", Text, nullable=False)
+    _refresh_token = Column("refresh_token", Text, nullable=False)
+    token_expiry = Column(DateTime, nullable=False)
+    granted_scopes = Column(Text, nullable=False)  # JSON array of scope strings
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+    @property
+    def access_token(self):
+        from encryption import decrypt_value
+
+        return decrypt_value(self._access_token)
+
+    @access_token.setter
+    def access_token(self, value):
+        from encryption import encrypt_value
+
+        self._access_token = encrypt_value(value)
+
+    @property
+    def refresh_token(self):
+        from encryption import decrypt_value
+
+        return decrypt_value(self._refresh_token)
+
+    @refresh_token.setter
+    def refresh_token(self, value):
+        from encryption import encrypt_value
+
+        self._refresh_token = encrypt_value(value)
+
+
+class ActionExecution(Base):
+    __tablename__ = "action_executions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    plugin_name = Column(String(64), nullable=False)
+    action_name = Column(String(64), nullable=False)
+    action_params = Column(Text, nullable=False)  # JSON
+    status = Column(String(32), nullable=False, default="pending_confirmation")
+    result = Column(Text, nullable=True)  # JSON
+    error_message = Column(Text, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    executed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    loop_state = Column(Text, nullable=True)  # JSON: serialized AgentLoopState for ReAct resume
+
+    agent = relationship("Agent", foreign_keys=[agent_id])
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class AgentTemplate(Base):
+    __tablename__ = "agent_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(50), nullable=True)
+    icon = Column(String(50), nullable=True)
+    default_contexte = Column(Text, nullable=True)
+    default_biographie = Column(Text, nullable=True)
+    default_type = Column(String(32), nullable=False, default="conversationnel")
+    default_email_tags = Column(Text, nullable=True)  # JSON array string
+    default_neo4j_enabled = Column(Boolean, nullable=False, default=False)
+    default_neo4j_person_name = Column(String(200), nullable=True)
+    default_neo4j_depth = Column(Integer, nullable=False, default=1)
+    default_weekly_recap_enabled = Column(Boolean, nullable=False, default=False)
+    default_weekly_recap_prompt = Column(Text, nullable=True)
+    default_weekly_recap_recipients = Column(Text, nullable=True)  # JSON array string
+    default_recap_frequency = Column(String(20), nullable=False, default="weekly")
+    default_recap_hour = Column(Integer, nullable=False, default=9)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
+
+    company = relationship("Company")
+    creator = relationship("User")
+    template_documents = relationship("AgentTemplateDocument", back_populates="template", cascade="all, delete-orphan")
+
+
+class AgentTemplateDocument(Base):
+    __tablename__ = "agent_template_documents"
+    __table_args__ = (UniqueConstraint("template_id", "document_id", name="uq_template_document"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("agent_templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    template = relationship("AgentTemplate", back_populates="template_documents")
+    document = relationship("Document")
 
 
 class AgentShare(Base):
@@ -340,6 +564,16 @@ class AgentShare(Base):
     agent = relationship("Agent")
     user = relationship("User", foreign_keys=[user_id])
     shared_by = relationship("User", foreign_keys=[shared_by_user_id])
+
+
+class CompanyFolder(Base):
+    __tablename__ = "company_folders"
+    __table_args__ = (UniqueConstraint("company_id", "name", name="uq_company_folder_name"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Document(Base):
@@ -360,6 +594,15 @@ class Document(Base):
     drive_link_id = Column(Integer, ForeignKey("drive_links.id"), nullable=True, index=True)
     drive_file_id = Column(String(128), nullable=True, index=True)
     source_url = Column(String(2048), nullable=True)
+    mission_id = Column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # Documents siloed to a mission (RAG sources)
+    is_company_rag = Column(
+        Boolean, default=False, nullable=False, server_default="false", index=True
+    )  # Company-shared document (agent_id is NULL); included only when an agent opts in
+    folder_id = Column(
+        Integer, ForeignKey("company_folders.id", ondelete="SET NULL"), nullable=True, index=True
+    )  # Company RAG folder (set only when is_company_rag=True; required at the app level for those)
 
     # Relations
     owner = relationship("User", back_populates="documents")
@@ -419,6 +662,23 @@ class Team(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+    orchestration_prompt = Column(Text, nullable=True)
+
+
+class TeamMember(Base):
+    __tablename__ = "team_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(20), nullable=False, default="member")  # "leader" or "member"
+    specialization = Column(Text, nullable=True)
+    auto_specialization = Column(Text, nullable=True)
+    position = Column(Integer, nullable=False, default=0)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("team_id", "agent_id", name="uq_team_member"),)
 
 
 class Conversation(Base):
@@ -429,6 +689,9 @@ class Conversation(Base):
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
+    mission_id = Column(
+        Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # Conversations scoped to a mission chat
     title = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -450,6 +713,8 @@ class Message(Base):
     buffered = Column(Integer, default=0)  # 0 = non bufferisé, 1 = à bufferiser
     sources_json = Column(Text, nullable=True)  # JSON array of RAG source chunks
     graph_data_json = Column(Text, nullable=True)  # JSON structured Neo4j graph data
+    contributions_json = Column(Text, nullable=True)  # JSON array of team agent contributions
+    action_proposal_json = Column(Text, nullable=True)  # JSON action proposal for actionnable agents
 
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -530,6 +795,85 @@ class RecapDocument(Base):
 
     recap = relationship("Recap", back_populates="recap_documents")
     document = relationship("Document")
+
+
+class Mission(Base):
+    __tablename__ = "missions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)  # Tenant isolation
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Creator (private)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="SET NULL"), nullable=True, index=True)  # Companion
+    name = Column(String(255), nullable=False)
+    objective = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="active", server_default="active")  # active | archived
+    recap_enabled = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    recap_weekday = Column(Integer, nullable=False, default=0, server_default="0")  # 0=Monday .. 6=Sunday
+    recap_hour = Column(Integer, nullable=False, default=8, server_default="8")  # Europe/Paris
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    agent = relationship("Agent")
+    events = relationship(
+        "MissionEvent",
+        back_populates="mission",
+        cascade="all, delete-orphan",
+        order_by="MissionEvent.event_date",
+    )
+    recaps = relationship("MissionRecap", back_populates="mission", cascade="all, delete-orphan")
+
+
+class MissionEvent(Base):
+    __tablename__ = "mission_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mission_id = Column(Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    event_date = Column(Date, nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    source = Column(String(10), nullable=False, default="upload", server_default="upload")  # upload | manual
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mission = relationship("Mission", back_populates="events")
+
+
+class MissionRecap(Base):
+    __tablename__ = "mission_recaps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mission_id = Column(Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    content = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False)  # success | error | no_data
+    error_message = Column(Text, nullable=True)
+    email_sent = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    trigger = Column(String(10), nullable=False, default="scheduled", server_default="scheduled")  # scheduled | manual
+    schedule_id = Column(
+        Integer, ForeignKey("mission_recap_schedules.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mission = relationship("Mission", back_populates="recaps")
+
+
+class MissionRecapSchedule(Base):
+    __tablename__ = "mission_recap_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mission_id = Column(Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    kind = Column(String(10), nullable=False)  # recurring | once
+    weekday = Column(Integer, nullable=True)  # 0=Monday .. 6=Sunday (recurring only)
+    run_date = Column(Date, nullable=True)  # one-shot only
+    hour = Column(Integer, nullable=False, default=8, server_default="8")  # Europe/Paris, full hour
+    enabled = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    last_run_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mission = relationship("Mission")
 
 
 class RoutineReport(Base):
@@ -625,28 +969,53 @@ def ensure_pgvector():
             conn.commit()
             logger.info("pgvector extension enabled")
 
-            # Add embedding_vec column if missing
+            # Check if embedding_vec column already exists before ALTER TABLE
+            has_col = False
             try:
-                conn.execute(text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)"))
-                conn.commit()
-                logger.info("ensure_pgvector: embedding_vec column OK")
-            except Exception as e:
-                logger.warning(f"ensure_pgvector: embedding_vec column skipped: {e}")
+                row = conn.execute(
+                    text(
+                        "SELECT 1 FROM information_schema.columns "
+                        "WHERE table_name='document_chunks' AND column_name='embedding_vec'"
+                    )
+                ).first()
+                has_col = row is not None
+            except Exception:
                 conn.rollback()
 
-            # Create HNSW index for cosine distance if it doesn't exist
-            try:
-                conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_chunks_embedding_vec_hnsw "
-                        "ON document_chunks USING hnsw (embedding_vec vector_cosine_ops)"
+            if not has_col:
+                try:
+                    conn.execute(
+                        text("ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(1024)")
                     )
-                )
-                conn.commit()
-                logger.info("ensure_pgvector: HNSW index OK")
-            except Exception as e:
-                logger.warning(f"ensure_pgvector: HNSW index skipped: {e}")
+                    conn.commit()
+                    logger.info("ensure_pgvector: embedding_vec column OK")
+                except Exception as e:
+                    logger.warning(f"ensure_pgvector: embedding_vec column skipped: {e}")
+                    conn.rollback()
+
+            # Check if HNSW index already exists before CREATE INDEX
+            has_idx = False
+            try:
+                row = conn.execute(
+                    text("SELECT 1 FROM pg_indexes WHERE indexname='idx_chunks_embedding_vec_hnsw'")
+                ).first()
+                has_idx = row is not None
+            except Exception:
                 conn.rollback()
+
+            if not has_idx:
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS idx_chunks_embedding_vec_hnsw "
+                            "ON document_chunks USING hnsw (embedding_vec vector_cosine_ops)"
+                        )
+                    )
+                    conn.commit()
+                    logger.info("ensure_pgvector: HNSW index OK")
+                except Exception as e:
+                    logger.warning(f"ensure_pgvector: HNSW index skipped: {e}")
+                    conn.rollback()
     except Exception as e:
         logger.error(f"ensure_pgvector failed: {e}")
 
@@ -694,10 +1063,55 @@ def ensure_columns():
         ("weekly_recap_logs", "recap_id", "INTEGER REFERENCES recaps(id)"),
         ("messages", "sources_json", "TEXT"),
         ("messages", "graph_data_json", "TEXT"),
+        ("messages", "action_proposal_json", "TEXT"),
+        # Companion templates
+        ("agents", "template_id", "INTEGER REFERENCES agent_templates(id) ON DELETE SET NULL"),
+        ("agent_templates", "default_email_tags", "TEXT"),
+        ("agent_templates", "default_neo4j_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("agent_templates", "default_neo4j_person_name", "VARCHAR(200)"),
+        ("agent_templates", "default_neo4j_depth", "INTEGER NOT NULL DEFAULT 1"),
+        ("agent_templates", "default_weekly_recap_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("agent_templates", "default_weekly_recap_prompt", "TEXT"),
+        ("agent_templates", "default_weekly_recap_recipients", "TEXT"),
+        ("agent_templates", "default_recap_frequency", "VARCHAR(20) NOT NULL DEFAULT 'weekly'"),
+        ("agent_templates", "default_recap_hour", "INTEGER NOT NULL DEFAULT 9"),
+        # Team orchestration
+        ("teams", "orchestration_prompt", "TEXT"),
+        ("messages", "contributions_json", "TEXT"),
+        # Actionnable agents
+        ("agents", "enabled_plugins", "TEXT"),
+        ("action_executions", "loop_state", "TEXT"),
+        # Date awareness
+        ("agents", "date_awareness_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        # Missions
+        ("documents", "mission_id", "INTEGER REFERENCES missions(id) ON DELETE CASCADE"),
+        ("conversations", "mission_id", "INTEGER REFERENCES missions(id) ON DELETE CASCADE"),
+        ("mission_recaps", "schedule_id", "INTEGER REFERENCES mission_recap_schedules(id) ON DELETE SET NULL"),
+        # Company RAG
+        ("documents", "is_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("agents", "include_company_rag", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        # Company RAG folders
+        ("documents", "folder_id", "INTEGER REFERENCES company_folders(id) ON DELETE SET NULL"),
+        ("agents", "company_rag_folder_ids", "TEXT"),
     ]
     try:
         with engine.connect() as conn:
+            # Prevent hanging on table locks during startup
+            conn.execute(text("SET lock_timeout = '5s'"))
+            conn.execute(text("SET statement_timeout = '30s'"))
+            # Pre-fetch existing columns to avoid unnecessary ALTER TABLE locks
+            existing = set()
+            try:
+                rows = conn.execute(
+                    text("SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'")
+                ).fetchall()
+                existing = {(r[0], r[1]) for r in rows}
+            except Exception:
+                pass  # Fall back to ALTER TABLE IF NOT EXISTS
+
             for table, column, col_def in migrations:
+                if (table, column) in existing:
+                    continue
                 try:
                     stmt = "ALTER TABLE " + table + " ADD COLUMN IF NOT EXISTS " + column + " " + col_def
                     conn.execute(text(stmt))
@@ -706,103 +1120,247 @@ def ensure_columns():
                 except Exception as e:
                     logger.warning(f"ensure_columns: {table}.{column} skipped: {e}")
                     conn.rollback()
-            # Make hashed_password nullable for OAuth users
+            # Make hashed_password nullable for OAuth users (skip if already nullable)
+            is_nullable = True
             try:
-                conn.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
-                conn.commit()
-                logger.info("ensure_columns: users.hashed_password DROP NOT NULL OK")
-            except Exception as e:
-                logger.warning(f"ensure_columns: hashed_password nullable skipped: {e}")
+                row = conn.execute(
+                    text(
+                        "SELECT is_nullable FROM information_schema.columns "
+                        "WHERE table_name='users' AND column_name='hashed_password'"
+                    )
+                ).first()
+                is_nullable = row is not None and row[0] == "YES"
+            except Exception:
                 conn.rollback()
+
+            if not is_nullable:
+                try:
+                    conn.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
+                    conn.commit()
+                    logger.info("ensure_columns: users.hashed_password DROP NOT NULL OK")
+                except Exception as e:
+                    logger.warning(f"ensure_columns: hashed_password nullable skipped: {e}")
+                    conn.rollback()
         logger.info("ensure_columns completed")
     except Exception as e:
         logger.error(f"ensure_columns failed: {e}")
 
 
-def ensure_rls_policies():
-    """Create RLS bypass policies and fix tenant_isolation policies.
+def ensure_company_rag_default_folders():
+    """Idempotent: attach orphan company-RAG docs (folder_id IS NULL) to a per-company
+    'Général' folder, creating it if needed. Runs at startup, safe to re-run."""
+    try:
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(Document.company_id)
+                .filter(
+                    Document.is_company_rag.is_(True),
+                    Document.folder_id.is_(None),
+                    Document.company_id.isnot(None),
+                )
+                .distinct()
+                .all()
+            )
+            company_ids = [r[0] for r in rows]
+            # Race-safe get-or-create: concurrent Cloud Run boots can both miss the
+            # folder; ON CONFLICT DO NOTHING makes the insert a no-op, then we re-read.
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    1. Adds a 'service_bypass' policy on tenant-scoped tables that allows
-       SELECT when the session variable app.service_bypass = 'true'.
-    2. Recreates 'tenant_isolation' policies with NULLIF to handle empty
-       string from current_setting (prevents ''::int cast errors).
+            for cid in company_ids:
+                db.execute(
+                    pg_insert(CompanyFolder)
+                    .values(company_id=cid, name="Général")
+                    .on_conflict_do_nothing(index_elements=["company_id", "name"])
+                )
+                db.flush()
+                folder = (
+                    db.query(CompanyFolder)
+                    .filter(CompanyFolder.company_id == cid, CompanyFolder.name == "Général")
+                    .first()
+                )
+                db.query(Document).filter(
+                    Document.is_company_rag.is_(True),
+                    Document.folder_id.is_(None),
+                    Document.company_id == cid,
+                ).update({Document.folder_id: folder.id}, synchronize_session=False)
+            db.commit()
+            if company_ids:
+                logger.info(f"ensure_company_rag_default_folders: migrated docs for {len(company_ids)} companies")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"ensure_company_rag_default_folders skipped: {e}")
+
+
+# Canonical list of tenant-scoped tables protected by Postgres RLS.
+# Single source of truth for ensure_rls_policies() and delete_company().
+#
+# Intentionally EXCLUDED tenant tables (have company_id but use app-level
+# isolation instead — RLS would break a write/read path that runs without an
+# app.company_id session var):
+#   - missions*, questionnaires*: public token endpoints + background scheduler.
+#   - company_invitations: the org-join flow reads an invitation by token before
+#     the joining user is a member (no tenant context yet); the random token is
+#     the security boundary, and queries filter company_id app-side.
+#   - company_memberships: the table that RESOLVES the current tenant, so it
+#     cannot be gated by the tenant itself; access is app-level (require_role).
+#   - company_creation_requests: pre-company, reviewed by a super-admin.
+#   - users: global identity table.
+TENANT_TABLES = [
+    "agents",
+    "agent_shares",
+    "documents",
+    "document_chunks",
+    "agent_actions",
+    "teams",
+    "team_members",
+    "conversations",
+    "messages",
+    "notion_links",
+    "weekly_recap_logs",
+    "recaps",
+    "recap_documents",
+    "drive_links",
+    "agent_templates",
+    "company_folders",
+    "action_executions",
+]
+
+
+def ensure_rls_policies():
+    """Idempotently enforce RLS on every TENANT_TABLES table.
+
+    For each table:
+      1. ENABLE + FORCE ROW LEVEL SECURITY (no-op if already set).
+      2. Create the 'service_bypass' SELECT policy if missing (escape hatch for
+         background jobs that set app.service_bypass = 'true').
+      3. Create/repair the 'tenant_isolation' policy (USING + WITH CHECK with
+         NULLIF to tolerate an empty app.company_id session var → ''::int error).
+
+    Safe to run on every instance at startup; per-table failures (e.g. a table
+    that does not exist yet) are logged and skipped, never fatal.
+
+    NOTE: missions*/questionnaires* are intentionally NOT in TENANT_TABLES.
+    Questionnaire public token endpoints (/questionnaire/{token}) run without a
+    tenant session var; the recap scheduler INSERTs mission_recaps from a
+    background session with no app.company_id (a WITH CHECK policy would reject
+    it, and service_bypass only covers SELECT). Both use stricter app-level
+    isolation: every mission query in routers/missions.py filters BOTH company_id
+    AND the creator user_id. Do not add them here without reworking those flows.
     """
-    tables = [
-        "agents",
-        "agent_shares",
-        "documents",
-        "document_chunks",
-        "agent_actions",
-        "teams",
-        "conversations",
-        "messages",
-        "notion_links",
-        "weekly_recap_logs",
-        "recaps",
-        "recap_documents",
-    ]
+    iso_qual = "company_id = NULLIF(current_setting('app.company_id', true), '')::int"
     try:
         with engine.connect() as conn:
-            # Set lock_timeout early to prevent blocking on any DDL
             conn.execute(text("SET lock_timeout = '5s'"))
-
-            for table in tables:
-                # service_bypass policy
+            for table in TENANT_TABLES:
                 try:
-                    stmt = (
-                        "CREATE POLICY service_bypass ON "
-                        + table
-                        + " FOR SELECT USING (current_setting('app.service_bypass', true) = 'true')"
-                    )
-                    conn.execute(text(stmt))
-                    conn.commit()
-                    print(f"ensure_rls_policies: service_bypass on {table} created", flush=True)
-                except Exception as e:
-                    conn.rollback()
-                    if "already exists" in str(e):
-                        pass  # expected
-                    else:
-                        print(f"ensure_rls_policies: {table} skipped: {e}", flush=True)
+                    conn.execute(text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"))
+                    conn.execute(text(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY"))
 
-            # Fix tenant_isolation policies: use NULLIF to prevent ''::int error.
-            # Check if already fixed by looking at policy definition.
-            needs_fix = False
-            try:
-                row = conn.execute(
-                    text(
-                        "SELECT polqual::text FROM pg_policy "
-                        "WHERE polname = 'tenant_isolation' AND polrelid = 'agents'::regclass"
-                    )
-                ).first()
-                needs_fix = row is not None and "nullif" not in (row[0] or "").lower()
-            except Exception:
-                conn.rollback()
-
-            if needs_fix:
-                print("ensure_rls_policies: fixing tenant_isolation policies (adding NULLIF)", flush=True)
-                try:
-                    for table in tables:
-                        drop_stmt = "DROP POLICY IF EXISTS tenant_isolation ON " + table
-                        conn.execute(text(drop_stmt))
-                        create_stmt = (
-                            "CREATE POLICY tenant_isolation ON " + table + " "
-                            "USING (company_id = NULLIF(current_setting('app.company_id', true), '')::int) "
-                            "WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::int)"
+                    # service_bypass (SELECT-only escape hatch for background jobs)
+                    sb = conn.execute(
+                        text(
+                            "SELECT 1 FROM pg_policy "
+                            "WHERE polname = 'service_bypass' AND polrelid = CAST(:t AS regclass)"
+                        ),
+                        {"t": table},
+                    ).first()
+                    if sb is None:
+                        conn.execute(
+                            text(
+                                f"CREATE POLICY service_bypass ON {table} "
+                                "FOR SELECT USING (current_setting('app.service_bypass', true) = 'true')"
+                            )
                         )
-                        conn.execute(text(create_stmt))
+
+                    # tenant_isolation — create if missing OR repair if it lacks NULLIF
+                    row = conn.execute(
+                        text(
+                            "SELECT polqual::text FROM pg_policy "
+                            "WHERE polname = 'tenant_isolation' AND polrelid = CAST(:t AS regclass)"
+                        ),
+                        {"t": table},
+                    ).first()
+                    needs_create = row is None or "nullif" not in (row[0] or "").lower()
+                    if needs_create:
+                        conn.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {table}"))
+                        conn.execute(
+                            text(
+                                f"CREATE POLICY tenant_isolation ON {table} USING ({iso_qual}) WITH CHECK ({iso_qual})"
+                            )
+                        )
                     conn.commit()
-                    print("ensure_rls_policies: tenant_isolation policies fixed", flush=True)
+                    print(f"ensure_rls_policies: {table} enforced", flush=True)
                 except Exception as e:
                     conn.rollback()
-                    print(
-                        f"ensure_rls_policies: tenant_isolation fix failed (will retry next startup): {e}", flush=True
-                    )
-            else:
-                print("ensure_rls_policies: tenant_isolation already OK", flush=True)
-
+                    print(f"ensure_rls_policies: {table} skipped: {e}", flush=True)
         print("ensure_rls_policies completed", flush=True)
     except Exception as e:
         print(f"ensure_rls_policies failed: {e}", flush=True)
+
+
+def ensure_llm_usage_table():
+    """Create llm_usage_logs + Company.llm_monthly_cap_usd on existing DBs (idempotent)."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SET lock_timeout = '5s'"))
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS llm_usage_logs ("
+                    "id SERIAL PRIMARY KEY, company_id INTEGER, user_id INTEGER, agent_id INTEGER, "
+                    "provider VARCHAR(32) NOT NULL, model VARCHAR(100) NOT NULL, "
+                    "prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, "
+                    "cost_usd DOUBLE PRECISION NOT NULL DEFAULT 0.0, created_at TIMESTAMP DEFAULT NOW())"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_llm_usage_company_created ON llm_usage_logs (company_id, created_at)"
+                )
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_llm_usage_agent_created ON llm_usage_logs (agent_id, created_at)")
+            )
+            conn.execute(text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS llm_monthly_cap_usd DOUBLE PRECISION"))
+            conn.commit()
+        print("ensure_llm_usage_table completed", flush=True)
+    except Exception as e:
+        print(f"ensure_llm_usage_table failed: {e}", flush=True)
+
+
+# App-wide advisory lock id for serializing startup schema migrations.
+MIGRATION_LOCK_KEY = 727274
+
+
+@contextmanager
+def migration_lock():
+    """Serialize startup schema migrations across concurrent Cloud Run instances.
+
+    statement_timeout bounds the wait so a stuck holder can't hang boot forever;
+    if the lock can't be acquired we proceed anyway (migrations are idempotent).
+    """
+    conn = engine.connect()
+    acquired = False
+    try:
+        try:
+            conn.execute(text("SET statement_timeout = '120s'"))
+            conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": MIGRATION_LOCK_KEY})
+            acquired = True
+            print("migration_lock: acquired", flush=True)
+        except Exception as e:
+            print(f"migration_lock: not acquired, proceeding ({e})", flush=True)
+        yield
+    finally:
+        if acquired:
+            try:
+                conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": MIGRATION_LOCK_KEY})
+            except Exception:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def migrate_existing_company_memberships():
@@ -899,6 +1457,66 @@ def migrate_existing_recaps():
         db.close()
     except Exception as e:
         logger.error(f"migrate_existing_recaps failed: {e}")
+
+
+def migrate_teams_to_members():
+    """Migrate existing teams from JSON action_agent_ids to team_members table.
+    Idempotent: skips if team_members already has entries."""
+    import json as _json
+
+    try:
+        db = SessionLocal()
+        existing_count = db.query(TeamMember).count()
+        if existing_count > 0:
+            logger.info("migrate_teams_to_members: team_members already populated, skipping")
+            db.close()
+            return
+
+        teams = db.query(Team).all()
+        if not teams:
+            logger.info("migrate_teams_to_members: no teams to migrate")
+            db.close()
+            return
+
+        for team in teams:
+            # Migrate leader
+            if team.leader_agent_id:
+                leader_member = TeamMember(
+                    team_id=team.id,
+                    agent_id=team.leader_agent_id,
+                    role="leader",
+                    position=0,
+                    company_id=team.company_id,
+                )
+                db.add(leader_member)
+
+            # Migrate action agents
+            action_ids = []
+            if team.action_agent_ids:
+                try:
+                    action_ids = (
+                        _json.loads(team.action_agent_ids)
+                        if isinstance(team.action_agent_ids, str)
+                        else team.action_agent_ids
+                    )
+                except (ValueError, TypeError):
+                    action_ids = []
+
+            for i, aid in enumerate(action_ids):
+                member = TeamMember(
+                    team_id=team.id,
+                    agent_id=int(aid),
+                    role="member",
+                    position=i + 1,
+                    company_id=team.company_id,
+                )
+                db.add(member)
+
+        db.commit()
+        logger.info(f"migrate_teams_to_members: migrated {len(teams)} teams")
+        db.close()
+    except Exception as e:
+        logger.error(f"migrate_teams_to_members failed: {e}")
 
 
 def test_connection():

@@ -482,3 +482,40 @@ def render_user_org_rejected_email(requested_name: str, reason: str | None, app_
         </div>
     """
     return _wrap_template(content, preheader="Information sur votre demande")
+
+
+def send_questionnaire_invitation_email(
+    to_email: str, questionnaire_name: str, company_name: str, respondent_name: str, questionnaire_url: str
+):
+    """Send a branded questionnaire invitation email with CTA button."""
+    greeting = f"Bonjour {respondent_name}," if respondent_name else "Bonjour,"
+    content = f"""
+<h2 style="color:#1f2937; margin:0 0 16px 0; font-size:20px;">
+  Vous &ecirc;tes invit&eacute;(e) &agrave; r&eacute;pondre &agrave; un questionnaire
+</h2>
+<p style="color:#4b5563; font-size:15px; line-height:1.6; margin:0 0 8px 0;">
+  {greeting}
+</p>
+<p style="color:#4b5563; font-size:15px; line-height:1.6; margin:0 0 24px 0;">
+  <strong>{company_name}</strong> vous invite &agrave; r&eacute;pondre au questionnaire
+  <strong>&laquo;&nbsp;{questionnaire_name}&nbsp;&raquo;</strong>.
+  Cliquez sur le bouton ci-dessous pour commencer.
+</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center" style="padding:8px 0 24px 0;">
+      <a href="{questionnaire_url}"
+         style="display:inline-block; background:linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+                color:#ffffff; text-decoration:none; padding:14px 32px; border-radius:8px;
+                font-size:15px; font-weight:600; letter-spacing:0.3px;">
+        R&eacute;pondre au questionnaire
+      </a>
+    </td>
+  </tr>
+</table>
+<p style="color:#9ca3af; font-size:13px; line-height:1.5; margin:0;">
+  Ce lien est unique et personnel. Ne le partagez pas.
+</p>"""
+
+    html = _wrap_template(content, preheader=f"Questionnaire : {questionnaire_name}")
+    send_email(to_email, f"Questionnaire : {questionnaire_name}", html)

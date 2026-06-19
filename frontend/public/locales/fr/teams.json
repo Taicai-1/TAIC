@@ -21,7 +21,24 @@
     "leaderPlaceholder": "Sélectionner un companion leader",
     "subAgentsLabel": "Sous-companions conversationnels",
     "teamLeader": "Chef d'équipe",
-    "subCompanions": "Sous-companions"
+    "subCompanions": "Sous-companions",
+    "step1Title": "Informations de base",
+    "step2Title": "Composition de l'équipe",
+    "step3Title": "Aperçu et confirmation",
+    "orchestrationPrompt": "Instructions de routage personnalisées (optionnel)",
+    "leaderSpecialization": "Spécialité du leader",
+    "memberSpecialization": "Spécialité",
+    "addMember": "Ajouter un companion",
+    "removeMember": "Retirer",
+    "regenerateSpec": "Régénérer",
+    "autoDetected": "Auto-détecté",
+    "customized": "Personnalisé",
+    "nextStep": "Suivant",
+    "previousStep": "Précédent",
+    "preview": "Aperçu de l'équipe",
+    "selectAgent": "Sélectionner un companion",
+    "noAgentsAvailable": "Aucun companion disponible",
+    "editTeam": "Modifier l'équipe"
   },
   "emptyState": {
     "title": "Aucune équipe de companions créée",
@@ -35,11 +52,15 @@
     "deletingAgent": "Erreur lors de la suppression",
     "creatingTeam": "Erreur lors de la création",
     "nameRequired": "Le nom est obligatoire",
-    "leaderRequired": "Choisir un companion conversationnel"
+    "leaderRequired": "Choisir un companion conversationnel",
+    "suggestSpecialization": "Erreur lors de la suggestion de spécialité",
+    "updateMembers": "Erreur lors de la mise à jour des membres"
   },
   "success": {
     "teamCreated": "Équipe créée avec succès !",
-    "agentDeleted": "Agent supprimé"
+    "agentDeleted": "Agent supprimé",
+    "teamUpdated": "Équipe mise à jour avec succès !",
+    "membersUpdated": "Membres mis à jour"
   },
   "confirmations": {
     "deleteAgent": "Êtes-vous sûr de vouloir supprimer cet agent ?"
@@ -78,7 +99,17 @@
     "createError": "Erreur lors de la création",
     "deleteError": "Erreur lors de la suppression",
     "updateError": "Erreur lors de la modification",
-    "sendError": "Erreur lors de l'envoi du message"
+    "sendError": "Erreur lors de l'envoi du message",
+    "consultingAgents": "Consultation en cours...",
+    "agentConsulted": "Agent consulté",
+    "agentUnavailable": "Indisponible",
+    "contributions": "Contributions",
+    "contribution": "Contribution",
+    "companionsUsed": "Companions utilisés : {{count}}",
+    "collapse": "Voir moins",
+    "expand": "Voir plus",
+    "synthesizing": "Synthèse en cours...",
+    "routingTo": "Consultation de"
   },
   "detail": {
     "loading": "Chargement...",
