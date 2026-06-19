@@ -12,9 +12,13 @@ logger = logging.getLogger(__name__)
 
 def verify_conversation_owner(conversation_id: int, user_id: str, db: Session) -> Conversation:
     """Load a conversation and verify the authenticated user owns it (via agent, share, or team)."""
+    from database import is_support_session
+
     conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if is_support_session():
+        return conv  # support acts as owner within the RLS-bounded active company
     uid = int(user_id)
     # If the conversation has a user_id, check it matches
     if conv.user_id and conv.user_id == uid:
