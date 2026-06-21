@@ -15,6 +15,9 @@ from datetime import datetime, timedelta
 # Tenant context variable — set by middleware, read by get_db
 _current_company_id: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar("company_id", default=None)
 
+# Support session flag — True when a support account is operating inside a chosen company.
+_support_session: contextvars.ContextVar[bool] = contextvars.ContextVar("support_session", default=False)
+
 # Configuration logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -207,6 +210,10 @@ class User(Base):
     totp_enabled = Column(Boolean, default=False, nullable=False)
     totp_backup_codes = Column(Text, nullable=True)  # JSON array of bcrypt-hashed backup codes
     totp_setup_completed_at = Column(DateTime, nullable=True)
+
+    # Platform support account: can switch into any company with owner-equivalent rights.
+    # Set manually in the DB (never via the API).
+    is_support = Column(Boolean, default=False, nullable=False)
 
     @property
     def totp_secret(self):
@@ -887,6 +894,20 @@ class RoutineReport(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class SupportAuditLog(Base):
+    """Audit trail of support-account actions (platform-level, no tenant RLS)."""
+
+    __tablename__ = "support_audit_logs"
+    __table_args__ = (Index("ix_support_audit_created", "created_at"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    support_user_id = Column(Integer, nullable=False, index=True)
+    target_company_id = Column(Integer, nullable=True)
+    method = Column(String(10), nullable=False)
+    path = Column(String(300), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 # Create database engine with connection pooling (env-configurable for Cloud Run scaling)
 engine = create_engine(
     DATABASE_URL,
@@ -920,6 +941,21 @@ def _set_tenant_on_begin(session, transaction, connection):
 def set_current_company_id(company_id: Optional[int]):
     """Set the tenant company_id for the current async context (called by middleware)."""
     _current_company_id.set(company_id)
+
+
+def get_current_company_id():
+    """Effective company_id for the current request context (set by the tenant middleware)."""
+    return _current_company_id.get()
+
+
+def set_support_session(value: bool):
+    """Flag the current request as a support account operating in a chosen company."""
+    _support_session.set(bool(value))
+
+
+def is_support_session() -> bool:
+    """True when the current request is a support account operating in a chosen company."""
+    return _support_session.get()
 
 
 def get_db():
@@ -1327,6 +1363,26 @@ def ensure_llm_usage_table():
         print("ensure_llm_usage_table completed", flush=True)
     except Exception as e:
         print(f"ensure_llm_usage_table failed: {e}", flush=True)
+
+
+def ensure_support_tables():
+    """Add User.is_support + support_audit_logs on existing DBs (idempotent)."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SET lock_timeout = '5s'"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_support BOOLEAN NOT NULL DEFAULT FALSE"))
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS support_audit_logs ("
+                    "id SERIAL PRIMARY KEY, support_user_id INTEGER NOT NULL, target_company_id INTEGER, "
+                    "method VARCHAR(10) NOT NULL, path VARCHAR(300) NOT NULL, created_at TIMESTAMP DEFAULT NOW())"
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_audit_created ON support_audit_logs (created_at)"))
+            conn.commit()
+        print("ensure_support_tables completed", flush=True)
+    except Exception as e:
+        print(f"ensure_support_tables failed: {e}", flush=True)
 
 
 # App-wide advisory lock id for serializing startup schema migrations.

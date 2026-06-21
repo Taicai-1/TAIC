@@ -4,6 +4,7 @@ import { useTranslation } from 'next-i18next';
 import { Bot, Users, Building2, Settings, LogOut, User, ChevronsLeft, ChevronsRight, LayoutTemplate, Zap, Wallet } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import Image from 'next/image';
+import SupportCompanyPicker from './SupportCompanyPicker';
 
 const NAV_ITEMS = [
   { href: '/agents',       labelKey: 'navigation.agents',       Icon: Bot },
@@ -82,6 +83,9 @@ export default function Sidebar({ collapsed: controlledCollapsed, onToggle }) {
           </button>
         )}
       </div>
+
+      {/* Support: active-company picker */}
+      {user?.is_support && !collapsed && <SupportCompanyPicker currentId={user.active_company?.id} />}
 
       {/* Nav */}
       <nav className={`flex-1 flex flex-col gap-0.5 px-2 ${collapsed ? 'mt-4' : ''}`}>

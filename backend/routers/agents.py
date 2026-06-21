@@ -23,6 +23,7 @@ from database import (
     Team,
     TeamMember,
     Company,
+    is_support_session,
 )
 from helpers.agent_helpers import (
     resolve_model_id,
@@ -326,7 +327,10 @@ async def create_agent(
 async def delete_agent(agent_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Delete an agent and all related data"""
     try:
-        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.user_id == int(user_id)).first()
+        _aq = db.query(Agent).filter(Agent.id == agent_id)
+        if not is_support_session():
+            _aq = _aq.filter(Agent.user_id == int(user_id))
+        agent = _aq.first()
 
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
@@ -597,7 +601,10 @@ async def create_team(payload: dict, user_id: str = Depends(verify_token), db: S
 async def get_team(team_id: int, user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Get a single team with members."""
     try:
-        t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
+        _tq = db.query(Team).filter(Team.id == team_id)
+        if not is_support_session():
+            _tq = _tq.filter(Team.user_id == int(user_id))
+        t = _tq.first()
         if not t:
             raise HTTPException(status_code=404, detail="Team not found")
 
@@ -683,7 +690,10 @@ async def update_team_members(
     """Replace full team composition."""
     from validation import TeamMemberSchema
 
-    t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
+    _tq = db.query(Team).filter(Team.id == team_id)
+    if not is_support_session():
+        _tq = _tq.filter(Team.user_id == int(user_id))
+    t = _tq.first()
     if not t:
         raise HTTPException(status_code=404, detail="Team not found")
 
@@ -733,7 +743,10 @@ async def patch_team_member(
     team_id: int, agent_id: int, payload: dict, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """Update specialization or position of a team member."""
-    t = db.query(Team).filter(Team.id == team_id, Team.user_id == int(user_id)).first()
+    _tq = db.query(Team).filter(Team.id == team_id)
+    if not is_support_session():
+        _tq = _tq.filter(Team.user_id == int(user_id))
+    t = _tq.first()
     if not t:
         raise HTTPException(status_code=404, detail="Team not found")
 

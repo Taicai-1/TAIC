@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from database import CompanyMembership
+from database import CompanyMembership, is_support_session, get_current_company_id
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,12 @@ ROLE_HIERARCHY = {"owner": 3, "admin": 2, "member": 1}
 
 
 def get_user_membership(user_id: int, db: Session) -> Optional[CompanyMembership]:
-    """Return the user's CompanyMembership or None."""
+    """Return the user's CompanyMembership, or a synthetic owner membership in the
+    active company when this is a support session (cross-company support access)."""
+    if is_support_session():
+        active = get_current_company_id()
+        if active is not None:
+            return CompanyMembership(user_id=user_id, company_id=active, role="owner")
     return db.query(CompanyMembership).filter(CompanyMembership.user_id == user_id).first()
 
 
