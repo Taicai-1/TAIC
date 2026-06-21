@@ -64,6 +64,10 @@ async def register(user: UserCreateValidated, request: Request, db: Session = De
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again in 1 hour.")
 
     try:
+        # Reserved support email cannot be self-registered.
+        if user.email.strip().lower() == "contact@taic.co":
+            raise HTTPException(status_code=400, detail="This email is reserved.")
+
         # Check if user exists
         if db.query(User).filter(User.username == user.username).first():
             raise HTTPException(status_code=400, detail="Username already registered")
@@ -192,6 +196,17 @@ async def login(user: UserLogin, request: Request, response: Response, db: Sessi
             )
             logger.info(f"User {user.username} requires 2FA verification")
             return {"requires_2fa": True}
+
+        # Support accounts MUST use 2FA — never issue a full token without it.
+        if getattr(db_user, "is_support", False) and not db_user.totp_enabled:
+            setup_token = create_access_token(
+                data={"sub": str(db_user.id), "type": "needs_2fa_setup"}, expires_delta=timedelta(minutes=30)
+            )
+            response.set_cookie(
+                key="setup_token", value=setup_token, httponly=True, secure=True, samesite="lax", max_age=1800, path="/"
+            )
+            logger.info(f"Support user {db_user.username} must set up 2FA")
+            return {"requires_2fa_setup": True}
 
         if not getattr(db_user, "totp_setup_completed_at", None):
             # User has NOT set up 2FA yet → issue restricted setup token (30 min)
@@ -463,6 +478,17 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
             if membership:
                 role = membership.role
 
+        # Support account: surface support state + the currently active company.
+        active_company = None
+        if getattr(db_user, "is_support", False):
+            from database import get_current_company_id, Company
+
+            acid = get_current_company_id()
+            if acid is not None:
+                c = db.query(Company).filter(Company.id == acid).first()
+                if c:
+                    active_company = {"id": c.id, "name": c.name}
+
         return {
             "authenticated": True,
             "user": {
@@ -472,6 +498,8 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
                 "totp_enabled": db_user.totp_enabled,
                 "company_id": db_user.company_id,
                 "role": role,
+                "is_support": bool(getattr(db_user, "is_support", False)),
+                "active_company": active_company,
             },
         }
     except HTTPException:
