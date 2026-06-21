@@ -17,6 +17,13 @@ export default function Layout({ children, title, actions, className = '' }) {
       {/* Main area */}
       <div className={`flex-1 flex flex-col min-w-0 ${className}`}>
 
+        {/* Support-mode banner */}
+        {user?.is_support && (
+          <div className="bg-red-600 text-white text-sm font-semibold px-6 py-2 text-center">
+            Mode support — {user.active_company ? `entreprise : ${user.active_company.name}` : 'aucune entreprise sélectionnée'}
+          </div>
+        )}
+
         {/* No-org warning */}
         {hasNoOrg && (
           <div className="bg-amber-50 border-b-2 border-amber-300">
