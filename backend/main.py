@@ -272,6 +272,49 @@ async def tenant_isolation_middleware(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def support_audit_middleware(request: Request, call_next):
+    """Audit every state-changing request made by a support account (self-contained:
+    re-derives support state from the token, not contextvars, to avoid middleware
+    ordering issues). Best-effort — never breaks the request."""
+    response = await call_next(request)
+    try:
+        if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.url.path != "/api/support/active-company":
+            import jwt as pyjwt
+
+            token = request.cookies.get("token")
+            if not token:
+                auth_header = request.headers.get("Authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header.split(" ")[1]
+            if token:
+                try:
+                    payload = pyjwt.decode(token, os.getenv("JWT_SECRET_KEY", "").strip(), algorithms=["HS256"])
+                except Exception:
+                    payload = None
+                if payload and payload.get("active_company_id") is not None and payload.get("sub"):
+                    from database import SupportAuditLog
+
+                    db = SessionLocal()
+                    try:
+                        u = db.query(User).filter(User.id == int(payload["sub"])).first()
+                        if u and getattr(u, "is_support", False):
+                            db.add(
+                                SupportAuditLog(
+                                    support_user_id=int(payload["sub"]),
+                                    target_company_id=int(payload["active_company_id"]),
+                                    method=request.method,
+                                    path=request.url.path[:300],
+                                )
+                            )
+                            db.commit()
+                    finally:
+                        db.close()
+    except Exception as exc:
+        logger.warning("support_audit_middleware failed (non-fatal): %s", exc)
+    return response
+
+
 # ---------------------------------------------------------------------------
 # CSRF protection middleware (Double Submit Cookie)
 # ---------------------------------------------------------------------------
@@ -559,6 +602,7 @@ from routers.email_ingest import router as email_ingest_router  # noqa: E402
 from routers.organization import router as organization_router  # noqa: E402
 from routers.user import router as user_router  # noqa: E402
 from routers.monitoring import router as monitoring_router  # noqa: E402
+from routers.support import router as support_router  # noqa: E402
 from routers.routines import router as routines_router  # noqa: E402
 from routers.graph import router as graph_router  # noqa: E402
 from routers.recaps import router as recaps_router  # noqa: E402
@@ -587,6 +631,7 @@ app.include_router(email_ingest_router)
 app.include_router(organization_router)
 app.include_router(user_router)
 app.include_router(monitoring_router)
+app.include_router(support_router)
 app.include_router(routines_router)
 app.include_router(graph_router)
 app.include_router(recaps_router)
