@@ -334,7 +334,7 @@ async def admin_org_request_decide(
 async def get_my_company(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """Get the current user's company with role and integration status."""
     uid = int(user_id)
-    membership = db.query(CompanyMembership).filter(CompanyMembership.user_id == uid).first()
+    membership = get_user_membership(uid, db)  # honors support sessions (active company)
     if not membership:
         return {"company": None}
 
