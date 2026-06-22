@@ -56,22 +56,29 @@ async def list_conversations(
     uid = int(user_id)
     if agent_id is not None:
         agent = _user_can_access_agent(uid, agent_id, db)
+        from database import is_support_session
 
-        # Show user's own conversations + legacy conversations (no user_id) if user is owner
-        user_filter = [Conversation.user_id == uid]
-        if agent.user_id == uid:
-            user_filter.append(Conversation.user_id.is_(None))
+        # Support sees ALL of the agent's conversations (active company, RLS-bounded);
+        # a normal user sees their own (+ legacy null-user conversations if they own the agent).
+        conv_filter = [Conversation.agent_id == agent_id]
+        if not is_support_session():
+            user_filter = [Conversation.user_id == uid]
+            if agent.user_id == uid:
+                user_filter.append(Conversation.user_id.is_(None))
+            conv_filter.append(or_(*user_filter))
         conversations = (
             db.query(Conversation)
-            .filter(Conversation.agent_id == agent_id, or_(*user_filter))
+            .filter(*conv_filter)
             .order_by(Conversation.created_at.desc())
             .offset(skip)
             .limit(limit)
             .all()
         )
     elif team_id is not None:
+        from database import is_support_session
+
         team = db.query(Team).filter(Team.id == team_id).first()
-        if not team or team.user_id != uid:
+        if not team or (team.user_id != uid and not is_support_session()):
             raise HTTPException(status_code=404, detail="Team not found")
         conversations = (
             db.query(Conversation)

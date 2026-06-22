@@ -131,7 +131,12 @@ async def get_agents(user_id: str = Depends(verify_token), db: Session = Depends
     """Get user's own agents + agents shared with them"""
     try:
         uid = int(user_id)
-        own_agents = db.query(Agent).filter(Agent.user_id == uid).order_by(Agent.created_at.desc()).all()
+        # Support sees ALL agents of the active company (RLS-bounded); a normal user
+        # sees only their own (+ shared, below).
+        _own_q = db.query(Agent)
+        if not is_support_session():
+            _own_q = _own_q.filter(Agent.user_id == uid)
+        own_agents = _own_q.order_by(Agent.created_at.desc()).all()
         result = [
             {
                 "id": a.id,
@@ -427,7 +432,10 @@ async def get_agent(agent_id: int, user_id: str = Depends(verify_token), db: Ses
 async def list_teams(user_id: str = Depends(verify_token), db: Session = Depends(get_db)):
     """List teams for the current user, including members."""
     try:
-        teams = db.query(Team).filter(Team.user_id == int(user_id)).order_by(Team.created_at.desc()).all()
+        _teams_q = db.query(Team)
+        if not is_support_session():
+            _teams_q = _teams_q.filter(Team.user_id == int(user_id))
+        teams = _teams_q.order_by(Team.created_at.desc()).all()
         team_ids = [t.id for t in teams]
 
         # Batch-load all members
