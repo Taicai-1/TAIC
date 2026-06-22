@@ -478,8 +478,10 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
             if membership:
                 role = membership.role
 
-        # Support account: surface support state + the currently active company.
+        # Support account: present the active company as the user's effective company
+        # with owner role, so every UI gate that checks company_id/role works for support.
         active_company = None
+        effective_company_id = db_user.company_id
         if getattr(db_user, "is_support", False):
             from database import get_current_company_id, Company
 
@@ -488,6 +490,8 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
                 c = db.query(Company).filter(Company.id == acid).first()
                 if c:
                     active_company = {"id": c.id, "name": c.name}
+                    effective_company_id = c.id
+                    role = "owner"
 
         return {
             "authenticated": True,
@@ -496,7 +500,7 @@ async def verify_auth(request: Request, db: Session = Depends(get_db)):
                 "username": db_user.username,
                 "email": db_user.email,
                 "totp_enabled": db_user.totp_enabled,
-                "company_id": db_user.company_id,
+                "company_id": effective_company_id,
                 "role": role,
                 "is_support": bool(getattr(db_user, "is_support", False)),
                 "active_company": active_company,
