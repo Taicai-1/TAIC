@@ -8,7 +8,9 @@ export default function Layout({ children, title, actions, className = '' }) {
   const router = useRouter();
   const { t } = useTranslation('common');
   const { user } = useAuth({ required: false });
-  const hasNoOrg = user && !user.company_id;
+  // Support accounts have no company of their own (they operate via the active
+  // company selector), so the "no organization" nag does not apply to them.
+  const hasNoOrg = user && !user.company_id && !user.is_support;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
