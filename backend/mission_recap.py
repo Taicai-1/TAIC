@@ -306,8 +306,9 @@ def _send_recap_email(mission, content: str, db: Session, schedule=None) -> None
     seen = set()
     unique = []
     for r in recipients:
-        if r not in seen:
-            seen.add(r)
+        key = r.lower()  # case-insensitive dedup
+        if key not in seen:
+            seen.add(key)
             unique.append(r)
     if not unique:
         logger.warning(f"Mission {mission.id}: no recipient email, skipping recap email")
@@ -321,5 +322,9 @@ def _send_recap_email(mission, content: str, db: Session, schedule=None) -> None
         f"</div>"
     )
     subject = f"Récap mission — {mission.name}"
+    # Send per-recipient so one bad address (e.g. a typo) does not abort delivery to the rest.
     for to in unique:
-        send_email(to, subject, html)
+        try:
+            send_email(to, subject, html)
+        except Exception as send_err:
+            logger.warning(f"Mission {mission.id}: failed to send recap to {to}: {send_err}")

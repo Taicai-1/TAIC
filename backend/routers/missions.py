@@ -791,7 +791,7 @@ async def list_recaps(
 async def generate_recap_schedule_now(
     mission_id: int, schedule_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
 ):
-    """Generate this scheduled recap on demand (synchronous, no email, no scheduler impact)."""
+    """Generate this scheduled recap on demand (synchronous; emails the recipients)."""
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
@@ -808,8 +808,6 @@ async def generate_recap_schedule_now(
     from mission_recap import process_mission_recap
 
     result = process_mission_recap(mission, db, trigger="manual", schedule_id=schedule.id)
-    if result["status"] == "no_data":
-        raise HTTPException(status_code=400, detail="Aucun évènement à venir cette semaine")
     if result["status"] == "error":
         raise HTTPException(status_code=502, detail="La génération du récap a échoué")
     return {"recap_id": result["recap_id"], "content": result["content"]}
