@@ -483,3 +483,12 @@ def test_recap_schedule_create_schema_accepts_recap_prompt():
 
     s = RecapScheduleCreate(kind="recurring", weekday=0, hour=8, recap_prompt="hi")
     assert s.recap_prompt == "hi"
+
+
+def test_search_similar_texts_accepts_recap_schedule_id():
+    import inspect
+    from rag_engine import search_similar_texts_for_user
+
+    params = inspect.signature(search_similar_texts_for_user).parameters
+    assert "recap_schedule_id" in params
+    assert "recap_source_only" not in params

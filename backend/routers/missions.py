@@ -765,18 +765,27 @@ async def list_recaps(
     }
 
 
-@router.post("/api/automations/missions/{mission_id}/recaps/generate")
-async def generate_recap_now(mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)):
-    """Generate a recap on demand (synchronous, no email, no scheduler impact)."""
+@router.post("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/generate")
+async def generate_recap_schedule_now(
+    mission_id: int, schedule_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Generate this scheduled recap on demand (synchronous, no email, no scheduler impact)."""
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
     if not mission.agent_id:
         raise HTTPException(status_code=400, detail="Connectez un companion à la mission d'abord")
+    schedule = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
 
     from mission_recap import process_mission_recap
 
-    result = process_mission_recap(mission, db, trigger="manual")
+    result = process_mission_recap(mission, db, trigger="manual", schedule_id=schedule.id)
     if result["status"] == "no_data":
         raise HTTPException(status_code=400, detail="Aucun évènement à venir cette semaine")
     if result["status"] == "error":

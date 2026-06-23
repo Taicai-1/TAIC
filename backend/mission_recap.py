@@ -39,7 +39,7 @@ def fetch_events(mission_id: int, start: date, end: date, db: Session) -> list:
     )
 
 
-def enrich_events_with_docs(mission, events: list, db: Session) -> list:
+def enrich_events_with_docs(mission, events: list, db: Session, schedule_id: int | None = None) -> list:
     """For each upcoming event, attach top-k RAG snippets from the mission's docs.
 
     Returns a list of {event, snippets} dicts. Embeddings use the same Mistral
@@ -63,7 +63,7 @@ def enrich_events_with_docs(mission, events: list, db: Session) -> list:
                     top_k=min(RAG_TOP_K, snippet_budget),
                     company_id=mission.company_id,
                     mission_id=mission.id,
-                    recap_source_only=True,
+                    recap_schedule_id=schedule_id,
                 )
                 snippets = [r["text"] for r in results]
                 snippet_budget -= len(snippets)
@@ -178,13 +178,22 @@ def process_mission_recap(
         return {"status": "no_data", "recap_id": recap.id}
 
     try:
+        schedule = None
+        if schedule_id is not None:
+            from database import MissionRecapSchedule
+
+            schedule = db.query(MissionRecapSchedule).filter(MissionRecapSchedule.id == schedule_id).first()
         recall = fetch_events(mission.id, rc_start, rc_end, db)
         # RAG enrichment (the only RLS-protected SELECTs here) must run BEFORE the
         # first commit below: the scheduler sets `SET LOCAL app.service_bypass`,
         # which is transaction-scoped and lost after a commit. Do not reorder.
-        enriched = enrich_events_with_docs(mission, upcoming, db)
+        enriched = enrich_events_with_docs(mission, upcoming, db, schedule_id=schedule_id)
         prompt = build_mission_recap_prompt(
-            mission, agent, recall, enriched, custom_prompt=getattr(mission, "recap_prompt", None)
+            mission,
+            agent,
+            recall,
+            enriched,
+            custom_prompt=(schedule.recap_prompt if schedule else None),
         )
         model_id = get_model_id_for_agent(agent) if agent else "mistral:mistral-large-latest"
         content = get_chat_response(prompt, model_id=model_id)
