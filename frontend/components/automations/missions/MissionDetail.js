@@ -7,9 +7,8 @@ import PlanningTab from './PlanningTab';
 import DocumentsTab from './DocumentsTab';
 import RecapsTab from './RecapsTab';
 import ChatTab from './ChatTab';
-import SettingsTab from './SettingsTab';
 
-const SUB_TABS = ['planning', 'documents', 'recaps', 'chat', 'settings'];
+const SUB_TABS = ['planning', 'documents', 'recaps', 'aide'];
 
 export default function MissionDetail({ missionId, onBack }) {
   const { t } = useTranslation('automations');
@@ -66,9 +65,8 @@ export default function MissionDetail({ missionId, onBack }) {
 
       {subTab === 'planning' && <PlanningTab missionId={mission.id} />}
       {subTab === 'documents' && <DocumentsTab missionId={mission.id} />}
-      {subTab === 'recaps' && <RecapsTab missionId={mission.id} hasCompanion={!!mission.agent_id} />}
-      {subTab === 'chat' && <ChatTab missionId={mission.id} hasCompanion={!!mission.agent_id} />}
-      {subTab === 'settings' && <SettingsTab mission={mission} onChanged={load} onDeleted={onBack} />}
+      {subTab === 'recaps' && <RecapsTab mission={mission} onChanged={load} onDeleted={onBack} />}
+      {subTab === 'aide' && <ChatTab missionId={mission.id} hasCompanion={!!mission.agent_id} />}
     </div>
   );
 }

@@ -125,7 +125,8 @@
         "documents": "Documents",
         "recaps": "Recaps",
         "chat": "Chat",
-        "settings": "Settings"
+        "settings": "Settings",
+        "aide": "Help"
       }
     },
     "planning": {
@@ -163,7 +164,17 @@
       "noData": "No upcoming events",
       "error": "Generation failed",
       "generated": "Recap generated",
-      "noCompanion": "Connect a companion to generate a recap."
+      "noCompanion": "Connect a companion to generate a recap.",
+      "promptTitle": "Recap prompt",
+      "promptPlaceholder": "Custom instructions for generating this mission's recap…",
+      "promptSave": "Save prompt",
+      "docsTitle": "Recap documents",
+      "docsHint": "These documents are used only as sources for this mission's recaps.",
+      "docsUpload": "Add a document",
+      "docsUploading": "Uploading…",
+      "docsEmpty": "No recap document yet.",
+      "docsDeleteConfirm": "Delete this recap document?",
+      "docsUploaded": "Document added"
     },
     "chat": {
       "placeholder": "Ask a question about the mission…",

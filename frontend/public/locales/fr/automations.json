@@ -125,7 +125,8 @@
         "documents": "Documents",
         "recaps": "Récaps",
         "chat": "Chat",
-        "settings": "Réglages"
+        "settings": "Réglages",
+        "aide": "Aide"
       }
     },
     "planning": {
@@ -163,7 +164,17 @@
       "noData": "Aucun évènement à venir",
       "error": "Échec de la génération",
       "generated": "Récap généré",
-      "noCompanion": "Connectez un companion pour générer un récap."
+      "noCompanion": "Connectez un companion pour générer un récap.",
+      "promptTitle": "Prompt du récap",
+      "promptPlaceholder": "Instructions personnalisées pour générer le récap de cette mission…",
+      "promptSave": "Enregistrer le prompt",
+      "docsTitle": "Documents du récap",
+      "docsHint": "Ces documents servent uniquement de source aux récaps de cette mission.",
+      "docsUpload": "Ajouter un document",
+      "docsUploading": "Import en cours…",
+      "docsEmpty": "Aucun document de récap.",
+      "docsDeleteConfirm": "Supprimer ce document de récap ?",
+      "docsUploaded": "Document ajouté"
     },
     "chat": {
       "placeholder": "Posez une question sur la mission…",
