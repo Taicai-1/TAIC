@@ -455,3 +455,10 @@ async def test_recap_document_upload_list_delete(client, db_session, member_cook
     assert resp.status_code == 200
     remaining_ids = [d["id"] for d in resp.json()["documents"]]
     assert recap_doc_id not in remaining_ids
+
+
+def test_recap_schedule_prompt_and_doc_schedule_link_columns_exist():
+    from database import Document, MissionRecapSchedule
+
+    assert hasattr(MissionRecapSchedule, "recap_prompt")
+    assert hasattr(Document, "recap_schedule_id")
