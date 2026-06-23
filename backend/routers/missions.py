@@ -9,7 +9,16 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Qu
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import Agent, Document, Mission, MissionEvent, MissionRecap, MissionRecapSchedule, get_db
+from database import (
+    Agent,
+    Document,
+    DocumentChunk,
+    Mission,
+    MissionEvent,
+    MissionRecap,
+    MissionRecapSchedule,
+    get_db,
+)
 from permissions import require_role
 from schemas.missions import (
     EventCreate,
@@ -531,13 +540,16 @@ async def delete_recap_schedule(
     )
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    # ORM-delete this recap's documents first so their chunks cascade via the
-    # Document.chunks relationship. documents.recap_schedule_id is ON DELETE CASCADE
-    # at the DB level, but document_chunks.document_id is NOT, so relying on the raw
-    # DB cascade would raise a FK violation when a recap doc has chunks.
-    recap_docs = db.query(Document).filter(Document.recap_schedule_id == schedule.id).all()
-    for doc in recap_docs:
-        db.delete(doc)
+    # Delete this recap's documents (and their chunks) BEFORE the schedule. The
+    # documents.recap_schedule_id FK is ON DELETE CASCADE, but document_chunks.document_id
+    # is NOT — and there is no ORM relationship from the schedule to its documents to make
+    # SQLAlchemy order the deletes — so letting the schedule delete cascade into documents
+    # at the DB level would hit the chunk FK and raise IntegrityError. Delete explicitly,
+    # innermost first: chunks, then documents, then the schedule.
+    doc_ids = [d.id for d in db.query(Document.id).filter(Document.recap_schedule_id == schedule.id).all()]
+    if doc_ids:
+        db.query(DocumentChunk).filter(DocumentChunk.document_id.in_(doc_ids)).delete(synchronize_session=False)
+        db.query(Document).filter(Document.id.in_(doc_ids)).delete(synchronize_session=False)
     db.delete(schedule)
     db.commit()
     return {"success": True}
