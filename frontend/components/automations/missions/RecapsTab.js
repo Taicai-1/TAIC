@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'next-i18next';
 import toast from 'react-hot-toast';
 import api from '../../../lib/api';
-import MarkdownRenderer from '../../MarkdownRenderer';
 import RecapSchedules from './RecapSchedules';
 
 export default function RecapsTab({ mission, onChanged, onDeleted }) {
@@ -62,53 +61,12 @@ export default function RecapsTab({ mission, onChanged, onDeleted }) {
     }
   };
 
-  // --- generated recaps ---
-  const [recaps, setRecaps] = useState([]);
-
-  const loadRecaps = useCallback(async () => {
-    try {
-      const res = await api.get(`/api/automations/missions/${missionId}/recaps`);
-      setRecaps(res.data.recaps || []);
-    } catch {
-      toast.error(t('errors.loadFailed'));
-    }
-  }, [missionId, t]);
-
-  useEffect(() => {
-    loadRecaps();
-  }, [loadRecaps]);
-
   return (
     <div className="max-w-2xl space-y-8">
-      {/* Scheduled recaps — each with its own prompt, documents and "generate now" */}
+      {/* Scheduled recaps — each with its own prompt, documents and "generate now".
+          Generated recaps are delivered by email only, not displayed here. */}
       <section>
-        <RecapSchedules missionId={missionId} hasCompanion={hasCompanion} onGenerated={loadRecaps} />
-      </section>
-
-      {/* Generated recaps */}
-      <section>
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">{t('missions.recaps.title')}</h3>
-        {recaps.length === 0 ? (
-          <p className="text-sm text-gray-400 py-8 text-center">{t('missions.recaps.empty')}</p>
-        ) : (
-          <div className="space-y-4">
-            {recaps.map((r) => (
-              <div key={r.id} className="border border-gray-200 rounded-card p-4 bg-white">
-                <p className="text-xs text-gray-400 mb-2">
-                  {t('missions.recaps.period', { start: r.period_start, end: r.period_end })}
-                  {r.trigger === 'manual' && ' · manuel'}
-                </p>
-                {r.status === 'success' ? (
-                  <MarkdownRenderer>{r.content}</MarkdownRenderer>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    {r.status === 'no_data' ? t('missions.recaps.noData') : t('missions.recaps.error')}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        <RecapSchedules missionId={missionId} hasCompanion={hasCompanion} />
       </section>
 
       {/* Mission lifecycle */}

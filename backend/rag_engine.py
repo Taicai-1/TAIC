@@ -907,7 +907,14 @@ def search_similar_texts_for_user(
         if mission_id:
             query = query.filter(Document.mission_id == mission_id)
             if recap_schedule_id is not None:
-                query = query.filter(Document.recap_schedule_id == recap_schedule_id)
+                # Recap source = this recap's own docs + the mission's general docs
+                # (recap_schedule_id IS NULL), which apply to every recap.
+                query = query.filter(
+                    or_(
+                        Document.recap_schedule_id == recap_schedule_id,
+                        Document.recap_schedule_id.is_(None),
+                    )
+                )
         elif agent_id:
             # Agent-scoped docs; optionally union the company-shared docs
             agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))

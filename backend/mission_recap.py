@@ -114,21 +114,31 @@ def build_mission_recap_prompt(
     agent_context = (getattr(agent, "contexte", "") if agent else "") or ""
 
     if custom_prompt and custom_prompt.strip():
-        system_prompt = custom_prompt.strip()
+        system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
+
+Tu es connecté à une mission dont l'objectif est :
+\"\"\"{mission.objective.strip()}\"\"\"
+
+{custom_prompt.strip()}
+
+IMPORTANT: Génère UNIQUEMENT du contenu HTML, sans balises <html>, <head>, <body>.
+Utilise des <h2> pour les titres de section et des <ul>/<li> pour les listes."""
     else:
         system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
 
 Tu es connecté à une mission dont l'objectif est :
 \"\"\"{mission.objective.strip()}\"\"\"
 
-Tu dois produire un récap hebdomadaire en Markdown, analysé À LA LUMIÈRE DE CET OBJECTIF.
+Tu dois produire un récap hebdomadaire en HTML, analysé À LA LUMIÈRE DE CET OBJECTIF.
+
+IMPORTANT: Génère UNIQUEMENT le contenu HTML des sections ci-dessous, sans balises <html>, <head>, <body>.
 
 Structure attendue :
-## Rappel de la semaine écoulée
+<h2 style="color: #6366f1; margin-top: 20px;">Rappel de la semaine écoulée</h2>
 Un paragraphe bref (2-3 phrases) rappelant ce qui s'est passé. Si aucun évènement, écris "Rien à signaler la semaine dernière."
 
-## Semaine à venir
-Pour chaque évènement à venir : ce qu'il implique pour l'objectif, les priorités et points d'attention, en t'appuyant sur les extraits de documents fournis quand ils sont pertinents.
+<h2 style="color: #8b5cf6; margin-top: 20px;">Semaine à venir</h2>
+Pour chaque évènement à venir : ce qu'il implique pour l'objectif, les priorités et points d'attention, en t'appuyant sur les extraits de documents fournis quand ils sont pertinents. Utilise des <ul>/<li>.
 
 Sois concret et actionnable. N'invente pas d'évènements absents des données."""
 
@@ -170,7 +180,7 @@ Sois concret et actionnable. N'invente pas d'évènements absents des données."
 ÉVÈNEMENTS DE LA SEMAINE À VENIR (avec extraits documentaires) :
 {upcoming_text}{doc_text}
 
-Génère le récap Markdown maintenant."""
+Génère le récap HTML maintenant."""
 
     return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
@@ -289,7 +299,7 @@ def _send_recap_email(mission, content: str, db: Session, schedule=None) -> None
     Sender is contact@taic.co (SMTP_FROM_EMAIL default).
     """
     from database import User
-    from email_service import send_email
+    from email_service import generate_recap_html, send_email
 
     recipients = []
     user = db.query(User).filter(User.id == mission.user_id).first()
@@ -314,13 +324,8 @@ def _send_recap_email(mission, content: str, db: Session, schedule=None) -> None
         logger.warning(f"Mission {mission.id}: no recipient email, skipping recap email")
         return
 
-    safe = content.replace("\n", "<br>")
-    html = (
-        f'<div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">'
-        f"<h2>Récap mission — {mission.name}</h2>"
-        f'<div style="white-space: normal; line-height: 1.6;">{safe}</div>'
-        f"</div>"
-    )
+    # Same branded template as the companion recap (gradient header + footer).
+    html = generate_recap_html(mission.name, content)
     subject = f"Récap mission — {mission.name}"
     # Send per-recipient so one bad address (e.g. a typo) does not abort delivery to the rest.
     for to in unique:
