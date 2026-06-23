@@ -106,6 +106,7 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
   const [hour, setHour] = useState(schedule.hour);
   const [enabled, setEnabled] = useState(schedule.enabled);
   const [recapPrompt, setRecapPrompt] = useState(schedule.recap_prompt ?? '');
+  const [recipients, setRecipients] = useState((schedule.recipients ?? []).join(', '));
 
   useEffect(() => {
     setKind(schedule.kind);
@@ -114,6 +115,7 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
     setHour(schedule.hour);
     setEnabled(schedule.enabled);
     setRecapPrompt(schedule.recap_prompt ?? '');
+    setRecipients((schedule.recipients ?? []).join(', '));
   }, [schedule]);
 
   const commit = (overrides = {}) => {
@@ -124,6 +126,7 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
       hour,
       enabled,
       recap_prompt: recapPrompt,
+      recipients,
       ...overrides,
     };
     onSave(schedule.id, {
@@ -133,6 +136,10 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
       hour: parseInt(next.hour, 10),
       enabled: next.enabled,
       recap_prompt: next.recap_prompt,
+      recipients: next.recipients
+        .split(',')
+        .map((e) => e.trim())
+        .filter(Boolean),
     });
   };
 
@@ -297,6 +304,22 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
           rows={3}
           className="w-full px-3 py-2 border border-gray-300 rounded-button text-sm"
         />
+      </div>
+
+      {/* this recap's recipients */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          {t('missions.settings.recapSchedules.recipients')}
+        </label>
+        <input
+          type="text"
+          value={recipients}
+          onChange={(e) => setRecipients(e.target.value)}
+          onBlur={() => commit()}
+          placeholder={t('missions.settings.recapSchedules.recipientsPlaceholder')}
+          className="w-full px-3 py-2 border border-gray-300 rounded-button text-sm"
+        />
+        <p className="text-xs text-gray-400 mt-1">{t('missions.settings.recapSchedules.recipientsHint')}</p>
       </div>
 
       {/* this recap's documents */}

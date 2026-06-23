@@ -216,7 +216,10 @@
         "generate": "Generate now",
         "generating": "Generating…",
         "generated": "Recap generated",
-        "noCompanion": "Connect a companion to the mission to generate."
+        "noCompanion": "Connect a companion to the mission to generate.",
+        "recipients": "Recipients",
+        "recipientsPlaceholder": "email1@example.com, email2@example.com",
+        "recipientsHint": "Comma-separated emails. The mission owner is always included."
       },
       "weekdays": {
         "0": "Monday", "1": "Tuesday", "2": "Wednesday", "3": "Thursday",
