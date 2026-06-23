@@ -1077,6 +1077,7 @@ def ingest_text_content(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    is_mission_recap_source: bool = False,
 ) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
@@ -1116,6 +1117,7 @@ def ingest_text_content(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            is_mission_recap_source=is_mission_recap_source,
         )
         db.add(document)
         db.commit()
@@ -1177,6 +1179,7 @@ def process_document_for_user(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    is_mission_recap_source: bool = False,
 ) -> int:
     import tempfile
     import os
@@ -1242,6 +1245,7 @@ def process_document_for_user(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            is_mission_recap_source=is_mission_recap_source,
         )
     except Exception as e:
         logger.error(f"Error processing document: {e}")

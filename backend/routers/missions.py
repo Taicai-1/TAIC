@@ -656,10 +656,9 @@ async def upload_mission_recap_document(
     from rag_engine import process_document_for_user
 
     doc_id = process_document_for_user(
-        file.filename, content, user_id, db, agent_id=None, company_id=mission.company_id, mission_id=mission.id
+        file.filename, content, user_id, db, agent_id=None, company_id=mission.company_id,
+        mission_id=mission.id, is_mission_recap_source=True,
     )
-    db.query(Document).filter(Document.id == doc_id).update({Document.is_mission_recap_source: True})
-    db.commit()
     return {"filename": file.filename, "document_id": doc_id, "status": "uploaded"}
 
 
