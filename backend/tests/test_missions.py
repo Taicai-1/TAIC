@@ -544,6 +544,16 @@ def test_recap_schedule_create_schema_accepts_recipients():
     assert s.recipients == ["a@x.co", "b@x.co"]
 
 
+def test_build_mission_recap_prompt_includes_doc_context():
+    import types
+    from mission_recap import build_mission_recap_prompt
+
+    mission = types.SimpleNamespace(objective="Obj", id=1, user_id=1, company_id=1, name="M")
+    agent = types.SimpleNamespace(name="Bot", contexte="")
+    msgs = build_mission_recap_prompt(mission, agent, [], [], doc_context=["secret-reference-snippet"])
+    assert "secret-reference-snippet" in msgs[1]["content"]
+
+
 def test_send_recap_email_dedups_owner_and_recipients(monkeypatch):
     """Recipients = owner + schedule.recipients, deduplicated, one send_email per address."""
     import types
