@@ -462,3 +462,10 @@ def test_recap_schedule_prompt_and_doc_schedule_link_columns_exist():
 
     assert hasattr(MissionRecapSchedule, "recap_prompt")
     assert hasattr(Document, "recap_schedule_id")
+
+
+def test_recap_schedule_create_schema_accepts_recap_prompt():
+    from schemas.missions import RecapScheduleCreate
+
+    s = RecapScheduleCreate(kind="recurring", weekday=0, hour=8, recap_prompt="hi")
+    assert s.recap_prompt == "hi"
