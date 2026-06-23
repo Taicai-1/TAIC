@@ -844,6 +844,7 @@ def search_similar_texts_for_user(
     mission_id: int = None,
     include_company_rag: bool = False,
     company_rag_folder_ids: list = None,
+    recap_source_only: bool = False,
 ) -> List[dict]:
     """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context.
 
@@ -905,6 +906,8 @@ def search_similar_texts_for_user(
 
         if mission_id:
             query = query.filter(Document.mission_id == mission_id)
+            if recap_source_only:
+                query = query.filter(Document.is_mission_recap_source.is_(True))
         elif agent_id:
             # Agent-scoped docs; optionally union the company-shared docs
             agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))

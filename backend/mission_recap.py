@@ -63,6 +63,7 @@ def enrich_events_with_docs(mission, events: list, db: Session) -> list:
                     top_k=min(RAG_TOP_K, snippet_budget),
                     company_id=mission.company_id,
                     mission_id=mission.id,
+                    recap_source_only=True,
                 )
                 snippets = [r["text"] for r in results]
                 snippet_budget -= len(snippets)
@@ -72,12 +73,15 @@ def enrich_events_with_docs(mission, events: list, db: Session) -> list:
     return enriched
 
 
-def build_mission_recap_prompt(mission, agent, recall_events: list, enriched_upcoming: list) -> list:
+def build_mission_recap_prompt(mission, agent, recall_events: list, enriched_upcoming: list, custom_prompt: str | None = None) -> list:
     """Build the [system, user] message list for the recap LLM call."""
     agent_name = (agent.name if agent else None) or "Assistant"
     agent_context = (getattr(agent, "contexte", "") if agent else "") or ""
 
-    system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
+    if custom_prompt and custom_prompt.strip():
+        system_prompt = custom_prompt.strip()
+    else:
+        system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
 
 Tu es connecté à une mission dont l'objectif est :
 \"\"\"{mission.objective.strip()}\"\"\"
@@ -177,7 +181,7 @@ def process_mission_recap(
         # first commit below: the scheduler sets `SET LOCAL app.service_bypass`,
         # which is transaction-scoped and lost after a commit. Do not reorder.
         enriched = enrich_events_with_docs(mission, upcoming, db)
-        prompt = build_mission_recap_prompt(mission, agent, recall, enriched)
+        prompt = build_mission_recap_prompt(mission, agent, recall, enriched, custom_prompt=getattr(mission, "recap_prompt", None))
         model_id = get_model_id_for_agent(agent) if agent else "mistral:mistral-large-latest"
         content = get_chat_response(prompt, model_id=model_id)
 

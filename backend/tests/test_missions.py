@@ -373,6 +373,28 @@ def test_mission_update_schema_recap_prompt_max_length():
         MissionUpdate(name="x", objective="y", recap_prompt="a" * 10001)
 
 
+def test_build_mission_recap_prompt_uses_custom_prompt():
+    import types
+    from mission_recap import build_mission_recap_prompt
+
+    mission = types.SimpleNamespace(objective="Obj", id=1, user_id=1, company_id=1)
+    agent = types.SimpleNamespace(name="Bot", contexte="")
+    msgs = build_mission_recap_prompt(mission, agent, [], [], custom_prompt="MY CUSTOM PROMPT")
+    assert msgs[0]["role"] == "system"
+    assert msgs[0]["content"] == "MY CUSTOM PROMPT"
+
+
+def test_build_mission_recap_prompt_default_when_no_custom():
+    import types
+    from mission_recap import build_mission_recap_prompt
+
+    mission = types.SimpleNamespace(objective="Obj", id=1, user_id=1, company_id=1)
+    agent = types.SimpleNamespace(name="Bot", contexte="")
+    msgs = build_mission_recap_prompt(mission, agent, [], [])
+    assert msgs[0]["role"] == "system"
+    assert "récap" in msgs[0]["content"].lower() or "recap" in msgs[0]["content"].lower()
+
+
 # ---------------------------------------------------------------------------
 # Recap-document endpoint tests (require DB; auto-skip when PG unavailable)
 # ---------------------------------------------------------------------------
