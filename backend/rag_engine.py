@@ -844,6 +844,7 @@ def search_similar_texts_for_user(
     mission_id: int = None,
     include_company_rag: bool = False,
     company_rag_folder_ids: list = None,
+    recap_source_only: bool = False,
 ) -> List[dict]:
     """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context.
 
@@ -905,6 +906,8 @@ def search_similar_texts_for_user(
 
         if mission_id:
             query = query.filter(Document.mission_id == mission_id)
+            if recap_source_only:
+                query = query.filter(Document.is_mission_recap_source.is_(True))
         elif agent_id:
             # Agent-scoped docs; optionally union the company-shared docs
             agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))
@@ -1074,6 +1077,7 @@ def ingest_text_content(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    is_mission_recap_source: bool = False,
 ) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
@@ -1113,6 +1117,7 @@ def ingest_text_content(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            is_mission_recap_source=is_mission_recap_source,
         )
         db.add(document)
         db.commit()
@@ -1174,6 +1179,7 @@ def process_document_for_user(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    is_mission_recap_source: bool = False,
 ) -> int:
     import tempfile
     import os
@@ -1239,6 +1245,7 @@ def process_document_for_user(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            is_mission_recap_source=is_mission_recap_source,
         )
     except Exception as e:
         logger.error(f"Error processing document: {e}")

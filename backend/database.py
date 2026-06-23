@@ -610,6 +610,9 @@ class Document(Base):
     folder_id = Column(
         Integer, ForeignKey("company_folders.id", ondelete="SET NULL"), nullable=True, index=True
     )  # Company RAG folder (set only when is_company_rag=True; required at the app level for those)
+    is_mission_recap_source = Column(
+        Boolean, nullable=False, default=False, server_default="false", index=True
+    )  # document used ONLY as a source for this mission's recaps (not the mission's general docs)
 
     # Relations
     owner = relationship("User", back_populates="documents")
@@ -817,6 +820,7 @@ class Mission(Base):
     recap_enabled = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     recap_weekday = Column(Integer, nullable=False, default=0, server_default="0")  # 0=Monday .. 6=Sunday
     recap_hour = Column(Integer, nullable=False, default=8, server_default="8")  # Europe/Paris
+    recap_prompt = Column(Text, nullable=True)  # custom prompt for this mission's recaps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -1129,6 +1133,9 @@ def ensure_columns():
         # Company RAG folders
         ("documents", "folder_id", "INTEGER REFERENCES company_folders(id) ON DELETE SET NULL"),
         ("agents", "company_rag_folder_ids", "TEXT"),
+        # Mission Recaps Revamp
+        ("missions", "recap_prompt", "TEXT"),
+        ("documents", "is_mission_recap_source", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ]
     try:
         with engine.connect() as conn:

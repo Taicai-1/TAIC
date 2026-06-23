@@ -72,6 +72,7 @@ def _mission_detail(mission: Mission, db: Session) -> dict:
         "recap_enabled": mission.recap_enabled,
         "recap_weekday": mission.recap_weekday,
         "recap_hour": mission.recap_hour,
+        "recap_prompt": mission.recap_prompt,
         "created_at": mission.created_at.isoformat() if mission.created_at else None,
         "last_recap_at": last_recap.created_at.isoformat() if last_recap and last_recap.created_at else None,
     }
@@ -141,6 +142,7 @@ async def update_mission(
     mission.recap_enabled = body.recap_enabled
     mission.recap_weekday = body.recap_weekday
     mission.recap_hour = body.recap_hour
+    mission.recap_prompt = body.recap_prompt
     mission.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(mission)
@@ -599,7 +601,12 @@ async def list_mission_documents(mission_id: int, user_id: int = Depends(verify_
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
-    docs = db.query(Document).filter(Document.mission_id == mission.id).order_by(Document.created_at.desc()).all()
+    docs = (
+        db.query(Document)
+        .filter(Document.mission_id == mission.id, Document.is_mission_recap_source.is_(False))
+        .order_by(Document.created_at.desc())
+        .all()
+    )
     return {
         "documents": [
             {"id": d.id, "filename": d.filename, "created_at": d.created_at.isoformat() if d.created_at else None}
@@ -619,6 +626,82 @@ async def delete_mission_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     db.delete(doc)  # chunks cascade via the relationship
+    db.commit()
+    return {"success": True}
+
+
+# --------------------------------------------------------------------------- #
+# Mission recap-source documents (siloed, excluded from normal RAG)
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/api/automations/missions/{mission_id}/recap-documents")
+async def upload_mission_recap_document(
+    mission_id: int,
+    file: UploadFile = File(...),
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Upload a document used ONLY as a source for this mission's recaps."""
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+
+    if not any(file.filename.lower().endswith(ext) for ext in ALLOWED_EXT):
+        raise HTTPException(status_code=400, detail="Type de fichier non supporté")
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="Fichier trop volumineux")
+
+    from rag_engine import process_document_for_user
+
+    doc_id = process_document_for_user(
+        file.filename, content, user_id, db, agent_id=None, company_id=mission.company_id,
+        mission_id=mission.id, is_mission_recap_source=True,
+    )
+    return {"filename": file.filename, "document_id": doc_id, "status": "uploaded"}
+
+
+@router.get("/api/automations/missions/{mission_id}/recap-documents")
+async def list_mission_recap_documents(
+    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    docs = (
+        db.query(Document)
+        .filter(Document.mission_id == mission.id, Document.is_mission_recap_source.is_(True))
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+    return {
+        "documents": [
+            {"id": d.id, "filename": d.filename, "created_at": d.created_at.isoformat() if d.created_at else None}
+            for d in docs
+        ]
+    }
+
+
+@router.delete("/api/automations/missions/{mission_id}/recap-documents/{document_id}")
+async def delete_mission_recap_document(
+    mission_id: int, document_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    doc = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.mission_id == mission.id,
+            Document.is_mission_recap_source.is_(True),
+        )
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    db.delete(doc)
     db.commit()
     return {"success": True}
 
