@@ -396,62 +396,76 @@ def test_build_mission_recap_prompt_default_when_no_custom():
 
 
 # ---------------------------------------------------------------------------
-# Recap-document endpoint tests (require DB; auto-skip when PG unavailable)
+# Per-recap-schedule document endpoint tests (require DB; auto-skip when PG unavailable)
 # ---------------------------------------------------------------------------
 
 
-async def test_recap_document_upload_list_delete(client, db_session, member_cookies, test_mission):
-    """Upload a recap-source doc; assert it appears only in recap-documents, not documents."""
-    from unittest.mock import patch
+async def test_recap_schedule_document_upload_list_delete(client, db_session, member_cookies, test_mission):
+    """Recap-schedule docs appear in /recap-schedules/{sid}/documents, not in /documents."""
     from tests.factories import DocumentFactory
-    from database import Document
+    from database import Document, MissionRecapSchedule
 
-    # Seed a regular mission doc (is_mission_recap_source=False) so we can verify separation.
+    mid = test_mission.id
+
+    # Create a recap schedule directly via DB (no factory needed).
+    schedule = MissionRecapSchedule(
+        mission_id=mid,
+        company_id=test_mission.company_id,
+        kind="recurring",
+        weekday=1,
+        hour=9,
+        enabled=True,
+    )
+    db_session.add(schedule)
+    db_session.flush()
+    sid = schedule.id
+
+    # Seed a regular mission doc (no recap link) — should appear in /documents only.
     regular_doc = DocumentFactory.build(
         user_id=test_mission.user_id,
-        mission_id=test_mission.id,
+        mission_id=mid,
         is_mission_recap_source=False,
         filename="regular.txt",
     )
     db_session.add(regular_doc)
     db_session.flush()
 
-    # Seed a recap-source doc directly (bypass GCS) and record its id.
+    # Seed a per-schedule recap doc directly (bypass GCS).
     recap_doc = DocumentFactory.build(
         user_id=test_mission.user_id,
-        mission_id=test_mission.id,
+        mission_id=mid,
         is_mission_recap_source=True,
-        filename="recap-source.txt",
+        recap_schedule_id=sid,
+        filename="recap-schedule-source.txt",
     )
     db_session.add(recap_doc)
     db_session.flush()
     recap_doc_id = recap_doc.id
 
-    mid = test_mission.id
-
-    # GET /recap-documents must include recap_doc, NOT regular_doc.
-    resp = await client.get(f"/api/automations/missions/{mid}/recap-documents", cookies=member_cookies)
+    # GET /recap-schedules/{sid}/documents must include recap_doc, NOT regular_doc.
+    resp = await client.get(f"/api/automations/missions/{mid}/recap-schedules/{sid}/documents", cookies=member_cookies)
     assert resp.status_code == 200, resp.text
-    recap_ids = [d["id"] for d in resp.json()["documents"]]
-    assert recap_doc_id in recap_ids
-    assert regular_doc.id not in recap_ids
+    schedule_doc_ids = [d["id"] for d in resp.json()["documents"]]
+    assert recap_doc_id in schedule_doc_ids
+    assert regular_doc.id not in schedule_doc_ids
 
-    # GET /documents must include regular_doc, NOT recap_doc.
+    # GET /documents must include regular_doc, NOT recap_doc (is_mission_recap_source=True filters it).
     resp = await client.get(f"/api/automations/missions/{mid}/documents", cookies=member_cookies)
     assert resp.status_code == 200, resp.text
     doc_ids = [d["id"] for d in resp.json()["documents"]]
     assert regular_doc.id in doc_ids
     assert recap_doc_id not in doc_ids
 
-    # DELETE /recap-documents/{id} must remove the recap doc.
+    # DELETE /recap-schedules/{sid}/documents/{id} must remove the recap doc.
     resp = await client.delete(
-        f"/api/automations/missions/{mid}/recap-documents/{recap_doc_id}", cookies=member_cookies
+        f"/api/automations/missions/{mid}/recap-schedules/{sid}/documents/{recap_doc_id}",
+        cookies=member_cookies,
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["success"] is True
 
-    # After deletion, recap-documents list must be empty for this mission.
-    resp = await client.get(f"/api/automations/missions/{mid}/recap-documents", cookies=member_cookies)
+    # After deletion, the schedule's document list must no longer contain the doc.
+    resp = await client.get(f"/api/automations/missions/{mid}/recap-schedules/{sid}/documents", cookies=member_cookies)
     assert resp.status_code == 200
     remaining_ids = [d["id"] for d in resp.json()["documents"]]
     assert recap_doc_id not in remaining_ids

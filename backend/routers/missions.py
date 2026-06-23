@@ -634,21 +634,29 @@ async def delete_mission_document(
 
 
 # --------------------------------------------------------------------------- #
-# Mission recap-source documents (siloed, excluded from normal RAG)
+# Per-recap-schedule documents (scoped to a specific scheduled recap)
 # --------------------------------------------------------------------------- #
 
 
-@router.post("/api/automations/missions/{mission_id}/recap-documents")
-async def upload_mission_recap_document(
+@router.post("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents")
+async def upload_recap_schedule_document(
     mission_id: int,
+    schedule_id: int,
     file: UploadFile = File(...),
     user_id: int = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
-    """Upload a document used ONLY as a source for this mission's recaps."""
+    """Upload a document used ONLY as a source for this scheduled recap."""
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    schedule = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
 
     if not any(file.filename.lower().endswith(ext) for ext in ALLOWED_EXT):
         raise HTTPException(status_code=400, detail="Type de fichier non supporté")
@@ -667,20 +675,21 @@ async def upload_mission_recap_document(
         company_id=mission.company_id,
         mission_id=mission.id,
         is_mission_recap_source=True,
+        recap_schedule_id=schedule.id,
     )
     return {"filename": file.filename, "document_id": doc_id, "status": "uploaded"}
 
 
-@router.get("/api/automations/missions/{mission_id}/recap-documents")
-async def list_mission_recap_documents(
-    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+@router.get("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents")
+async def list_recap_schedule_documents(
+    mission_id: int, schedule_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
 ):
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
     docs = (
         db.query(Document)
-        .filter(Document.mission_id == mission.id, Document.is_mission_recap_source.is_(True))
+        .filter(Document.mission_id == mission.id, Document.recap_schedule_id == schedule_id)
         .order_by(Document.created_at.desc())
         .all()
     )
@@ -692,9 +701,13 @@ async def list_mission_recap_documents(
     }
 
 
-@router.delete("/api/automations/missions/{mission_id}/recap-documents/{document_id}")
-async def delete_mission_recap_document(
-    mission_id: int, document_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+@router.delete("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents/{document_id}")
+async def delete_recap_schedule_document(
+    mission_id: int,
+    schedule_id: int,
+    document_id: int,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
 ):
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
@@ -704,7 +717,7 @@ async def delete_mission_recap_document(
         .filter(
             Document.id == document_id,
             Document.mission_id == mission.id,
-            Document.is_mission_recap_source.is_(True),
+            Document.recap_schedule_id == schedule_id,
         )
         .first()
     )
