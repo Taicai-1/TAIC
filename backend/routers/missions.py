@@ -787,11 +787,64 @@ async def list_recaps(
     }
 
 
+def _set_recap_task(task_id: str, status: str, recap_id=None, error=None) -> None:
+    """Write recap-generation task status to Redis (best-effort, 1h TTL)."""
+    from redis_client import get_redis
+
+    r = get_redis()
+    if r is None:
+        return
+    r.setex(
+        f"recap_task:{task_id}",
+        3600,
+        json.dumps({"task_id": task_id, "status": status, "recap_id": recap_id, "error": error}),
+    )
+
+
+def _generate_recap_background(task_id: str, mission_id: int, schedule_id: int) -> None:
+    """Background worker: generate a mission recap off the request path. Owns its DB
+    session and bypasses RLS for the RAG SELECTs (same approach as the scheduler)."""
+    from sqlalchemy import text
+
+    from database import Mission, SessionLocal
+    from mission_recap import process_mission_recap
+
+    db = SessionLocal()
+    try:
+        # service_bypass is transaction-scoped; process_mission_recap runs its RAG
+        # SELECTs before its first commit, so the bypass still covers them.
+        db.execute(text("SET LOCAL app.service_bypass = 'true'"))
+        mission = db.query(Mission).filter(Mission.id == mission_id).first()
+        if not mission:
+            _set_recap_task(task_id, "failed", error="Mission introuvable")
+            return
+        result = process_mission_recap(mission, db, trigger="manual", schedule_id=schedule_id)
+        if result["status"] == "success":
+            _set_recap_task(task_id, "completed", recap_id=result.get("recap_id"))
+        else:
+            _set_recap_task(task_id, "failed", error=result.get("error") or "génération échouée")
+    except Exception as e:  # noqa: BLE001 - report any failure to the poller
+        logger.error(f"Async mission recap failed (mission {mission_id}, schedule {schedule_id}): {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        _set_recap_task(task_id, "failed", error=str(e)[:300])
+    finally:
+        db.close()
+
+
 @router.post("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/generate")
 async def generate_recap_schedule_now(
-    mission_id: int, schedule_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+    mission_id: int,
+    schedule_id: int,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
 ):
-    """Generate this scheduled recap on demand (synchronous; emails the recipients)."""
+    """Kick off recap generation. Async (background task + Redis status) when Redis is
+    available — LLM generation can take 30-60s, longer than the frontend proxy allows —
+    otherwise falls back to synchronous generation. Emails the recipients on completion."""
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
@@ -805,12 +858,46 @@ async def generate_recap_schedule_now(
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
 
+    from redis_client import get_redis
+
+    if get_redis() is not None:
+        task_id = str(uuid4())
+        _set_recap_task(task_id, "processing")
+        background_tasks.add_task(_generate_recap_background, task_id, mission.id, schedule.id)
+        return {"task_id": task_id, "status": "processing"}
+
+    # No Redis: synchronous fallback (slower; may hit the proxy timeout).
     from mission_recap import process_mission_recap
 
     result = process_mission_recap(mission, db, trigger="manual", schedule_id=schedule.id)
     if result["status"] == "error":
         raise HTTPException(status_code=502, detail="La génération du récap a échoué")
-    return {"recap_id": result["recap_id"], "content": result["content"]}
+    return {"recap_id": result["recap_id"], "content": result["content"], "status": "completed"}
+
+
+@router.get("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/generate-status/{task_id}")
+async def recap_generate_status(
+    mission_id: int,
+    schedule_id: int,
+    task_id: str,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Poll the status of an async recap generation: processing | completed | failed."""
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    # Authorizes the caller for this mission (404 if not theirs).
+    _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+
+    from redis_client import get_redis
+
+    r = get_redis()
+    if r is None:
+        raise HTTPException(status_code=404, detail="Suivi indisponible")
+    data = r.get(f"recap_task:{task_id}")
+    if not data:
+        raise HTTPException(status_code=404, detail="Tâche introuvable")
+    return json.loads(data)
 
 
 # --------------------------------------------------------------------------- #

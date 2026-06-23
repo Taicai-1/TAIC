@@ -537,6 +537,15 @@ def test_search_similar_texts_accepts_recap_schedule_id():
     assert "recap_source_only" not in params
 
 
+def test_set_recap_task_noops_without_redis(monkeypatch):
+    import redis_client
+    import routers.missions as missions_router
+
+    monkeypatch.setattr(redis_client, "get_redis", lambda: None)
+    # Must not raise when Redis is unavailable (graceful degradation).
+    missions_router._set_recap_task("task-x", "processing")
+
+
 def test_recap_schedule_create_schema_accepts_recipients():
     from schemas.missions import RecapScheduleCreate
 

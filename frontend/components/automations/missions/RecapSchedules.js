@@ -197,14 +197,38 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
     }
   };
 
-  // --- manual generation for this recap ---
+  // --- manual generation for this recap (async: kick off + poll) ---
   const [generating, setGenerating] = useState(false);
+
+  const pollGenerateStatus = async (taskId) => {
+    // LLM generation can take 30-60s; poll every 3s for up to ~3 min.
+    for (let i = 0; i < 60; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const res = await api.get(
+          `/api/automations/missions/${missionId}/recap-schedules/${schedule.id}/generate-status/${taskId}`
+        );
+        if (res.data.status === 'completed') return true;
+        if (res.data.status === 'failed') return false;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  };
+
   const generate = async () => {
     setGenerating(true);
     try {
-      await api.post(
+      const res = await api.post(
         `/api/automations/missions/${missionId}/recap-schedules/${schedule.id}/generate`
       );
+      if (res.data.task_id) {
+        const ok = await pollGenerateStatus(res.data.task_id);
+        if (!ok) throw new Error('failed');
+      }
       toast.success(t('missions.settings.recapSchedules.generated'));
       onGenerated?.();
     } catch (err) {
