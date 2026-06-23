@@ -889,6 +889,7 @@ class MissionRecapSchedule(Base):
     enabled = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     last_run_at = Column(DateTime, nullable=True)
     recap_prompt = Column(Text, nullable=True)  # this recap's own prompt
+    recipients = Column(Text, nullable=True)  # JSON array of extra recipient emails
     created_at = Column(DateTime, default=datetime.utcnow)
 
     mission = relationship("Mission")
@@ -1145,6 +1146,7 @@ def ensure_columns():
         ("documents", "is_mission_recap_source", "BOOLEAN NOT NULL DEFAULT FALSE"),
         # Mission Recaps Per-Schedule
         ("mission_recap_schedules", "recap_prompt", "TEXT"),
+        ("mission_recap_schedules", "recipients", "TEXT"),
         (
             "documents",
             "recap_schedule_id",

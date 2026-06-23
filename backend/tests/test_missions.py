@@ -535,3 +535,45 @@ def test_search_similar_texts_accepts_recap_schedule_id():
     params = inspect.signature(search_similar_texts_for_user).parameters
     assert "recap_schedule_id" in params
     assert "recap_source_only" not in params
+
+
+def test_recap_schedule_create_schema_accepts_recipients():
+    from schemas.missions import RecapScheduleCreate
+
+    s = RecapScheduleCreate(kind="recurring", weekday=0, hour=8, recipients=["a@x.co", "b@x.co"])
+    assert s.recipients == ["a@x.co", "b@x.co"]
+
+
+def test_send_recap_email_dedups_owner_and_recipients(monkeypatch):
+    """Recipients = owner + schedule.recipients, deduplicated, one send_email per address."""
+    import types
+    import email_service
+    import mission_recap
+
+    class _Query:
+        def __init__(self, user):
+            self._user = user
+
+        def filter(self, *a, **k):
+            return self
+
+        def first(self):
+            return self._user
+
+    class _DB:
+        def __init__(self, user):
+            self._user = user
+
+        def query(self, *a, **k):
+            return _Query(self._user)
+
+    user = types.SimpleNamespace(id=1, email="owner@x.co")
+    mission = types.SimpleNamespace(id=1, user_id=1, name="M", company_id=1)
+    # owner@x.co is also listed explicitly -> must be deduped.
+    schedule = types.SimpleNamespace(recipients='["owner@x.co", "a@x.co", "b@x.co"]')
+
+    sent = []
+    monkeypatch.setattr(email_service, "send_email", lambda to, subject, html: sent.append(to))
+
+    mission_recap._send_recap_email(mission, "body", _DB(user), schedule=schedule)
+    assert sent == ["owner@x.co", "a@x.co", "b@x.co"]

@@ -1,5 +1,6 @@
 """Mission weekly recap: date windows, RAG enrichment, prompt, persistence, email."""
 
+import json
 import logging
 from datetime import date, timedelta
 
@@ -214,14 +215,14 @@ def process_mission_recap(
 
         # Email is best-effort: the recap was generated and persisted as success,
         # so a send failure must not flip the run to error or leave it un-retried.
-        if trigger == "scheduled":
-            try:
-                _send_recap_email(mission, content, db)
-                recap.email_sent = True
-                db.commit()
-            except Exception as email_err:
-                logger.error(f"Mission {mission.id}: recap email failed: {email_err}")
-                db.rollback()
+        # Sent for both scheduled runs and manual "generate now".
+        try:
+            _send_recap_email(mission, content, db, schedule=schedule)
+            recap.email_sent = True
+            db.commit()
+        except Exception as email_err:
+            logger.error(f"Mission {mission.id}: recap email failed: {email_err}")
+            db.rollback()
 
         return {"status": "success", "recap_id": recap.id, "content": content}
 
@@ -249,13 +250,34 @@ def process_mission_recap(
         return {"status": "error", "error": str(e)}
 
 
-def _send_recap_email(mission, content: str, db: Session) -> None:
-    """Email the recap to the mission creator. Markdown is wrapped minimally."""
+def _send_recap_email(mission, content: str, db: Session, schedule=None) -> None:
+    """Email the recap to the mission owner plus this recap's configured recipients.
+
+    Recipients = mission owner + schedule.recipients (JSON array), deduplicated.
+    Sender is contact@taic.co (SMTP_FROM_EMAIL default).
+    """
     from database import User
     from email_service import send_email
 
+    recipients = []
     user = db.query(User).filter(User.id == mission.user_id).first()
-    if not user or not user.email:
+    if user and user.email:
+        recipients.append(user.email)
+    if schedule is not None and getattr(schedule, "recipients", None):
+        try:
+            extra = json.loads(schedule.recipients)
+            if isinstance(extra, list):
+                recipients.extend(e.strip() for e in extra if isinstance(e, str) and e.strip())
+        except (ValueError, TypeError):
+            logger.warning(f"Mission {mission.id}: could not parse recap recipients JSON")
+
+    seen = set()
+    unique = []
+    for r in recipients:
+        if r not in seen:
+            seen.add(r)
+            unique.append(r)
+    if not unique:
         logger.warning(f"Mission {mission.id}: no recipient email, skipping recap email")
         return
 
@@ -267,4 +289,5 @@ def _send_recap_email(mission, content: str, db: Session) -> None:
         f"</div>"
     )
     subject = f"Récap mission — {mission.name}"
-    send_email(user.email, subject, html)
+    for to in unique:
+        send_email(to, subject, html)

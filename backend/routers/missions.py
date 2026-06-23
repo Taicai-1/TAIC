@@ -446,6 +446,7 @@ def _schedule_detail(s: MissionRecapSchedule) -> dict:
         "enabled": s.enabled,
         "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
         "recap_prompt": s.recap_prompt,
+        "recipients": json.loads(s.recipients) if s.recipients else [],
     }
 
 
@@ -484,6 +485,7 @@ async def create_recap_schedule(
         hour=body.hour,
         enabled=body.enabled,
         recap_prompt=body.recap_prompt,
+        recipients=json.dumps(body.recipients) if body.recipients else None,
     )
     db.add(schedule)
     db.commit()
@@ -517,6 +519,7 @@ async def update_recap_schedule(
     schedule.hour = body.hour
     schedule.enabled = body.enabled
     schedule.recap_prompt = body.recap_prompt
+    schedule.recipients = json.dumps(body.recipients) if body.recipients else None
     db.commit()
     return {"success": True}
 
