@@ -387,7 +387,10 @@ def test_build_mission_recap_prompt_uses_custom_prompt():
     agent = types.SimpleNamespace(name="Bot", contexte="")
     msgs = build_mission_recap_prompt(mission, agent, [], [], custom_prompt="MY CUSTOM PROMPT")
     assert msgs[0]["role"] == "system"
-    assert msgs[0]["content"] == "MY CUSTOM PROMPT"
+    # The custom prompt is embedded, and an HTML-output instruction is appended so
+    # the recap matches the branded companion email template.
+    assert "MY CUSTOM PROMPT" in msgs[0]["content"]
+    assert "HTML" in msgs[0]["content"]
 
 
 def test_build_mission_recap_prompt_default_when_no_custom():
