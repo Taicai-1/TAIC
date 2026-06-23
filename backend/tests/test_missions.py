@@ -371,3 +371,65 @@ def test_mission_update_schema_recap_prompt_max_length():
 
     with pytest.raises(ValidationError):
         MissionUpdate(name="x", objective="y", recap_prompt="a" * 10001)
+
+
+# ---------------------------------------------------------------------------
+# Recap-document endpoint tests (require DB; auto-skip when PG unavailable)
+# ---------------------------------------------------------------------------
+
+
+async def test_recap_document_upload_list_delete(client, db_session, member_cookies, test_mission):
+    """Upload a recap-source doc; assert it appears only in recap-documents, not documents."""
+    from unittest.mock import patch
+    from tests.factories import DocumentFactory
+    from database import Document
+
+    # Seed a regular mission doc (is_mission_recap_source=False) so we can verify separation.
+    regular_doc = DocumentFactory.build(
+        user_id=test_mission.user_id,
+        mission_id=test_mission.id,
+        is_mission_recap_source=False,
+        filename="regular.txt",
+    )
+    db_session.add(regular_doc)
+    db_session.flush()
+
+    # Seed a recap-source doc directly (bypass GCS) and record its id.
+    recap_doc = DocumentFactory.build(
+        user_id=test_mission.user_id,
+        mission_id=test_mission.id,
+        is_mission_recap_source=True,
+        filename="recap-source.txt",
+    )
+    db_session.add(recap_doc)
+    db_session.flush()
+    recap_doc_id = recap_doc.id
+
+    mid = test_mission.id
+
+    # GET /recap-documents must include recap_doc, NOT regular_doc.
+    resp = await client.get(f"/api/automations/missions/{mid}/recap-documents", cookies=member_cookies)
+    assert resp.status_code == 200, resp.text
+    recap_ids = [d["id"] for d in resp.json()["documents"]]
+    assert recap_doc_id in recap_ids
+    assert regular_doc.id not in recap_ids
+
+    # GET /documents must include regular_doc, NOT recap_doc.
+    resp = await client.get(f"/api/automations/missions/{mid}/documents", cookies=member_cookies)
+    assert resp.status_code == 200, resp.text
+    doc_ids = [d["id"] for d in resp.json()["documents"]]
+    assert regular_doc.id in doc_ids
+    assert recap_doc_id not in doc_ids
+
+    # DELETE /recap-documents/{id} must remove the recap doc.
+    resp = await client.delete(
+        f"/api/automations/missions/{mid}/recap-documents/{recap_doc_id}", cookies=member_cookies
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["success"] is True
+
+    # After deletion, recap-documents list must be empty for this mission.
+    resp = await client.get(f"/api/automations/missions/{mid}/recap-documents", cookies=member_cookies)
+    assert resp.status_code == 200
+    remaining_ids = [d["id"] for d in resp.json()["documents"]]
+    assert recap_doc_id not in remaining_ids
