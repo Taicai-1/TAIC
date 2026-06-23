@@ -258,7 +258,13 @@ async def test_generate_recap_requires_companion(client, member_cookies):
         cookies=member_cookies,
     )
     mid = created.json()["mission"]["id"]
-    resp = await client.post(f"/api/automations/missions/{mid}/recaps/generate", cookies=member_cookies)
+    sched = await client.post(
+        f"/api/automations/missions/{mid}/recap-schedules",
+        json={"kind": "recurring", "weekday": 0, "hour": 8, "enabled": True},
+        cookies=member_cookies,
+    )
+    sid = sched.json()["id"]
+    resp = await client.post(f"/api/automations/missions/{mid}/recap-schedules/{sid}/generate", cookies=member_cookies)
     assert resp.status_code == 400
 
 
@@ -469,6 +475,43 @@ async def test_recap_schedule_document_upload_list_delete(client, db_session, me
     assert resp.status_code == 200
     remaining_ids = [d["id"] for d in resp.json()["documents"]]
     assert recap_doc_id not in remaining_ids
+
+
+async def test_deleting_recap_schedule_cascades_its_documents(client, db_session, member_cookies, test_mission):
+    """Deleting a recap schedule removes its documents AND their chunks, with no FK error."""
+    from tests.factories import DocumentFactory
+    from database import Document, DocumentChunk, MissionRecapSchedule
+
+    mid = test_mission.id
+    schedule = MissionRecapSchedule(
+        mission_id=mid, company_id=test_mission.company_id, kind="recurring", weekday=1, hour=9, enabled=True
+    )
+    db_session.add(schedule)
+    db_session.flush()
+    sid = schedule.id
+
+    doc = DocumentFactory.build(
+        user_id=test_mission.user_id,
+        mission_id=mid,
+        is_mission_recap_source=True,
+        recap_schedule_id=sid,
+        filename="to-cascade.txt",
+    )
+    db_session.add(doc)
+    db_session.flush()
+    # A chunk on the doc exercises the document_chunks FK path that would 500 on a raw cascade.
+    chunk = DocumentChunk(document_id=doc.id, company_id=test_mission.company_id, chunk_text="x", chunk_index=0)
+    db_session.add(chunk)
+    db_session.flush()
+    doc_id = doc.id
+
+    # Deleting the schedule must succeed (not 500) and remove the doc + its chunks.
+    resp = await client.delete(f"/api/automations/missions/{mid}/recap-schedules/{sid}", cookies=member_cookies)
+    assert resp.status_code == 200, resp.text
+
+    db_session.expire_all()
+    assert db_session.query(Document).filter(Document.id == doc_id).first() is None
+    assert db_session.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).count() == 0
 
 
 def test_recap_schedule_prompt_and_doc_schedule_link_columns_exist():

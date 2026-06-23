@@ -531,6 +531,13 @@ async def delete_recap_schedule(
     )
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    # ORM-delete this recap's documents first so their chunks cascade via the
+    # Document.chunks relationship. documents.recap_schedule_id is ON DELETE CASCADE
+    # at the DB level, but document_chunks.document_id is NOT, so relying on the raw
+    # DB cascade would raise a FK violation when a recap doc has chunks.
+    recap_docs = db.query(Document).filter(Document.recap_schedule_id == schedule.id).all()
+    for doc in recap_docs:
+        db.delete(doc)
     db.delete(schedule)
     db.commit()
     return {"success": True}
