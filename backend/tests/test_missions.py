@@ -349,3 +349,25 @@ def test_mission_recap_prompt_and_recap_source_columns_exist():
 
     assert hasattr(Mission, "recap_prompt")
     assert hasattr(Document, "is_mission_recap_source")
+
+
+def test_mission_update_schema_accepts_recap_prompt():
+    from schemas.missions import MissionUpdate
+
+    m = MissionUpdate(name="x", objective="y", recap_prompt="hello")
+    assert m.recap_prompt == "hello"
+
+
+def test_mission_update_schema_recap_prompt_defaults_none():
+    from schemas.missions import MissionUpdate
+
+    m = MissionUpdate(name="x", objective="y")
+    assert m.recap_prompt is None
+
+
+def test_mission_update_schema_recap_prompt_max_length():
+    from schemas.missions import MissionUpdate
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        MissionUpdate(name="x", objective="y", recap_prompt="a" * 10001)

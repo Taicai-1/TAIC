@@ -72,6 +72,7 @@ def _mission_detail(mission: Mission, db: Session) -> dict:
         "recap_enabled": mission.recap_enabled,
         "recap_weekday": mission.recap_weekday,
         "recap_hour": mission.recap_hour,
+        "recap_prompt": mission.recap_prompt,
         "created_at": mission.created_at.isoformat() if mission.created_at else None,
         "last_recap_at": last_recap.created_at.isoformat() if last_recap and last_recap.created_at else None,
     }
@@ -141,6 +142,7 @@ async def update_mission(
     mission.recap_enabled = body.recap_enabled
     mission.recap_weekday = body.recap_weekday
     mission.recap_hour = body.recap_hour
+    mission.recap_prompt = body.recap_prompt
     mission.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(mission)

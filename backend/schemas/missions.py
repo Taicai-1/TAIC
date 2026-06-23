@@ -32,6 +32,7 @@ class MissionUpdate(BaseModel):
     recap_enabled: bool = True
     recap_weekday: int = Field(0, ge=0, le=6)
     recap_hour: int = Field(8, ge=0, le=23)
+    recap_prompt: Optional[str] = Field(None, max_length=10000)
 
     @field_validator("name", "objective")
     @classmethod
