@@ -787,8 +787,12 @@ async def list_recaps(
     }
 
 
-def _set_recap_task(task_id: str, status: str, recap_id=None, error=None) -> None:
-    """Write recap-generation task status to Redis (best-effort, 1h TTL)."""
+def _set_recap_task(task_id: str, status: str, recap_id=None, error=None, mission_id=None) -> None:
+    """Write recap-generation task status to Redis (best-effort, 1h TTL).
+
+    mission_id is stamped so the status endpoint can verify the task belongs to the
+    mission the caller is authorized for (defense in depth on top of the opaque UUID).
+    """
     from redis_client import get_redis
 
     r = get_redis()
@@ -797,7 +801,15 @@ def _set_recap_task(task_id: str, status: str, recap_id=None, error=None) -> Non
     r.setex(
         f"recap_task:{task_id}",
         3600,
-        json.dumps({"task_id": task_id, "status": status, "recap_id": recap_id, "error": error}),
+        json.dumps(
+            {
+                "task_id": task_id,
+                "status": status,
+                "recap_id": recap_id,
+                "error": error,
+                "mission_id": mission_id,
+            }
+        ),
     )
 
 
@@ -816,20 +828,20 @@ def _generate_recap_background(task_id: str, mission_id: int, schedule_id: int) 
         db.execute(text("SET LOCAL app.service_bypass = 'true'"))
         mission = db.query(Mission).filter(Mission.id == mission_id).first()
         if not mission:
-            _set_recap_task(task_id, "failed", error="Mission introuvable")
+            _set_recap_task(task_id, "failed", error="Mission introuvable", mission_id=mission_id)
             return
         result = process_mission_recap(mission, db, trigger="manual", schedule_id=schedule_id)
         if result["status"] == "success":
-            _set_recap_task(task_id, "completed", recap_id=result.get("recap_id"))
+            _set_recap_task(task_id, "completed", recap_id=result.get("recap_id"), mission_id=mission_id)
         else:
-            _set_recap_task(task_id, "failed", error=result.get("error") or "génération échouée")
+            _set_recap_task(task_id, "failed", error=result.get("error") or "génération échouée", mission_id=mission_id)
     except Exception as e:  # noqa: BLE001 - report any failure to the poller
         logger.error(f"Async mission recap failed (mission {mission_id}, schedule {schedule_id}): {e}")
         try:
             db.rollback()
         except Exception:
             pass
-        _set_recap_task(task_id, "failed", error=str(e)[:300])
+        _set_recap_task(task_id, "failed", error=str(e)[:300], mission_id=mission_id)
     finally:
         db.close()
 
@@ -862,7 +874,7 @@ async def generate_recap_schedule_now(
 
     if get_redis() is not None:
         task_id = str(uuid4())
-        _set_recap_task(task_id, "processing")
+        _set_recap_task(task_id, "processing", mission_id=mission.id)
         background_tasks.add_task(_generate_recap_background, task_id, mission.id, schedule.id)
         return {"task_id": task_id, "status": "processing"}
 
@@ -897,7 +909,11 @@ async def recap_generate_status(
     data = r.get(f"recap_task:{task_id}")
     if not data:
         raise HTTPException(status_code=404, detail="Tâche introuvable")
-    return json.loads(data)
+    payload = json.loads(data)
+    # Defense in depth: the task must belong to the mission the caller is authorized for.
+    if payload.get("mission_id") != mission_id:
+        raise HTTPException(status_code=404, detail="Tâche introuvable")
+    return payload
 
 
 # --------------------------------------------------------------------------- #
