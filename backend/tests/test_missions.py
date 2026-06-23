@@ -342,3 +342,10 @@ async def test_recap_schedule_recurring_requires_weekday(client, member_cookies)
         cookies=member_cookies,
     )
     assert resp.status_code == 422
+
+
+def test_mission_recap_prompt_and_recap_source_columns_exist():
+    from database import Mission, Document
+
+    assert hasattr(Mission, "recap_prompt")
+    assert hasattr(Document, "is_mission_recap_source")
