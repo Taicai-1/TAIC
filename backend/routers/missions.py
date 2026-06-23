@@ -436,6 +436,7 @@ def _schedule_detail(s: MissionRecapSchedule) -> dict:
         "hour": s.hour,
         "enabled": s.enabled,
         "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
+        "recap_prompt": s.recap_prompt,
     }
 
 
@@ -473,6 +474,7 @@ async def create_recap_schedule(
         run_date=body.run_date if body.kind == "once" else None,
         hour=body.hour,
         enabled=body.enabled,
+        recap_prompt=body.recap_prompt,
     )
     db.add(schedule)
     db.commit()
@@ -505,6 +507,7 @@ async def update_recap_schedule(
     schedule.run_date = body.run_date if body.kind == "once" else None
     schedule.hour = body.hour
     schedule.enabled = body.enabled
+    schedule.recap_prompt = body.recap_prompt
     db.commit()
     return {"success": True}
 
@@ -528,6 +531,13 @@ async def delete_recap_schedule(
     )
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    # ORM-delete this recap's documents first so their chunks cascade via the
+    # Document.chunks relationship. documents.recap_schedule_id is ON DELETE CASCADE
+    # at the DB level, but document_chunks.document_id is NOT, so relying on the raw
+    # DB cascade would raise a FK violation when a recap doc has chunks.
+    recap_docs = db.query(Document).filter(Document.recap_schedule_id == schedule.id).all()
+    for doc in recap_docs:
+        db.delete(doc)
     db.delete(schedule)
     db.commit()
     return {"success": True}
@@ -631,21 +641,29 @@ async def delete_mission_document(
 
 
 # --------------------------------------------------------------------------- #
-# Mission recap-source documents (siloed, excluded from normal RAG)
+# Per-recap-schedule documents (scoped to a specific scheduled recap)
 # --------------------------------------------------------------------------- #
 
 
-@router.post("/api/automations/missions/{mission_id}/recap-documents")
-async def upload_mission_recap_document(
+@router.post("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents")
+async def upload_recap_schedule_document(
     mission_id: int,
+    schedule_id: int,
     file: UploadFile = File(...),
     user_id: int = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
-    """Upload a document used ONLY as a source for this mission's recaps."""
+    """Upload a document used ONLY as a source for this scheduled recap."""
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    schedule = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
 
     if not any(file.filename.lower().endswith(ext) for ext in ALLOWED_EXT):
         raise HTTPException(status_code=400, detail="Type de fichier non supporté")
@@ -664,20 +682,21 @@ async def upload_mission_recap_document(
         company_id=mission.company_id,
         mission_id=mission.id,
         is_mission_recap_source=True,
+        recap_schedule_id=schedule.id,
     )
     return {"filename": file.filename, "document_id": doc_id, "status": "uploaded"}
 
 
-@router.get("/api/automations/missions/{mission_id}/recap-documents")
-async def list_mission_recap_documents(
-    mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+@router.get("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents")
+async def list_recap_schedule_documents(
+    mission_id: int, schedule_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
 ):
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
     docs = (
         db.query(Document)
-        .filter(Document.mission_id == mission.id, Document.is_mission_recap_source.is_(True))
+        .filter(Document.mission_id == mission.id, Document.recap_schedule_id == schedule_id)
         .order_by(Document.created_at.desc())
         .all()
     )
@@ -689,9 +708,13 @@ async def list_mission_recap_documents(
     }
 
 
-@router.delete("/api/automations/missions/{mission_id}/recap-documents/{document_id}")
-async def delete_mission_recap_document(
-    mission_id: int, document_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+@router.delete("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents/{document_id}")
+async def delete_recap_schedule_document(
+    mission_id: int,
+    schedule_id: int,
+    document_id: int,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
 ):
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
@@ -701,7 +724,7 @@ async def delete_mission_recap_document(
         .filter(
             Document.id == document_id,
             Document.mission_id == mission.id,
-            Document.is_mission_recap_source.is_(True),
+            Document.recap_schedule_id == schedule_id,
         )
         .first()
     )
@@ -749,18 +772,27 @@ async def list_recaps(
     }
 
 
-@router.post("/api/automations/missions/{mission_id}/recaps/generate")
-async def generate_recap_now(mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)):
-    """Generate a recap on demand (synchronous, no email, no scheduler impact)."""
+@router.post("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/generate")
+async def generate_recap_schedule_now(
+    mission_id: int, schedule_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Generate this scheduled recap on demand (synchronous, no email, no scheduler impact)."""
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
     if not mission.agent_id:
         raise HTTPException(status_code=400, detail="Connectez un companion à la mission d'abord")
+    schedule = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
 
     from mission_recap import process_mission_recap
 
-    result = process_mission_recap(mission, db, trigger="manual")
+    result = process_mission_recap(mission, db, trigger="manual", schedule_id=schedule.id)
     if result["status"] == "no_data":
         raise HTTPException(status_code=400, detail="Aucun évènement à venir cette semaine")
     if result["status"] == "error":

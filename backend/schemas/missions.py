@@ -88,6 +88,7 @@ class RecapScheduleCreate(BaseModel):
     run_date: Optional[date] = None
     hour: int = Field(..., ge=0, le=23)
     enabled: bool = True
+    recap_prompt: Optional[str] = Field(None, max_length=10000)
 
     @model_validator(mode="after")
     def check_kind_fields(self):

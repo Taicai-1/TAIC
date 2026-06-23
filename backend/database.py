@@ -613,6 +613,12 @@ class Document(Base):
     is_mission_recap_source = Column(
         Boolean, nullable=False, default=False, server_default="false", index=True
     )  # document used ONLY as a source for this mission's recaps (not the mission's general docs)
+    recap_schedule_id = Column(
+        Integer,
+        ForeignKey("mission_recap_schedules.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )  # the scheduled recap this document is a source for
 
     # Relations
     owner = relationship("User", back_populates="documents")
@@ -882,6 +888,7 @@ class MissionRecapSchedule(Base):
     hour = Column(Integer, nullable=False, default=8, server_default="8")  # Europe/Paris, full hour
     enabled = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     last_run_at = Column(DateTime, nullable=True)
+    recap_prompt = Column(Text, nullable=True)  # this recap's own prompt
     created_at = Column(DateTime, default=datetime.utcnow)
 
     mission = relationship("Mission")
@@ -1136,6 +1143,13 @@ def ensure_columns():
         # Mission Recaps Revamp
         ("missions", "recap_prompt", "TEXT"),
         ("documents", "is_mission_recap_source", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        # Mission Recaps Per-Schedule
+        ("mission_recap_schedules", "recap_prompt", "TEXT"),
+        (
+            "documents",
+            "recap_schedule_id",
+            "INTEGER REFERENCES mission_recap_schedules(id) ON DELETE CASCADE",
+        ),
     ]
     try:
         with engine.connect() as conn:

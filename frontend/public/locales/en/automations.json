@@ -157,6 +157,7 @@
       "uploaded": "Document added"
     },
     "recaps": {
+      "title": "Generated recaps",
       "generate": "Generate now",
       "generating": "Generating…",
       "empty": "No recaps yet",
@@ -203,7 +204,19 @@
         "hour": "Hour",
         "enabled": "Enabled",
         "saved": "Scheduled recap saved",
-        "deleted": "Scheduled recap deleted"
+        "deleted": "Scheduled recap deleted",
+        "prompt": "This recap's prompt",
+        "promptPlaceholder": "Instructions to generate this recap…",
+        "docsTitle": "This recap's documents",
+        "docsUpload": "Add a document",
+        "docsUploading": "Uploading…",
+        "docsEmpty": "No document.",
+        "docsDeleteConfirm": "Delete this document?",
+        "docsUploaded": "Document added",
+        "generate": "Generate now",
+        "generating": "Generating…",
+        "generated": "Recap generated",
+        "noCompanion": "Connect a companion to the mission to generate."
       },
       "weekdays": {
         "0": "Monday", "1": "Tuesday", "2": "Wednesday", "3": "Thursday",
