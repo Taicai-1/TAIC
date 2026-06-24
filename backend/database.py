@@ -882,6 +882,7 @@ class MissionRecapSchedule(Base):
     id = Column(Integer, primary_key=True, index=True)
     mission_id = Column(Integer, ForeignKey("missions.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=True)  # user-facing label for this recap
     kind = Column(String(10), nullable=False)  # recurring | once
     weekday = Column(Integer, nullable=True)  # 0=Monday .. 6=Sunday (recurring only)
     run_date = Column(Date, nullable=True)  # one-shot only
@@ -1147,6 +1148,7 @@ def ensure_columns():
         # Mission Recaps Per-Schedule
         ("mission_recap_schedules", "recap_prompt", "TEXT"),
         ("mission_recap_schedules", "recipients", "TEXT"),
+        ("mission_recap_schedules", "name", "VARCHAR(255)"),
         (
             "documents",
             "recap_schedule_id",

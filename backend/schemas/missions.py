@@ -83,6 +83,7 @@ class EventUpdate(EventCreate):
 
 
 class RecapScheduleCreate(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
     kind: str = Field(..., pattern="^(recurring|once)$")
     weekday: Optional[int] = Field(None, ge=0, le=6)
     run_date: Optional[date] = None

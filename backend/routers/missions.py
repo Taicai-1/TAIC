@@ -439,6 +439,7 @@ async def delete_event(
 def _schedule_detail(s: MissionRecapSchedule) -> dict:
     return {
         "id": s.id,
+        "name": s.name,
         "kind": s.kind,
         "weekday": s.weekday,
         "run_date": s.run_date.isoformat() if s.run_date else None,
@@ -479,6 +480,7 @@ async def create_recap_schedule(
     schedule = MissionRecapSchedule(
         mission_id=mission.id,
         company_id=mission.company_id,
+        name=(body.name.strip() or None) if body.name else None,
         kind=body.kind,
         weekday=body.weekday if body.kind == "recurring" else None,
         run_date=body.run_date if body.kind == "once" else None,
@@ -513,6 +515,7 @@ async def update_recap_schedule(
     )
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    schedule.name = (body.name.strip() or None) if body.name else None
     schedule.kind = body.kind
     schedule.weekday = body.weekday if body.kind == "recurring" else None
     schedule.run_date = body.run_date if body.kind == "once" else None

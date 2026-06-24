@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'next-i18next';
 import toast from 'react-hot-toast';
-import { Plus, Trash2, Upload, FileText, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Upload, FileText, Sparkles, ChevronDown } from 'lucide-react';
 import api from '../../../lib/api';
 
 function todayIso() {
@@ -11,6 +11,8 @@ function todayIso() {
 export default function RecapSchedules({ missionId, hasCompanion, onGenerated }) {
   const { t } = useTranslation('automations');
   const [schedules, setSchedules] = useState([]);
+  // Id of the schedule that should start expanded (the one just created).
+  const [expandedId, setExpandedId] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -27,12 +29,13 @@ export default function RecapSchedules({ missionId, hasCompanion, onGenerated })
 
   const add = async () => {
     try {
-      await api.post(`/api/automations/missions/${missionId}/recap-schedules`, {
+      const res = await api.post(`/api/automations/missions/${missionId}/recap-schedules`, {
         kind: 'recurring',
         weekday: 0,
         hour: 8,
         enabled: true,
       });
+      if (res.data?.id) setExpandedId(res.data.id);
       load();
     } catch {
       toast.error(t('errors.saveFailed'));
@@ -87,6 +90,7 @@ export default function RecapSchedules({ missionId, hasCompanion, onGenerated })
               schedule={s}
               weekdays={weekdays}
               hasCompanion={hasCompanion}
+              defaultExpanded={s.id === expandedId}
               onSave={save}
               onDelete={remove}
               onGenerated={onGenerated}
@@ -99,7 +103,9 @@ export default function RecapSchedules({ missionId, hasCompanion, onGenerated })
   );
 }
 
-function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onDelete, onGenerated, t }) {
+function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, defaultExpanded, onSave, onDelete, onGenerated, t }) {
+  const [expanded, setExpanded] = useState(defaultExpanded ?? false);
+  const [name, setName] = useState(schedule.name ?? '');
   const [kind, setKind] = useState(schedule.kind);
   const [weekday, setWeekday] = useState(schedule.weekday ?? 0);
   const [runDate, setRunDate] = useState(schedule.run_date ?? todayIso());
@@ -109,6 +115,7 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
   const [recipients, setRecipients] = useState((schedule.recipients ?? []).join(', '));
 
   useEffect(() => {
+    setName(schedule.name ?? '');
     setKind(schedule.kind);
     setWeekday(schedule.weekday ?? 0);
     setRunDate(schedule.run_date ?? todayIso());
@@ -120,6 +127,7 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
 
   const commit = (overrides = {}) => {
     const next = {
+      name,
       kind,
       weekday,
       run_date: runDate,
@@ -130,6 +138,7 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
       ...overrides,
     };
     onSave(schedule.id, {
+      name: next.name.trim() || null,
       kind: next.kind,
       weekday: next.kind === 'recurring' ? parseInt(next.weekday, 10) : null,
       run_date: next.kind === 'once' ? next.run_date : null,
@@ -142,6 +151,12 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
         .filter(Boolean),
     });
   };
+
+  // Short timing label shown on the collapsed row (and as the fallback name).
+  const hourLabel = `${String(parseInt(hour, 10)).padStart(2, '0')}:00`;
+  const timingSummary =
+    kind === 'recurring' ? `${weekdays[String(weekday)]} · ${hourLabel}` : `${runDate} · ${hourLabel}`;
+  const displayName = name.trim() || timingSummary;
 
   // --- documents for this scheduled recap (sync upload) ---
   const [docs, setDocs] = useState([]);
@@ -239,9 +254,21 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
   };
 
   return (
-    <div className="px-3 py-3 bg-white border border-gray-200 rounded-card space-y-3">
-      {/* timing row */}
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="bg-white border border-gray-200 rounded-card">
+      {/* collapsed header — always visible: enable toggle, name (or timing fallback), delete */}
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="shrink-0 text-gray-400 hover:text-gray-600"
+          title={
+            expanded
+              ? t('missions.settings.recapSchedules.collapse')
+              : t('missions.settings.recapSchedules.expand')
+          }
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+        </button>
         <input
           type="checkbox"
           checked={enabled}
@@ -250,10 +277,50 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
             commit({ enabled: e.target.checked });
           }}
           title={t('missions.settings.recapSchedules.enabled')}
+          className="shrink-0"
         />
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex-1 min-w-0 flex items-center gap-2 text-left"
+        >
+          <span
+            className={`text-sm truncate ${name.trim() ? 'font-medium text-gray-800' : 'text-gray-500'}`}
+          >
+            {displayName}
+          </span>
+          {name.trim() && <span className="shrink-0 text-xs text-gray-400">{timingSummary}</span>}
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(schedule.id)}
+          className="shrink-0 p-1.5 text-gray-300 hover:text-red-500"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
 
-        <select
-          value={kind}
+      {expanded && (
+        <div className="px-3 pb-3 pt-3 space-y-3 border-t border-gray-100">
+          {/* name */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              {t('missions.settings.recapSchedules.name')}
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => commit()}
+              placeholder={t('missions.settings.recapSchedules.namePlaceholder')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-button text-sm"
+            />
+          </div>
+
+          {/* timing row */}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={kind}
           onChange={(e) => {
             const newKind = e.target.value;
             setKind(newKind);
@@ -307,15 +374,9 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
           ))}
         </select>
 
-        <button
-          onClick={() => onDelete(schedule.id)}
-          className="p-1.5 text-gray-300 hover:text-red-500 ml-auto"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
+          </div>
 
-      {/* this recap's prompt */}
+          {/* this recap's prompt */}
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">
           {t('missions.settings.recapSchedules.prompt')}
@@ -410,7 +471,9 @@ function ScheduleCard({ missionId, schedule, weekdays, hasCompanion, onSave, onD
             {t('missions.settings.recapSchedules.noCompanion')}
           </p>
         )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
