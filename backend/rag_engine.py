@@ -844,6 +844,7 @@ def search_similar_texts_for_user(
     mission_id: int = None,
     include_company_rag: bool = False,
     company_rag_folder_ids: list = None,
+    recap_schedule_id: int = None,
 ) -> List[dict]:
     """Search similar texts using pgvector cosine distance (ORM), with neighbor chunk context.
 
@@ -905,6 +906,15 @@ def search_similar_texts_for_user(
 
         if mission_id:
             query = query.filter(Document.mission_id == mission_id)
+            if recap_schedule_id is not None:
+                # Recap source = this recap's own docs + the mission's general docs
+                # (recap_schedule_id IS NULL), which apply to every recap.
+                query = query.filter(
+                    or_(
+                        Document.recap_schedule_id == recap_schedule_id,
+                        Document.recap_schedule_id.is_(None),
+                    )
+                )
         elif agent_id:
             # Agent-scoped docs; optionally union the company-shared docs
             agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))
@@ -1074,6 +1084,8 @@ def ingest_text_content(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    is_mission_recap_source: bool = False,
+    recap_schedule_id: int = None,
 ) -> int:
     """Chunk text, create Document + DocumentChunks with Mistral embeddings via pgvector. Returns document.id."""
     import numpy as np
@@ -1113,6 +1125,8 @@ def ingest_text_content(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            is_mission_recap_source=is_mission_recap_source,
+            recap_schedule_id=recap_schedule_id,
         )
         db.add(document)
         db.commit()
@@ -1174,6 +1188,8 @@ def process_document_for_user(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    is_mission_recap_source: bool = False,
+    recap_schedule_id: int = None,
 ) -> int:
     import tempfile
     import os
@@ -1239,6 +1255,8 @@ def process_document_for_user(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            is_mission_recap_source=is_mission_recap_source,
+            recap_schedule_id=recap_schedule_id,
         )
     except Exception as e:
         logger.error(f"Error processing document: {e}")

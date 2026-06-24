@@ -8,7 +8,9 @@ export default function Layout({ children, title, actions, className = '' }) {
   const router = useRouter();
   const { t } = useTranslation('common');
   const { user } = useAuth({ required: false });
-  const hasNoOrg = user && !user.company_id;
+  // Support accounts have no company of their own (they operate via the active
+  // company selector), so the "no organization" nag does not apply to them.
+  const hasNoOrg = user && !user.company_id && !user.is_support;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -16,6 +18,13 @@ export default function Layout({ children, title, actions, className = '' }) {
 
       {/* Main area */}
       <div className={`flex-1 flex flex-col min-w-0 ${className}`}>
+
+        {/* Support-mode banner */}
+        {user?.is_support && (
+          <div className="bg-red-600 text-white text-sm font-semibold px-6 py-2 text-center">
+            Mode support — {user.active_company ? `entreprise : ${user.active_company.name}` : 'aucune entreprise sélectionnée'}
+          </div>
+        )}
 
         {/* No-org warning */}
         {hasNoOrg && (

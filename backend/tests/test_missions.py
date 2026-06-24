@@ -258,7 +258,13 @@ async def test_generate_recap_requires_companion(client, member_cookies):
         cookies=member_cookies,
     )
     mid = created.json()["mission"]["id"]
-    resp = await client.post(f"/api/automations/missions/{mid}/recaps/generate", cookies=member_cookies)
+    sched = await client.post(
+        f"/api/automations/missions/{mid}/recap-schedules",
+        json={"kind": "recurring", "weekday": 0, "hour": 8, "enabled": True},
+        cookies=member_cookies,
+    )
+    sid = sched.json()["id"]
+    resp = await client.post(f"/api/automations/missions/{mid}/recap-schedules/{sid}/generate", cookies=member_cookies)
     assert resp.status_code == 400
 
 
@@ -342,3 +348,254 @@ async def test_recap_schedule_recurring_requires_weekday(client, member_cookies)
         cookies=member_cookies,
     )
     assert resp.status_code == 422
+
+
+def test_mission_recap_prompt_and_recap_source_columns_exist():
+    from database import Mission, Document
+
+    assert hasattr(Mission, "recap_prompt")
+    assert hasattr(Document, "is_mission_recap_source")
+
+
+def test_mission_update_schema_accepts_recap_prompt():
+    from schemas.missions import MissionUpdate
+
+    m = MissionUpdate(name="x", objective="y", recap_prompt="hello")
+    assert m.recap_prompt == "hello"
+
+
+def test_mission_update_schema_recap_prompt_defaults_none():
+    from schemas.missions import MissionUpdate
+
+    m = MissionUpdate(name="x", objective="y")
+    assert m.recap_prompt is None
+
+
+def test_mission_update_schema_recap_prompt_max_length():
+    from schemas.missions import MissionUpdate
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        MissionUpdate(name="x", objective="y", recap_prompt="a" * 10001)
+
+
+def test_build_mission_recap_prompt_uses_custom_prompt():
+    import types
+    from mission_recap import build_mission_recap_prompt
+
+    mission = types.SimpleNamespace(objective="Obj", id=1, user_id=1, company_id=1)
+    agent = types.SimpleNamespace(name="Bot", contexte="")
+    msgs = build_mission_recap_prompt(mission, agent, [], [], custom_prompt="MY CUSTOM PROMPT")
+    assert msgs[0]["role"] == "system"
+    # The custom prompt is embedded, and an HTML-output instruction is appended so
+    # the recap matches the branded companion email template.
+    assert "MY CUSTOM PROMPT" in msgs[0]["content"]
+    assert "HTML" in msgs[0]["content"]
+
+
+def test_build_mission_recap_prompt_default_when_no_custom():
+    import types
+    from mission_recap import build_mission_recap_prompt
+
+    mission = types.SimpleNamespace(objective="Obj", id=1, user_id=1, company_id=1)
+    agent = types.SimpleNamespace(name="Bot", contexte="")
+    msgs = build_mission_recap_prompt(mission, agent, [], [])
+    assert msgs[0]["role"] == "system"
+    assert "récap" in msgs[0]["content"].lower() or "recap" in msgs[0]["content"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Per-recap-schedule document endpoint tests (require DB; auto-skip when PG unavailable)
+# ---------------------------------------------------------------------------
+
+
+async def test_recap_schedule_document_upload_list_delete(client, db_session, member_cookies, test_mission):
+    """Recap-schedule docs appear in /recap-schedules/{sid}/documents, not in /documents."""
+    from tests.factories import DocumentFactory
+    from database import Document, MissionRecapSchedule
+
+    mid = test_mission.id
+
+    # Create a recap schedule directly via DB (no factory needed).
+    schedule = MissionRecapSchedule(
+        mission_id=mid,
+        company_id=test_mission.company_id,
+        kind="recurring",
+        weekday=1,
+        hour=9,
+        enabled=True,
+    )
+    db_session.add(schedule)
+    db_session.flush()
+    sid = schedule.id
+
+    # Seed a regular mission doc (no recap link) — should appear in /documents only.
+    regular_doc = DocumentFactory.build(
+        user_id=test_mission.user_id,
+        mission_id=mid,
+        is_mission_recap_source=False,
+        filename="regular.txt",
+    )
+    db_session.add(regular_doc)
+    db_session.flush()
+
+    # Seed a per-schedule recap doc directly (bypass GCS).
+    recap_doc = DocumentFactory.build(
+        user_id=test_mission.user_id,
+        mission_id=mid,
+        is_mission_recap_source=True,
+        recap_schedule_id=sid,
+        filename="recap-schedule-source.txt",
+    )
+    db_session.add(recap_doc)
+    db_session.flush()
+    recap_doc_id = recap_doc.id
+
+    # GET /recap-schedules/{sid}/documents must include recap_doc, NOT regular_doc.
+    resp = await client.get(f"/api/automations/missions/{mid}/recap-schedules/{sid}/documents", cookies=member_cookies)
+    assert resp.status_code == 200, resp.text
+    schedule_doc_ids = [d["id"] for d in resp.json()["documents"]]
+    assert recap_doc_id in schedule_doc_ids
+    assert regular_doc.id not in schedule_doc_ids
+
+    # GET /documents must include regular_doc, NOT recap_doc (is_mission_recap_source=True filters it).
+    resp = await client.get(f"/api/automations/missions/{mid}/documents", cookies=member_cookies)
+    assert resp.status_code == 200, resp.text
+    doc_ids = [d["id"] for d in resp.json()["documents"]]
+    assert regular_doc.id in doc_ids
+    assert recap_doc_id not in doc_ids
+
+    # DELETE /recap-schedules/{sid}/documents/{id} must remove the recap doc.
+    resp = await client.delete(
+        f"/api/automations/missions/{mid}/recap-schedules/{sid}/documents/{recap_doc_id}",
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["success"] is True
+
+    # After deletion, the schedule's document list must no longer contain the doc.
+    resp = await client.get(f"/api/automations/missions/{mid}/recap-schedules/{sid}/documents", cookies=member_cookies)
+    assert resp.status_code == 200
+    remaining_ids = [d["id"] for d in resp.json()["documents"]]
+    assert recap_doc_id not in remaining_ids
+
+
+async def test_deleting_recap_schedule_cascades_its_documents(client, db_session, member_cookies, test_mission):
+    """Deleting a recap schedule removes its documents AND their chunks, with no FK error."""
+    from tests.factories import DocumentFactory
+    from database import Document, DocumentChunk, MissionRecapSchedule
+
+    mid = test_mission.id
+    schedule = MissionRecapSchedule(
+        mission_id=mid, company_id=test_mission.company_id, kind="recurring", weekday=1, hour=9, enabled=True
+    )
+    db_session.add(schedule)
+    db_session.flush()
+    sid = schedule.id
+
+    doc = DocumentFactory.build(
+        user_id=test_mission.user_id,
+        mission_id=mid,
+        is_mission_recap_source=True,
+        recap_schedule_id=sid,
+        filename="to-cascade.txt",
+    )
+    db_session.add(doc)
+    db_session.flush()
+    # A chunk on the doc exercises the document_chunks FK path that would 500 on a raw cascade.
+    chunk = DocumentChunk(document_id=doc.id, company_id=test_mission.company_id, chunk_text="x", chunk_index=0)
+    db_session.add(chunk)
+    db_session.flush()
+    doc_id = doc.id
+
+    # Deleting the schedule must succeed (not 500) and remove the doc + its chunks.
+    resp = await client.delete(f"/api/automations/missions/{mid}/recap-schedules/{sid}", cookies=member_cookies)
+    assert resp.status_code == 200, resp.text
+
+    db_session.expire_all()
+    assert db_session.query(Document).filter(Document.id == doc_id).first() is None
+    assert db_session.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).count() == 0
+
+
+def test_recap_schedule_prompt_and_doc_schedule_link_columns_exist():
+    from database import Document, MissionRecapSchedule
+
+    assert hasattr(MissionRecapSchedule, "recap_prompt")
+    assert hasattr(Document, "recap_schedule_id")
+
+
+def test_recap_schedule_create_schema_accepts_recap_prompt():
+    from schemas.missions import RecapScheduleCreate
+
+    s = RecapScheduleCreate(kind="recurring", weekday=0, hour=8, recap_prompt="hi")
+    assert s.recap_prompt == "hi"
+
+
+def test_search_similar_texts_accepts_recap_schedule_id():
+    import inspect
+    from rag_engine import search_similar_texts_for_user
+
+    params = inspect.signature(search_similar_texts_for_user).parameters
+    assert "recap_schedule_id" in params
+    assert "recap_source_only" not in params
+
+
+def test_set_recap_task_noops_without_redis(monkeypatch):
+    import redis_client
+    import routers.missions as missions_router
+
+    monkeypatch.setattr(redis_client, "get_redis", lambda: None)
+    # Must not raise when Redis is unavailable (graceful degradation).
+    missions_router._set_recap_task("task-x", "processing")
+
+
+def test_recap_schedule_create_schema_accepts_recipients():
+    from schemas.missions import RecapScheduleCreate
+
+    s = RecapScheduleCreate(kind="recurring", weekday=0, hour=8, recipients=["a@x.co", "b@x.co"])
+    assert s.recipients == ["a@x.co", "b@x.co"]
+
+
+def test_build_mission_recap_prompt_includes_doc_context():
+    import types
+    from mission_recap import build_mission_recap_prompt
+
+    mission = types.SimpleNamespace(objective="Obj", id=1, user_id=1, company_id=1, name="M")
+    agent = types.SimpleNamespace(name="Bot", contexte="")
+    msgs = build_mission_recap_prompt(mission, agent, [], [], doc_context=["secret-reference-snippet"])
+    assert "secret-reference-snippet" in msgs[1]["content"]
+
+
+def test_send_recap_email_dedups_owner_and_recipients(monkeypatch):
+    """Recipients = owner + schedule.recipients, deduplicated, one send_email per address."""
+    import types
+    import email_service
+    import mission_recap
+
+    class _Query:
+        def __init__(self, user):
+            self._user = user
+
+        def filter(self, *a, **k):
+            return self
+
+        def first(self):
+            return self._user
+
+    class _DB:
+        def __init__(self, user):
+            self._user = user
+
+        def query(self, *a, **k):
+            return _Query(self._user)
+
+    user = types.SimpleNamespace(id=1, email="owner@x.co")
+    mission = types.SimpleNamespace(id=1, user_id=1, name="M", company_id=1)
+    # owner@x.co is also listed explicitly -> must be deduped.
+    schedule = types.SimpleNamespace(recipients='["owner@x.co", "a@x.co", "b@x.co"]')
+
+    sent = []
+    monkeypatch.setattr(email_service, "send_email", lambda to, subject, html: sent.append(to))
+
+    mission_recap._send_recap_email(mission, "body", _DB(user), schedule=schedule)
+    assert sent == ["owner@x.co", "a@x.co", "b@x.co"]

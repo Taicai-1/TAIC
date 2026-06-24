@@ -783,7 +783,14 @@ async def get_user_documents(
 
         # Build query
         uid = int(user_id)
-        if agent_id is not None:
+        from database import is_support_session
+
+        if is_support_session():
+            # Support sees ALL documents of the active company (RLS-bounded).
+            query = db.query(Document)
+            if agent_id is not None:
+                query = query.filter(Document.agent_id == agent_id)
+        elif agent_id is not None:
             # Check if user has edit access to this agent (owner or can_edit share)
             share = (
                 db.query(AgentShare)

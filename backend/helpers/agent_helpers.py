@@ -52,9 +52,13 @@ def resolve_llm_provider(agent_type: str) -> str:
 
 def _user_can_access_agent(user_id: int, agent_id: int, db: Session):
     """Return the agent if the user is owner OR has an AgentShare. Otherwise raise 403."""
+    from database import is_support_session
+
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+    if is_support_session():
+        return agent  # support acts as owner within the RLS-bounded active company
     if agent.user_id == user_id:
         return agent
     share = db.query(AgentShare).filter(AgentShare.agent_id == agent_id, AgentShare.user_id == user_id).first()
@@ -65,9 +69,13 @@ def _user_can_access_agent(user_id: int, agent_id: int, db: Session):
 
 def _user_can_edit_agent(user_id: int, agent_id: int, db: Session):
     """Return the agent if the user is owner OR has an AgentShare with can_edit=True. Otherwise raise 403."""
+    from database import is_support_session
+
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+    if is_support_session():
+        return agent  # support acts as owner within the RLS-bounded active company
     if agent.user_id == user_id:
         return agent
     share = (

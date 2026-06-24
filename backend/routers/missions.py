@@ -9,7 +9,16 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Qu
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import Agent, Document, Mission, MissionEvent, MissionRecap, MissionRecapSchedule, get_db
+from database import (
+    Agent,
+    Document,
+    DocumentChunk,
+    Mission,
+    MissionEvent,
+    MissionRecap,
+    MissionRecapSchedule,
+    get_db,
+)
 from permissions import require_role
 from schemas.missions import (
     EventCreate,
@@ -72,6 +81,7 @@ def _mission_detail(mission: Mission, db: Session) -> dict:
         "recap_enabled": mission.recap_enabled,
         "recap_weekday": mission.recap_weekday,
         "recap_hour": mission.recap_hour,
+        "recap_prompt": mission.recap_prompt,
         "created_at": mission.created_at.isoformat() if mission.created_at else None,
         "last_recap_at": last_recap.created_at.isoformat() if last_recap and last_recap.created_at else None,
     }
@@ -141,6 +151,7 @@ async def update_mission(
     mission.recap_enabled = body.recap_enabled
     mission.recap_weekday = body.recap_weekday
     mission.recap_hour = body.recap_hour
+    mission.recap_prompt = body.recap_prompt
     mission.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(mission)
@@ -434,6 +445,8 @@ def _schedule_detail(s: MissionRecapSchedule) -> dict:
         "hour": s.hour,
         "enabled": s.enabled,
         "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
+        "recap_prompt": s.recap_prompt,
+        "recipients": json.loads(s.recipients) if s.recipients else [],
     }
 
 
@@ -471,6 +484,8 @@ async def create_recap_schedule(
         run_date=body.run_date if body.kind == "once" else None,
         hour=body.hour,
         enabled=body.enabled,
+        recap_prompt=body.recap_prompt,
+        recipients=json.dumps(body.recipients) if body.recipients else None,
     )
     db.add(schedule)
     db.commit()
@@ -503,6 +518,8 @@ async def update_recap_schedule(
     schedule.run_date = body.run_date if body.kind == "once" else None
     schedule.hour = body.hour
     schedule.enabled = body.enabled
+    schedule.recap_prompt = body.recap_prompt
+    schedule.recipients = json.dumps(body.recipients) if body.recipients else None
     db.commit()
     return {"success": True}
 
@@ -526,6 +543,16 @@ async def delete_recap_schedule(
     )
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    # Delete this recap's documents (and their chunks) BEFORE the schedule. The
+    # documents.recap_schedule_id FK is ON DELETE CASCADE, but document_chunks.document_id
+    # is NOT — and there is no ORM relationship from the schedule to its documents to make
+    # SQLAlchemy order the deletes — so letting the schedule delete cascade into documents
+    # at the DB level would hit the chunk FK and raise IntegrityError. Delete explicitly,
+    # innermost first: chunks, then documents, then the schedule.
+    doc_ids = [d.id for d in db.query(Document.id).filter(Document.recap_schedule_id == schedule.id).all()]
+    if doc_ids:
+        db.query(DocumentChunk).filter(DocumentChunk.document_id.in_(doc_ids)).delete(synchronize_session=False)
+        db.query(Document).filter(Document.id.in_(doc_ids)).delete(synchronize_session=False)
     db.delete(schedule)
     db.commit()
     return {"success": True}
@@ -599,7 +626,12 @@ async def list_mission_documents(mission_id: int, user_id: int = Depends(verify_
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
-    docs = db.query(Document).filter(Document.mission_id == mission.id).order_by(Document.created_at.desc()).all()
+    docs = (
+        db.query(Document)
+        .filter(Document.mission_id == mission.id, Document.is_mission_recap_source.is_(False))
+        .order_by(Document.created_at.desc())
+        .all()
+    )
     return {
         "documents": [
             {"id": d.id, "filename": d.filename, "created_at": d.created_at.isoformat() if d.created_at else None}
@@ -619,6 +651,101 @@ async def delete_mission_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     db.delete(doc)  # chunks cascade via the relationship
+    db.commit()
+    return {"success": True}
+
+
+# --------------------------------------------------------------------------- #
+# Per-recap-schedule documents (scoped to a specific scheduled recap)
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents")
+async def upload_recap_schedule_document(
+    mission_id: int,
+    schedule_id: int,
+    file: UploadFile = File(...),
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Upload a document used ONLY as a source for this scheduled recap."""
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    schedule = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    if not any(file.filename.lower().endswith(ext) for ext in ALLOWED_EXT):
+        raise HTTPException(status_code=400, detail="Type de fichier non supporté")
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="Fichier trop volumineux")
+
+    from rag_engine import process_document_for_user
+
+    doc_id = process_document_for_user(
+        file.filename,
+        content,
+        user_id,
+        db,
+        agent_id=None,
+        company_id=mission.company_id,
+        mission_id=mission.id,
+        is_mission_recap_source=True,
+        recap_schedule_id=schedule.id,
+    )
+    return {"filename": file.filename, "document_id": doc_id, "status": "uploaded"}
+
+
+@router.get("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents")
+async def list_recap_schedule_documents(
+    mission_id: int, schedule_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    docs = (
+        db.query(Document)
+        .filter(Document.mission_id == mission.id, Document.recap_schedule_id == schedule_id)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+    return {
+        "documents": [
+            {"id": d.id, "filename": d.filename, "created_at": d.created_at.isoformat() if d.created_at else None}
+            for d in docs
+        ]
+    }
+
+
+@router.delete("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/documents/{document_id}")
+async def delete_recap_schedule_document(
+    mission_id: int,
+    schedule_id: int,
+    document_id: int,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+    doc = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.mission_id == mission.id,
+            Document.recap_schedule_id == schedule_id,
+        )
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    db.delete(doc)
     db.commit()
     return {"success": True}
 
@@ -660,23 +787,133 @@ async def list_recaps(
     }
 
 
-@router.post("/api/automations/missions/{mission_id}/recaps/generate")
-async def generate_recap_now(mission_id: int, user_id: int = Depends(verify_token), db: Session = Depends(get_db)):
-    """Generate a recap on demand (synchronous, no email, no scheduler impact)."""
+def _set_recap_task(task_id: str, status: str, recap_id=None, error=None, mission_id=None) -> None:
+    """Write recap-generation task status to Redis (best-effort, 1h TTL).
+
+    mission_id is stamped so the status endpoint can verify the task belongs to the
+    mission the caller is authorized for (defense in depth on top of the opaque UUID).
+    """
+    from redis_client import get_redis
+
+    r = get_redis()
+    if r is None:
+        return
+    r.setex(
+        f"recap_task:{task_id}",
+        3600,
+        json.dumps(
+            {
+                "task_id": task_id,
+                "status": status,
+                "recap_id": recap_id,
+                "error": error,
+                "mission_id": mission_id,
+            }
+        ),
+    )
+
+
+def _generate_recap_background(task_id: str, mission_id: int, schedule_id: int) -> None:
+    """Background worker: generate a mission recap off the request path. Owns its DB
+    session and bypasses RLS for the RAG SELECTs (same approach as the scheduler)."""
+    from sqlalchemy import text
+
+    from database import Mission, SessionLocal
+    from mission_recap import process_mission_recap
+
+    db = SessionLocal()
+    try:
+        # service_bypass is transaction-scoped; process_mission_recap runs its RAG
+        # SELECTs before its first commit, so the bypass still covers them.
+        db.execute(text("SET LOCAL app.service_bypass = 'true'"))
+        mission = db.query(Mission).filter(Mission.id == mission_id).first()
+        if not mission:
+            _set_recap_task(task_id, "failed", error="Mission introuvable", mission_id=mission_id)
+            return
+        result = process_mission_recap(mission, db, trigger="manual", schedule_id=schedule_id)
+        if result["status"] == "success":
+            _set_recap_task(task_id, "completed", recap_id=result.get("recap_id"), mission_id=mission_id)
+        else:
+            _set_recap_task(task_id, "failed", error=result.get("error") or "génération échouée", mission_id=mission_id)
+    except Exception as e:  # noqa: BLE001 - report any failure to the poller
+        logger.error(f"Async mission recap failed (mission {mission_id}, schedule {schedule_id}): {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        _set_recap_task(task_id, "failed", error=str(e)[:300], mission_id=mission_id)
+    finally:
+        db.close()
+
+
+@router.post("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/generate")
+async def generate_recap_schedule_now(
+    mission_id: int,
+    schedule_id: int,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Kick off recap generation. Async (background task + Redis status) when Redis is
+    available — LLM generation can take 30-60s, longer than the frontend proxy allows —
+    otherwise falls back to synchronous generation. Emails the recipients on completion."""
     user_id = int(user_id)
     membership = require_role(user_id, db, "member")
     mission = _get_mission_or_404(mission_id, user_id, membership.company_id, db)
     if not mission.agent_id:
         raise HTTPException(status_code=400, detail="Connectez un companion à la mission d'abord")
+    schedule = (
+        db.query(MissionRecapSchedule)
+        .filter(MissionRecapSchedule.id == schedule_id, MissionRecapSchedule.mission_id == mission.id)
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
 
+    from redis_client import get_redis
+
+    if get_redis() is not None:
+        task_id = str(uuid4())
+        _set_recap_task(task_id, "processing", mission_id=mission.id)
+        background_tasks.add_task(_generate_recap_background, task_id, mission.id, schedule.id)
+        return {"task_id": task_id, "status": "processing"}
+
+    # No Redis: synchronous fallback (slower; may hit the proxy timeout).
     from mission_recap import process_mission_recap
 
-    result = process_mission_recap(mission, db, trigger="manual")
-    if result["status"] == "no_data":
-        raise HTTPException(status_code=400, detail="Aucun évènement à venir cette semaine")
+    result = process_mission_recap(mission, db, trigger="manual", schedule_id=schedule.id)
     if result["status"] == "error":
         raise HTTPException(status_code=502, detail="La génération du récap a échoué")
-    return {"recap_id": result["recap_id"], "content": result["content"]}
+    return {"recap_id": result["recap_id"], "content": result["content"], "status": "completed"}
+
+
+@router.get("/api/automations/missions/{mission_id}/recap-schedules/{schedule_id}/generate-status/{task_id}")
+async def recap_generate_status(
+    mission_id: int,
+    schedule_id: int,
+    task_id: str,
+    user_id: int = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Poll the status of an async recap generation: processing | completed | failed."""
+    user_id = int(user_id)
+    membership = require_role(user_id, db, "member")
+    # Authorizes the caller for this mission (404 if not theirs).
+    _get_mission_or_404(mission_id, user_id, membership.company_id, db)
+
+    from redis_client import get_redis
+
+    r = get_redis()
+    if r is None:
+        raise HTTPException(status_code=404, detail="Suivi indisponible")
+    data = r.get(f"recap_task:{task_id}")
+    if not data:
+        raise HTTPException(status_code=404, detail="Tâche introuvable")
+    payload = json.loads(data)
+    # Defense in depth: the task must belong to the mission the caller is authorized for.
+    if payload.get("mission_id") != mission_id:
+        raise HTTPException(status_code=404, detail="Tâche introuvable")
+    return payload
 
 
 # --------------------------------------------------------------------------- #

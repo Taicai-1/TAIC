@@ -33,6 +33,7 @@ from database import (
     ensure_columns,
     ensure_company_rag_default_folders,
     ensure_llm_usage_table,
+    ensure_support_tables,
     ensure_pgvector,
     ensure_rls_policies,
     migration_lock,
@@ -40,6 +41,7 @@ from database import (
     migrate_existing_recaps,
     migrate_teams_to_members,
     set_current_company_id,
+    set_support_session,
 )
 
 # ---------------------------------------------------------------------------
@@ -219,6 +221,7 @@ async def request_id_middleware(request: Request, call_next):
 async def tenant_isolation_middleware(request: Request, call_next):
     """Extract company_id from JWT and set it in contextvars for RLS."""
     set_current_company_id(None)
+    set_support_session(False)
     import jwt as pyjwt
 
     try:
@@ -237,8 +240,24 @@ async def tenant_isolation_middleware(request: Request, call_next):
                 db = SessionLocal()
                 try:
                     user = db.query(User).filter(User.id == int(user_id)).first()
-                    if user and user.company_id:
-                        set_current_company_id(user.company_id)
+                    if user:
+                        effective = user.company_id
+                        support_active = False
+                        if getattr(user, "is_support", False):
+                            # Support account: the active company is the JWT claim
+                            # (only honored because is_support is re-checked here).
+                            claim = payload.get("active_company_id")
+                            if claim is not None:
+                                from database import Company
+
+                                exists = db.query(Company.id).filter(Company.id == int(claim)).first()
+                                effective = int(claim) if exists else None
+                            else:
+                                effective = None
+                            support_active = effective is not None
+                        if effective is not None:
+                            set_current_company_id(effective)
+                        set_support_session(support_active)
                 finally:
                     db.close()
     except pyjwt.PyJWTError:
@@ -250,6 +269,49 @@ async def tenant_isolation_middleware(request: Request, call_next):
         # but surface it: company_id stays None so RLS still fails closed.
         logger.warning("tenant_isolation_middleware: company_id resolution failed: %s", exc)
     response = await call_next(request)
+    return response
+
+
+@app.middleware("http")
+async def support_audit_middleware(request: Request, call_next):
+    """Audit every state-changing request made by a support account (self-contained:
+    re-derives support state from the token, not contextvars, to avoid middleware
+    ordering issues). Best-effort — never breaks the request."""
+    response = await call_next(request)
+    try:
+        if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.url.path != "/api/support/active-company":
+            import jwt as pyjwt
+
+            token = request.cookies.get("token")
+            if not token:
+                auth_header = request.headers.get("Authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header.split(" ")[1]
+            if token:
+                try:
+                    payload = pyjwt.decode(token, os.getenv("JWT_SECRET_KEY", "").strip(), algorithms=["HS256"])
+                except Exception:
+                    payload = None
+                if payload and payload.get("active_company_id") is not None and payload.get("sub"):
+                    from database import SupportAuditLog
+
+                    db = SessionLocal()
+                    try:
+                        u = db.query(User).filter(User.id == int(payload["sub"])).first()
+                        if u and getattr(u, "is_support", False):
+                            db.add(
+                                SupportAuditLog(
+                                    support_user_id=int(payload["sub"]),
+                                    target_company_id=int(payload["active_company_id"]),
+                                    method=request.method,
+                                    path=request.url.path[:300],
+                                )
+                            )
+                            db.commit()
+                    finally:
+                        db.close()
+    except Exception as exc:
+        logger.warning("support_audit_middleware failed (non-fatal): %s", exc)
     return response
 
 
@@ -378,6 +440,9 @@ async def startup_event():
             # WS2: LLM usage table + per-company cap column (intentionally NOT in TENANT_TABLES)
             ensure_llm_usage_table()
             logger.info("ensure_llm_usage_table done (%s)", _elapsed())
+            # Support account: is_support column + support_audit_logs
+            ensure_support_tables()
+            logger.info("ensure_support_tables done (%s)", _elapsed())
             # Run Alembic migrations to apply any pending schema changes
             try:
                 from alembic.config import Config as AlembicConfig
@@ -537,6 +602,7 @@ from routers.email_ingest import router as email_ingest_router  # noqa: E402
 from routers.organization import router as organization_router  # noqa: E402
 from routers.user import router as user_router  # noqa: E402
 from routers.monitoring import router as monitoring_router  # noqa: E402
+from routers.support import router as support_router  # noqa: E402
 from routers.routines import router as routines_router  # noqa: E402
 from routers.graph import router as graph_router  # noqa: E402
 from routers.recaps import router as recaps_router  # noqa: E402
@@ -565,6 +631,7 @@ app.include_router(email_ingest_router)
 app.include_router(organization_router)
 app.include_router(user_router)
 app.include_router(monitoring_router)
+app.include_router(support_router)
 app.include_router(routines_router)
 app.include_router(graph_router)
 app.include_router(recaps_router)

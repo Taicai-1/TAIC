@@ -125,7 +125,8 @@
         "documents": "Documents",
         "recaps": "Récaps",
         "chat": "Chat",
-        "settings": "Réglages"
+        "settings": "Réglages",
+        "aide": "Aide"
       }
     },
     "planning": {
@@ -156,6 +157,7 @@
       "uploaded": "Document ajouté"
     },
     "recaps": {
+      "title": "Récaps générés",
       "generate": "Générer maintenant",
       "generating": "Génération…",
       "empty": "Aucun récap pour le moment",
@@ -163,7 +165,17 @@
       "noData": "Aucun évènement à venir",
       "error": "Échec de la génération",
       "generated": "Récap généré",
-      "noCompanion": "Connectez un companion pour générer un récap."
+      "noCompanion": "Connectez un companion pour générer un récap.",
+      "promptTitle": "Prompt du récap",
+      "promptPlaceholder": "Instructions personnalisées pour générer le récap de cette mission…",
+      "promptSave": "Enregistrer le prompt",
+      "docsTitle": "Documents du récap",
+      "docsHint": "Ces documents servent uniquement de source aux récaps de cette mission.",
+      "docsUpload": "Ajouter un document",
+      "docsUploading": "Import en cours…",
+      "docsEmpty": "Aucun document de récap.",
+      "docsDeleteConfirm": "Supprimer ce document de récap ?",
+      "docsUploaded": "Document ajouté"
     },
     "chat": {
       "placeholder": "Posez une question sur la mission…",
@@ -192,7 +204,22 @@
         "hour": "Heure",
         "enabled": "Activé",
         "saved": "Récap planifié enregistré",
-        "deleted": "Récap planifié supprimé"
+        "deleted": "Récap planifié supprimé",
+        "prompt": "Prompt de ce récap",
+        "promptPlaceholder": "Instructions pour générer ce récap…",
+        "docsTitle": "Documents de ce récap",
+        "docsUpload": "Ajouter un document",
+        "docsUploading": "Import…",
+        "docsEmpty": "Aucun document.",
+        "docsDeleteConfirm": "Supprimer ce document ?",
+        "docsUploaded": "Document ajouté",
+        "generate": "Générer maintenant",
+        "generating": "Génération…",
+        "generated": "Récap généré",
+        "noCompanion": "Connectez un companion à la mission pour générer.",
+        "recipients": "Destinataires",
+        "recipientsPlaceholder": "email1@exemple.com, email2@exemple.com",
+        "recipientsHint": "Emails séparés par des virgules. Le propriétaire de la mission est toujours inclus."
       },
       "weekdays": {
         "0": "Lundi", "1": "Mardi", "2": "Mercredi", "3": "Jeudi",

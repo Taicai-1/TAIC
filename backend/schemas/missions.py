@@ -32,6 +32,7 @@ class MissionUpdate(BaseModel):
     recap_enabled: bool = True
     recap_weekday: int = Field(0, ge=0, le=6)
     recap_hour: int = Field(8, ge=0, le=23)
+    recap_prompt: Optional[str] = Field(None, max_length=10000)
 
     @field_validator("name", "objective")
     @classmethod
@@ -87,6 +88,8 @@ class RecapScheduleCreate(BaseModel):
     run_date: Optional[date] = None
     hour: int = Field(..., ge=0, le=23)
     enabled: bool = True
+    recap_prompt: Optional[str] = Field(None, max_length=10000)
+    recipients: Optional[List[str]] = Field(None, max_length=50)
 
     @model_validator(mode="after")
     def check_kind_fields(self):

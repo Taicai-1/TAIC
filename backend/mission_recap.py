@@ -1,5 +1,6 @@
 """Mission weekly recap: date windows, RAG enrichment, prompt, persistence, email."""
 
+import json
 import logging
 from datetime import date, timedelta
 
@@ -39,7 +40,7 @@ def fetch_events(mission_id: int, start: date, end: date, db: Session) -> list:
     )
 
 
-def enrich_events_with_docs(mission, events: list, db: Session) -> list:
+def enrich_events_with_docs(mission, events: list, db: Session, schedule_id: int | None = None) -> list:
     """For each upcoming event, attach top-k RAG snippets from the mission's docs.
 
     Returns a list of {event, snippets} dicts. Embeddings use the same Mistral
@@ -63,6 +64,7 @@ def enrich_events_with_docs(mission, events: list, db: Session) -> list:
                     top_k=min(RAG_TOP_K, snippet_budget),
                     company_id=mission.company_id,
                     mission_id=mission.id,
+                    recap_schedule_id=schedule_id,
                 )
                 snippets = [r["text"] for r in results]
                 snippet_budget -= len(snippets)
@@ -72,24 +74,71 @@ def enrich_events_with_docs(mission, events: list, db: Session) -> list:
     return enriched
 
 
-def build_mission_recap_prompt(mission, agent, recall_events: list, enriched_upcoming: list) -> list:
+def _fetch_recap_doc_snippets(mission, schedule, schedule_id, db: Session) -> list:
+    """Retrieve top-k snippets from this recap's documents using the recap prompt /
+    mission objective as the query. Used when there are no upcoming events so the
+    recap can still draw on its documents. Scoped to the recap's docs only."""
+    from mistral_embeddings import get_embedding_fast
+    from rag_engine import search_similar_texts_for_user
+
+    query = ((schedule.recap_prompt if schedule else None) or mission.objective or mission.name or "").strip()
+    if not query:
+        return []
+    try:
+        emb = get_embedding_fast(query)
+        results = search_similar_texts_for_user(
+            emb,
+            user_id=mission.user_id,
+            db=db,
+            top_k=RAG_TOP_K,
+            company_id=mission.company_id,
+            mission_id=mission.id,
+            recap_schedule_id=schedule_id,
+        )
+        return [r["text"] for r in results]
+    except Exception as e:
+        logger.warning(f"Mission {mission.id}: recap doc retrieval failed: {e}")
+        return []
+
+
+def build_mission_recap_prompt(
+    mission,
+    agent,
+    recall_events: list,
+    enriched_upcoming: list,
+    custom_prompt: str | None = None,
+    doc_context: list | None = None,
+) -> list:
     """Build the [system, user] message list for the recap LLM call."""
     agent_name = (agent.name if agent else None) or "Assistant"
     agent_context = (getattr(agent, "contexte", "") if agent else "") or ""
 
-    system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
+    if custom_prompt and custom_prompt.strip():
+        system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
 
 Tu es connecté à une mission dont l'objectif est :
 \"\"\"{mission.objective.strip()}\"\"\"
 
-Tu dois produire un récap hebdomadaire en Markdown, analysé À LA LUMIÈRE DE CET OBJECTIF.
+{custom_prompt.strip()}
+
+IMPORTANT: Génère UNIQUEMENT du contenu HTML, sans balises <html>, <head>, <body>.
+Utilise des <h2> pour les titres de section et des <ul>/<li> pour les listes."""
+    else:
+        system_prompt = f"""Tu es {agent_name}, un assistant IA d'entreprise. {agent_context}
+
+Tu es connecté à une mission dont l'objectif est :
+\"\"\"{mission.objective.strip()}\"\"\"
+
+Tu dois produire un récap hebdomadaire en HTML, analysé À LA LUMIÈRE DE CET OBJECTIF.
+
+IMPORTANT: Génère UNIQUEMENT le contenu HTML des sections ci-dessous, sans balises <html>, <head>, <body>.
 
 Structure attendue :
-## Rappel de la semaine écoulée
+<h2 style="color: #6366f1; margin-top: 20px;">Rappel de la semaine écoulée</h2>
 Un paragraphe bref (2-3 phrases) rappelant ce qui s'est passé. Si aucun évènement, écris "Rien à signaler la semaine dernière."
 
-## Semaine à venir
-Pour chaque évènement à venir : ce qu'il implique pour l'objectif, les priorités et points d'attention, en t'appuyant sur les extraits de documents fournis quand ils sont pertinents.
+<h2 style="color: #8b5cf6; margin-top: 20px;">Semaine à venir</h2>
+Pour chaque évènement à venir : ce qu'il implique pour l'objectif, les priorités et points d'attention, en t'appuyant sur les extraits de documents fournis quand ils sont pertinents. Utilise des <ul>/<li>.
 
 Sois concret et actionnable. N'invente pas d'évènements absents des données."""
 
@@ -119,13 +168,19 @@ Sois concret et actionnable. N'invente pas d'évènements absents des données."
     if not upcoming_text:
         upcoming_text = "(aucun évènement à venir)"
 
+    doc_text = ""
+    if doc_context:
+        doc_text = "\n\nDOCUMENTS DE RÉFÉRENCE DE CE RÉCAP :\n"
+        for s in doc_context:
+            doc_text += f"> {s[:800]}\n"
+
     user_prompt = f"""ÉVÈNEMENTS DE LA SEMAINE ÉCOULÉE :
 {_fmt_events(recall_events)}
 
 ÉVÈNEMENTS DE LA SEMAINE À VENIR (avec extraits documentaires) :
-{upcoming_text}
+{upcoming_text}{doc_text}
 
-Génère le récap Markdown maintenant."""
+Génère le récap HTML maintenant."""
 
     return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
@@ -135,7 +190,8 @@ def process_mission_recap(
 ) -> dict:
     """Full pipeline: fetch events -> RAG -> LLM -> persist MissionRecap -> email.
 
-    trigger='manual' skips the email and the scheduler anti-dup is unaffected.
+    Generates even when there is no upcoming event (drawing on the recap's prompt +
+    documents + past events). Email is sent for both scheduled and manual runs.
     Returns a result dict with status and the created recap id/content.
     """
     from database import Agent, MissionRecap
@@ -155,29 +211,33 @@ def process_mission_recap(
 
     upcoming = fetch_events(mission.id, up_start, up_end, db)
 
-    if not upcoming:
-        recap = MissionRecap(
-            mission_id=mission.id,
-            company_id=mission.company_id,
-            period_start=up_start,
-            period_end=up_end,
-            content=None,
-            status="no_data",
-            trigger=trigger,
-            schedule_id=schedule_id,
-        )
-        db.add(recap)
-        db.commit()
-        db.refresh(recap)
-        return {"status": "no_data", "recap_id": recap.id}
-
     try:
+        schedule = None
+        if schedule_id is not None:
+            from database import MissionRecapSchedule
+
+            schedule = db.query(MissionRecapSchedule).filter(MissionRecapSchedule.id == schedule_id).first()
         recall = fetch_events(mission.id, rc_start, rc_end, db)
-        # RAG enrichment (the only RLS-protected SELECTs here) must run BEFORE the
-        # first commit below: the scheduler sets `SET LOCAL app.service_bypass`,
-        # which is transaction-scoped and lost after a commit. Do not reorder.
-        enriched = enrich_events_with_docs(mission, upcoming, db)
-        prompt = build_mission_recap_prompt(mission, agent, recall, enriched)
+        # RAG (the only RLS-protected SELECTs here) must run BEFORE the first commit
+        # below: the scheduler sets `SET LOCAL app.service_bypass`, which is
+        # transaction-scoped and lost after a commit. Do not reorder.
+        # With upcoming events, doc snippets are attached per event. With no upcoming
+        # event the recap is still generated — from the prompt + this recap's documents
+        # (one objective/prompt-based query) + past events.
+        if upcoming:
+            enriched = enrich_events_with_docs(mission, upcoming, db, schedule_id=schedule_id)
+            doc_context = []
+        else:
+            enriched = []
+            doc_context = _fetch_recap_doc_snippets(mission, schedule, schedule_id, db)
+        prompt = build_mission_recap_prompt(
+            mission,
+            agent,
+            recall,
+            enriched,
+            custom_prompt=(schedule.recap_prompt if schedule else None),
+            doc_context=doc_context,
+        )
         model_id = get_model_id_for_agent(agent) if agent else "mistral:mistral-large-latest"
         content = get_chat_response(prompt, model_id=model_id)
 
@@ -197,14 +257,14 @@ def process_mission_recap(
 
         # Email is best-effort: the recap was generated and persisted as success,
         # so a send failure must not flip the run to error or leave it un-retried.
-        if trigger == "scheduled":
-            try:
-                _send_recap_email(mission, content, db)
-                recap.email_sent = True
-                db.commit()
-            except Exception as email_err:
-                logger.error(f"Mission {mission.id}: recap email failed: {email_err}")
-                db.rollback()
+        # Sent for both scheduled runs and manual "generate now".
+        try:
+            _send_recap_email(mission, content, db, schedule=schedule)
+            recap.email_sent = True
+            db.commit()
+        except Exception as email_err:
+            logger.error(f"Mission {mission.id}: recap email failed: {email_err}")
+            db.rollback()
 
         return {"status": "success", "recap_id": recap.id, "content": content}
 
@@ -232,22 +292,44 @@ def process_mission_recap(
         return {"status": "error", "error": str(e)}
 
 
-def _send_recap_email(mission, content: str, db: Session) -> None:
-    """Email the recap to the mission creator. Markdown is wrapped minimally."""
-    from database import User
-    from email_service import send_email
+def _send_recap_email(mission, content: str, db: Session, schedule=None) -> None:
+    """Email the recap to the mission owner plus this recap's configured recipients.
 
+    Recipients = mission owner + schedule.recipients (JSON array), deduplicated.
+    Sender is contact@taic.co (SMTP_FROM_EMAIL default).
+    """
+    from database import User
+    from email_service import generate_recap_html, send_email
+
+    recipients = []
     user = db.query(User).filter(User.id == mission.user_id).first()
-    if not user or not user.email:
+    if user and user.email:
+        recipients.append(user.email)
+    if schedule is not None and getattr(schedule, "recipients", None):
+        try:
+            extra = json.loads(schedule.recipients)
+            if isinstance(extra, list):
+                recipients.extend(e.strip() for e in extra if isinstance(e, str) and e.strip())
+        except (ValueError, TypeError):
+            logger.warning(f"Mission {mission.id}: could not parse recap recipients JSON")
+
+    seen = set()
+    unique = []
+    for r in recipients:
+        key = r.lower()  # case-insensitive dedup
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+    if not unique:
         logger.warning(f"Mission {mission.id}: no recipient email, skipping recap email")
         return
 
-    safe = content.replace("\n", "<br>")
-    html = (
-        f'<div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">'
-        f"<h2>Récap mission — {mission.name}</h2>"
-        f'<div style="white-space: normal; line-height: 1.6;">{safe}</div>'
-        f"</div>"
-    )
+    # Same branded template as the companion recap (gradient header + footer).
+    html = generate_recap_html(mission.name, content)
     subject = f"Récap mission — {mission.name}"
-    send_email(user.email, subject, html)
+    # Send per-recipient so one bad address (e.g. a typo) does not abort delivery to the rest.
+    for to in unique:
+        try:
+            send_email(to, subject, html)
+        except Exception as send_err:
+            logger.warning(f"Mission {mission.id}: failed to send recap to {to}: {send_err}")
