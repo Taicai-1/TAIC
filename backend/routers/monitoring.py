@@ -174,15 +174,16 @@ async def admin_llm_usage(
 ):
     """Current-month LLM token/cost usage.
 
-    Scope is tenant-respecting:
+    The admin area is reserved for the platform support account:
     - Platform operator (valid X-Scheduler-Secret header) → ALL companies.
-    - Company admin (admin JWT) → ONLY their own company (no cross-tenant cost leak).
+    - Support account (support JWT) → their active company only.
+    Ordinary company admins/owners have no access.
     """
     import os
 
     from auth import verify_token
-    from permissions import require_role, get_user_membership
-    from database import LLMUsageLog
+    from permissions import get_user_membership
+    from database import LLMUsageLog, User
 
     scheduler_secret = os.getenv("ROUTINE_SCHEDULER_SECRET", "").strip()
     is_platform = bool(scheduler_secret) and request.headers.get("X-Scheduler-Secret", "") == scheduler_secret
@@ -190,7 +191,9 @@ async def admin_llm_usage(
     company_id = None
     if not is_platform:
         user_id = verify_token(request)  # 401 if missing/invalid
-        require_role(int(user_id), db, "admin")  # 403 if not admin
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        if not user or not getattr(user, "is_support", False):
+            raise HTTPException(status_code=403, detail="Support access required")
         membership = get_user_membership(int(user_id), db)
         if not membership:
             raise HTTPException(status_code=403, detail="Not part of an organization")

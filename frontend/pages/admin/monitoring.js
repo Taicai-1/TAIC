@@ -145,11 +145,16 @@ export default function AdminMonitoring() {
       router.push('/login');
       return;
     }
-    if (authenticated) {
+    // Admin area is reserved for the platform support account.
+    if (authenticated && user && !user.is_support) {
+      router.push('/agents');
+      return;
+    }
+    if (authenticated && user?.is_support) {
       setLoading(true);
       Promise.all([loadLatest(), loadHistory()]).finally(() => setLoading(false));
     }
-  }, [authLoading, authenticated, loadLatest, loadHistory, router]);
+  }, [authLoading, authenticated, user, loadLatest, loadHistory, router]);
 
   const handleRunAll = async () => {
     setRunning(true);

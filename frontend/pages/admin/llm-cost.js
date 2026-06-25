@@ -6,7 +6,7 @@ import api from '../../lib/api';
 import Layout from '../../components/Layout';
 
 export default function AdminLlmCost() {
-  const { loading: authLoading, authenticated } = useAuth();
+  const { user, loading: authLoading, authenticated } = useAuth();
   const router = useRouter();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -20,7 +20,7 @@ export default function AdminLlmCost() {
       setData(res.data);
     } catch (err) {
       if (err?.response?.status === 403) {
-        setError('Accès réservé aux administrateurs.');
+        setError('Accès réservé au compte support.');
       } else {
         setError('Impossible de charger la consommation LLM.');
       }
@@ -34,10 +34,27 @@ export default function AdminLlmCost() {
       router.push('/login');
       return;
     }
-    if (authenticated) load();
-  }, [authLoading, authenticated, load, router]);
+    // Admin area is reserved for the platform support account.
+    if (authenticated && user && !user.is_support) {
+      router.push('/agents');
+      return;
+    }
+    if (authenticated && user?.is_support) load();
+  }, [authLoading, authenticated, user, load, router]);
 
   const fmtUsd = (n) => `$${Number(n ?? 0).toFixed(4)}`;
+
+  // Don't render the admin shell until we know the user is the support account
+  // (avoids flashing the admin page chrome before the redirect fires).
+  if (authLoading || !authenticated || !user?.is_support) {
+    return (
+      <Layout>
+        <div className="max-w-5xl mx-auto px-4 py-8">
+          <p className="text-gray-500">Chargement…</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
