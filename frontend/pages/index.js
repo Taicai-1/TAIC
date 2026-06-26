@@ -1367,7 +1367,7 @@ export default function CompanionSettings() {
                     >
                       <option value="">{t('agents:folders.noFolder', 'Sans dossier')}</option>
                       {agentFolders.map(f => (
-                        <option key={f.id} value={f.id}>{f.name}</option>
+                        <option key={f.id} value={f.id}>{f.name}{f.is_active ? '' : ' (inactif)'}</option>
                       ))}
                     </select>
                   </div>

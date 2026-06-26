@@ -261,7 +261,7 @@ export default function SourcesPage() {
             >
               <option value="">{t("sources:folders.uncategorized", "Sans dossier")}</option>
               {folders.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
+                <option key={f.id} value={f.id}>{f.name}{f.is_active ? '' : ' (inactif)'}</option>
               ))}
             </select>
             <button
@@ -427,7 +427,7 @@ export default function SourcesPage() {
                         >
                           <option value="">{t("sources:folders.uncategorized", "Sans dossier")}</option>
                           {folders.map((f) => (
-                            <option key={f.id} value={f.id}>{f.name}</option>
+                            <option key={f.id} value={f.id}>{f.name}{f.is_active ? '' : ' (inactif)'}</option>
                           ))}
                         </select>
                       )}
