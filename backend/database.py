@@ -583,6 +583,18 @@ class CompanyFolder(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class AgentFolder(Base):
+    __tablename__ = "agent_folders"
+    __table_args__ = (UniqueConstraint("agent_id", "name", name="uq_agent_folder_name"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
+    name = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, server_default="true")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -610,6 +622,9 @@ class Document(Base):
     folder_id = Column(
         Integer, ForeignKey("company_folders.id", ondelete="SET NULL"), nullable=True, index=True
     )  # Company RAG folder (set only when is_company_rag=True; required at the app level for those)
+    agent_folder_id = Column(
+        Integer, ForeignKey("agent_folders.id", ondelete="SET NULL"), nullable=True, index=True
+    )  # Companion RAG folder (set only on agent docs; NULL = "no folder")
     is_mission_recap_source = Column(
         Boolean, nullable=False, default=False, server_default="false", index=True
     )  # document used ONLY as a source for this mission's recaps (not the mission's general docs)
@@ -1142,6 +1157,7 @@ def ensure_columns():
         # Company RAG folders
         ("documents", "folder_id", "INTEGER REFERENCES company_folders(id) ON DELETE SET NULL"),
         ("agents", "company_rag_folder_ids", "TEXT"),
+        ("documents", "agent_folder_id", "INTEGER REFERENCES agent_folders(id) ON DELETE SET NULL"),
         # Mission Recaps Revamp
         ("missions", "recap_prompt", "TEXT"),
         ("documents", "is_mission_recap_source", "BOOLEAN NOT NULL DEFAULT FALSE"),
@@ -1285,6 +1301,7 @@ TENANT_TABLES = [
     "drive_links",
     "agent_templates",
     "company_folders",
+    "agent_folders",
     "action_executions",
 ]
 
