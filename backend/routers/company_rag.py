@@ -246,6 +246,7 @@ async def list_company_folders(
                 {
                     "id": f.id,
                     "name": f.name,
+                    "parent_id": f.parent_id,
                     "created_at": f.created_at.isoformat() if f.created_at else None,
                     "document_count": int(counts.get(f.id, 0)),
                 }
@@ -273,17 +274,26 @@ async def create_company_folder(
             raise HTTPException(status_code=400, detail="Folder name is required")
         if len(name) > MAX_FOLDER_NAME_LENGTH:
             raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
-        # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
-        exists = (
-            db.query(CompanyFolder).filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name).first()
+        parent_id = payload.get("parent_id")
+        if parent_id is not None:
+            try:
+                parent_id = int(parent_id)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="parent_id must be an integer or null")
+            _folder_or_404(parent_id, company_id, db)  # parent must belong to this company
+        sibling_q = db.query(CompanyFolder).filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name)
+        sibling_q = (
+            sibling_q.filter(CompanyFolder.parent_id.is_(None))
+            if parent_id is None
+            else sibling_q.filter(CompanyFolder.parent_id == parent_id)
         )
-        if exists:
-            raise HTTPException(status_code=409, detail="A folder with this name already exists")
-        folder = CompanyFolder(company_id=company_id, name=name)
+        if sibling_q.first():
+            raise HTTPException(status_code=409, detail="A folder with this name already exists here")
+        folder = CompanyFolder(company_id=company_id, name=name, parent_id=parent_id)
         db.add(folder)
         db.commit()
         db.refresh(folder)
-        return {"id": folder.id, "name": folder.name, "document_count": 0}
+        return {"id": folder.id, "name": folder.name, "parent_id": folder.parent_id, "document_count": 0}
     except HTTPException:
         raise
     except Exception as e:
@@ -309,17 +319,16 @@ async def rename_company_folder(
         if len(name) > MAX_FOLDER_NAME_LENGTH:
             raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
         # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
-        collision = (
-            db.query(CompanyFolder)
-            .filter(
-                CompanyFolder.company_id == company_id,
-                CompanyFolder.name == name,
-                CompanyFolder.id != folder_id,
-            )
-            .first()
+        sibling_q = db.query(CompanyFolder).filter(
+            CompanyFolder.company_id == company_id, CompanyFolder.name == name, CompanyFolder.id != folder_id
         )
-        if collision:
-            raise HTTPException(status_code=409, detail="A folder with this name already exists")
+        sibling_q = (
+            sibling_q.filter(CompanyFolder.parent_id.is_(None))
+            if folder.parent_id is None
+            else sibling_q.filter(CompanyFolder.parent_id == folder.parent_id)
+        )
+        if sibling_q.first():
+            raise HTTPException(status_code=409, detail="A folder with this name already exists here")
         folder.name = name
         db.commit()
         return {"id": folder.id, "name": folder.name}
@@ -346,7 +355,8 @@ async def delete_company_folder(
             .filter(Document.folder_id == folder_id, Document.company_id == company_id)
             .scalar()
         )
-        if doc_count:
+        child_count = db.query(func.count(CompanyFolder.id)).filter(CompanyFolder.parent_id == folder_id).scalar()
+        if doc_count or child_count:
             raise HTTPException(status_code=409, detail="Folder is not empty")
         db.delete(folder)
         db.commit()
