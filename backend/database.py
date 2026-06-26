@@ -1238,7 +1238,10 @@ def ensure_folder_hierarchy_constraints():
 
     create_all / ensure_columns do not alter existing constraints, so on an existing DB the old
     company-wide / agent-wide unique constraints would block same-named subfolders under different
-    parents. Drop the old constraints and add the parent-aware ones. Safe on every startup.
+    parents. Drop the old constraints and add the parent-aware ones. A multi-column UNIQUE cannot
+    enforce/dedup top-level folders (parent_id IS NULL) because Postgres treats NULLs as distinct,
+    so we ALSO add a partial unique index for the (tenant, name) WHERE parent_id IS NULL case.
+    Safe on every startup; each statement runs in its own transaction.
     """
     statements = [
         "ALTER TABLE company_folders DROP CONSTRAINT IF EXISTS uq_company_folder_name",
@@ -1250,6 +1253,8 @@ def ensure_folder_hierarchy_constraints():
             END IF;
         END $$;
         """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_company_folder_root_name "
+        "ON company_folders (company_id, name) WHERE parent_id IS NULL",
         "ALTER TABLE agent_folders DROP CONSTRAINT IF EXISTS uq_agent_folder_name",
         """
         DO $$ BEGIN
@@ -1259,12 +1264,16 @@ def ensure_folder_hierarchy_constraints():
             END IF;
         END $$;
         """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_folder_root_name "
+        "ON agent_folders (agent_id, name) WHERE parent_id IS NULL",
     ]
-    with engine.begin() as conn:
+    with engine.connect() as conn:
         for stmt in statements:
             try:
                 conn.execute(text(stmt))
+                conn.commit()
             except Exception as e:
+                conn.rollback()
                 logger.warning(f"ensure_folder_hierarchy_constraints: statement skipped: {e}")
 
 
@@ -1293,7 +1302,10 @@ def ensure_company_rag_default_folders():
                 db.execute(
                     pg_insert(CompanyFolder)
                     .values(company_id=cid, name="Général")
-                    .on_conflict_do_nothing(index_elements=["company_id", "parent_id", "name"])
+                    .on_conflict_do_nothing(
+                        index_elements=["company_id", "name"],
+                        index_where=CompanyFolder.parent_id.is_(None),
+                    )
                 )
                 db.flush()
                 folder = (
