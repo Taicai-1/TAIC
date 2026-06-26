@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from database import (
     Agent,
     AgentAction,
+    AgentFolder,
     AgentShare,
     Conversation,
     Document,
@@ -176,6 +177,10 @@ def _delete_agent_and_related_data(agent: Agent, owner_user_id: int, db: Session
 
     # Delete drive links
     db.query(DriveLink).filter(DriveLink.agent_id == agent_id).delete()
+    db.flush()
+
+    # Delete agent folders (companion RAG folders)
+    db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id).delete()
     db.flush()
 
     db.delete(agent)

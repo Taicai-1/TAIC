@@ -588,7 +588,7 @@ class AgentFolder(Base):
     __table_args__ = (UniqueConstraint("agent_id", "name", name="uq_agent_folder_name"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
     name = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False, server_default="true")
@@ -1157,6 +1157,7 @@ def ensure_columns():
         # Company RAG folders
         ("documents", "folder_id", "INTEGER REFERENCES company_folders(id) ON DELETE SET NULL"),
         ("agents", "company_rag_folder_ids", "TEXT"),
+        # Companion RAG folders
         ("documents", "agent_folder_id", "INTEGER REFERENCES agent_folders(id) ON DELETE SET NULL"),
         # Mission Recaps Revamp
         ("missions", "recap_prompt", "TEXT"),
