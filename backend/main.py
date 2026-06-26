@@ -613,6 +613,7 @@ from routers.action_executions import router as action_executions_router  # noqa
 from routers.automations import router as automations_router  # noqa: E402
 from routers.missions import router as missions_router  # noqa: E402
 from routers.company_rag import router as company_rag_router  # noqa: E402
+from routers.agent_folders import router as agent_folders_router  # noqa: E402
 
 # Discover and register all plugins
 from plugins import discover_plugins  # noqa: E402
@@ -642,3 +643,4 @@ app.include_router(action_executions_router)
 app.include_router(automations_router)
 app.include_router(missions_router)
 app.include_router(company_rag_router)
+app.include_router(agent_folders_router)
