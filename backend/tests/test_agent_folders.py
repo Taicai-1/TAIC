@@ -421,3 +421,17 @@ async def test_sources_includes_folders_and_doc_folder_id(client, auth_cookies, 
     assert any(f["id"] == folder.id and f["is_active"] is True for f in body["folders"])
     assert all("agent_folder_id" in d for d in body["documents"])
     assert any(d["agent_folder_id"] == folder.id for d in body["documents"])
+
+
+# -- rag cache key -----------------------------------------------------------
+
+
+def test_rag_cache_key_varies_with_inactive_folders():
+    """The cache key changes when the inactive-folder signature changes."""
+    from rag_engine import _rag_cache_key
+
+    base = _rag_cache_key(1, "q", [1, 2], "conversationnel", extra="")
+    toggled = _rag_cache_key(1, "q", [1, 2], "conversationnel", extra="7")
+    assert base != toggled
+    # Same inputs => same key (stable).
+    assert base == _rag_cache_key(1, "q", [1, 2], "conversationnel", extra="")

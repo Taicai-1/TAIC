@@ -57,9 +57,9 @@ _answer_cache = {}
 _RAG_CACHE_TTL = 300  # 5 minutes
 
 
-def _rag_cache_key(user_id: int, question: str, doc_ids, agent_type: str) -> str:
+def _rag_cache_key(user_id: int, question: str, doc_ids, agent_type: str, extra: str = "") -> str:
     q_hash = hashlib.md5(question.encode()).hexdigest()[:12]
-    d_hash = hashlib.md5(str(doc_ids).encode()).hexdigest()[:12]
+    d_hash = hashlib.md5((str(doc_ids) + "|" + extra).encode()).hexdigest()[:12]
     return f"rag_cache:{user_id}:{q_hash}:{d_hash}:{agent_type}"
 
 
@@ -802,7 +802,10 @@ def get_answer_stream(
         # --- Check RAG cache ---
         doc_ids_for_cache = selected_doc_ids or ([d.id for d in user_docs] if user_docs else [])
         agent_type_str = getattr(agent, "type", "conversationnel") if agent else "conversationnel"
-        cache_key = _rag_cache_key(user_id, question, doc_ids_for_cache, agent_type_str)
+        inactive_sig = ""
+        if agent is not None and getattr(agent, "id", None):
+            inactive_sig = ",".join(str(i) for i in sorted(_inactive_agent_folder_ids(agent.id, db)))
+        cache_key = _rag_cache_key(user_id, question, doc_ids_for_cache, agent_type_str, extra=inactive_sig)
         cached = _get_rag_cache(cache_key)
         if cached is not None:
             logger.info("Stream: returning cached answer")
