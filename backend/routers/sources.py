@@ -337,9 +337,7 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
     drive_links = db.query(DriveLink).filter(DriveLink.agent_id == agent_id).order_by(DriveLink.created_at.desc()).all()
 
     # Companion RAG folders + per-folder document counts
-    folders = (
-        db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id).order_by(AgentFolder.name.asc()).all()
-    )
+    folders = db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id).order_by(AgentFolder.name.asc()).all()
     folder_counts = {}
     for d in docs:
         if d.agent_folder_id is not None:

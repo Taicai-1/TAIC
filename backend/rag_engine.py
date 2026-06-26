@@ -844,11 +844,7 @@ def _inactive_agent_folder_ids(agent_id: int, db: Session) -> list:
     """
     from database import AgentFolder
 
-    rows = (
-        db.query(AgentFolder.id)
-        .filter(AgentFolder.agent_id == agent_id, AgentFolder.is_active.is_(False))
-        .all()
-    )
+    rows = db.query(AgentFolder.id).filter(AgentFolder.agent_id == agent_id, AgentFolder.is_active.is_(False)).all()
     return [r[0] for r in rows]
 
 

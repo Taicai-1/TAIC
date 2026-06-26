@@ -23,6 +23,26 @@ def _make_agent_doc(db_session, user_id, agent, agent_folder_id=None):
     return doc
 
 
+def _give_company(db_session, user, agent):
+    """Assign a real company to the user + agent.
+
+    The default test_user/test_agent fixtures have company_id=None, but
+    search_similar_texts_for_user refuses to run without a resolvable tenant
+    (returns [] to avoid a cross-tenant leak), so retrieval tests must set one.
+    """
+    from tests.factories import CompanyFactory
+
+    company = CompanyFactory.build()
+    db_session.add(company)
+    db_session.flush()
+    user.company_id = company.id
+    agent.company_id = company.id
+    db_session.add(user)
+    db_session.add(agent)
+    db_session.flush()
+    return company.id
+
+
 # -- create + list -----------------------------------------------------------
 
 
@@ -188,9 +208,7 @@ async def test_cross_agent_folder_isolation(client, auth_cookies, db_session, te
         f"/api/agents/{test_agent.id}/folders/{folder_b.id}", json={"name": "X"}, cookies=auth_cookies
     )
     assert r_rename.status_code == 404
-    r_delete = await client.delete(
-        f"/api/agents/{test_agent.id}/folders/{folder_b.id}", cookies=auth_cookies
-    )
+    r_delete = await client.delete(f"/api/agents/{test_agent.id}/folders/{folder_b.id}", cookies=auth_cookies)
     assert r_delete.status_code == 404
 
 
@@ -215,9 +233,7 @@ async def test_move_into_other_agent_folder_404(client, auth_cookies, db_session
 
 @pytest.mark.asyncio
 async def test_create_folder_name_too_long_400(client, auth_cookies, test_agent):
-    resp = await client.post(
-        f"/api/agents/{test_agent.id}/folders", json={"name": "x" * 101}, cookies=auth_cookies
-    )
+    resp = await client.post(f"/api/agents/{test_agent.id}/folders", json={"name": "x" * 101}, cookies=auth_cookies)
     assert resp.status_code == 400
 
 
@@ -250,9 +266,14 @@ async def test_traceability_doc_not_counted_or_blocking(client, auth_cookies, db
 
 @pytest.mark.asyncio
 async def test_upload_into_folder_sync(
-    client, auth_cookies, db_session, test_agent, mock_redis_none, mock_gcs, mock_event_tracker, monkeypatch
+    client, auth_cookies, db_session, test_agent, mock_gcs, mock_event_tracker, monkeypatch
 ):
     """With Redis off, /upload-agent stores the doc in the given folder (sync path)."""
+    # documents.py imports get_redis by value, so patch it on that module directly.
+    import routers.documents as docs_router
+
+    monkeypatch.setattr(docs_router, "get_redis", lambda: None)
+
     folder = _make_folder(db_session, test_agent, "Cible")
 
     # Avoid real embeddings: stub ingest to create a Document directly.
@@ -287,12 +308,18 @@ async def test_upload_into_folder_sync(
 
 
 @pytest.mark.asyncio
-async def test_upload_into_folder_async(client, auth_cookies, db_session, test_agent, mock_redis, monkeypatch):
+async def test_upload_into_folder_async(client, auth_cookies, db_session, test_agent, monkeypatch):
     """With Redis on, /upload-agent schedules the background worker with agent_folder_id."""
+    import fakeredis
     from unittest.mock import MagicMock
     import routers.documents as docs_router
 
     folder = _make_folder(db_session, test_agent, "CibleAsync")
+
+    # documents.py imports get_redis by value; patch it on that module so the
+    # endpoint takes the async (Redis-available) path. fakeredis backs r.setex(...).
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(docs_router, "get_redis", lambda: fake)
 
     captured = MagicMock()
     monkeypatch.setattr(docs_router, "_process_document_background", captured)
@@ -329,6 +356,7 @@ async def test_retrieval_excludes_inactive_folder(db_session, test_user, test_ag
     from rag_engine import search_similar_texts_for_user
     from database import DocumentChunk
 
+    _give_company(db_session, test_user, test_agent)
     active = _make_folder(db_session, test_agent, "RetrActive", is_active=True)
     inactive = _make_folder(db_session, test_agent, "RetrInactive", is_active=False)
 
@@ -356,7 +384,7 @@ async def test_retrieval_excludes_inactive_folder(db_session, test_user, test_ag
     results = search_similar_texts_for_user(
         vec, test_user.id, db_session, top_k=10, agent_id=test_agent.id, company_id=test_agent.company_id
     )
-    filenames = {r["filename"] for r in results}
+    filenames = {r["document_name"] for r in results}
     assert "no_folder.txt" in filenames
     assert "active.txt" in filenames
     assert "inactive.txt" not in filenames
@@ -368,6 +396,7 @@ async def test_retrieval_no_inactive_folder_returns_all(db_session, test_user, t
     from rag_engine import search_similar_texts_for_user
     from database import DocumentChunk
 
+    _give_company(db_session, test_user, test_agent)
     active = _make_folder(db_session, test_agent, "AlwaysActive", is_active=True)
     vec = [1.0] + [0.0] * 1023
     doc = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=active.id)
@@ -386,7 +415,7 @@ async def test_retrieval_no_inactive_folder_returns_all(db_session, test_user, t
     results = search_similar_texts_for_user(
         vec, test_user.id, db_session, top_k=10, agent_id=test_agent.id, company_id=test_agent.company_id
     )
-    assert any(r["filename"] == "should_appear.txt" for r in results)
+    assert any(r["document_name"] == "should_appear.txt" for r in results)
 
 
 @pytest.mark.asyncio

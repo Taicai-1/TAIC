@@ -24,9 +24,7 @@ MAX_FOLDER_NAME_LENGTH = 100
 
 
 def _folder_or_404(folder_id: int, agent_id: int, db: Session) -> AgentFolder:
-    folder = (
-        db.query(AgentFolder).filter(AgentFolder.id == folder_id, AgentFolder.agent_id == agent_id).first()
-    )
+    folder = db.query(AgentFolder).filter(AgentFolder.id == folder_id, AgentFolder.agent_id == agent_id).first()
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
     return folder
@@ -42,9 +40,7 @@ async def list_agent_folders(agent_id: int, user_id: str = Depends(verify_token)
         .group_by(Document.agent_folder_id)
         .all()
     )
-    folders = (
-        db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id).order_by(AgentFolder.name.asc()).all()
-    )
+    folders = db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id).order_by(AgentFolder.name.asc()).all()
     return {
         "folders": [
             {
@@ -72,9 +68,7 @@ async def create_agent_folder(
     if len(name) > MAX_FOLDER_NAME_LENGTH:
         raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
     # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
-    exists = (
-        db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id, AgentFolder.name == name).first()
-    )
+    exists = db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id, AgentFolder.name == name).first()
     if exists:
         raise HTTPException(status_code=409, detail="A folder with this name already exists")
     folder = AgentFolder(agent_id=agent_id, company_id=agent.company_id, name=name, is_active=True)
