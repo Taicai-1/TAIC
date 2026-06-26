@@ -833,6 +833,22 @@ def get_answer_stream(
         yield sse_event("error", {"message": str(e), "code": "llm_error"})
 
 
+def _inactive_agent_folder_ids(agent_id: int, db: Session) -> list:
+    """Return the ids of this agent's folders whose is_active is False.
+
+    Documents in these folders are excluded from RAG retrieval; documents with
+    agent_folder_id IS NULL (no folder) are always included.
+    """
+    from database import AgentFolder
+
+    rows = (
+        db.query(AgentFolder.id)
+        .filter(AgentFolder.agent_id == agent_id, AgentFolder.is_active.is_(False))
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
 def search_similar_texts_for_user(
     query_embedding: List[float],
     user_id: int,
@@ -916,8 +932,17 @@ def search_similar_texts_for_user(
                     )
                 )
         elif agent_id:
-            # Agent-scoped docs; optionally union the company-shared docs
+            # Agent-scoped docs; exclude docs sitting in an inactive folder.
+            inactive_folder_ids = _inactive_agent_folder_ids(agent_id, db)
             agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))
+            if inactive_folder_ids:
+                agent_scope = and_(
+                    agent_scope,
+                    or_(
+                        Document.agent_folder_id.is_(None),
+                        Document.agent_folder_id.notin_(inactive_folder_ids),
+                    ),
+                )
             if include_company_rag:
                 company_scope = Document.is_company_rag.is_(True)
                 if company_rag_folder_ids:

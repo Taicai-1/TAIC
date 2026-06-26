@@ -305,3 +305,58 @@ async def test_upload_into_folder_async(client, auth_cookies, db_session, test_a
     assert captured.called
     _, kwargs = captured.call_args
     assert kwargs.get("agent_folder_id") == folder.id
+
+
+# -- retrieval filtering -----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_inactive_folder_ids_helper(db_session, test_agent):
+    """The helper returns only the agent's inactive folder ids."""
+    from rag_engine import _inactive_agent_folder_ids
+
+    active = _make_folder(db_session, test_agent, "Actif", is_active=True)
+    inactive = _make_folder(db_session, test_agent, "Inactif", is_active=False)
+
+    ids = _inactive_agent_folder_ids(test_agent.id, db_session)
+    assert inactive.id in ids
+    assert active.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_retrieval_excludes_inactive_folder(db_session, test_user, test_agent):
+    """search_similar_texts_for_user returns docs from active/no folder, not inactive."""
+    from rag_engine import search_similar_texts_for_user
+    from database import DocumentChunk
+
+    active = _make_folder(db_session, test_agent, "RetrActive", is_active=True)
+    inactive = _make_folder(db_session, test_agent, "RetrInactive", is_active=False)
+
+    # One non-zero unit vector so cosine_distance is well-defined (dim 1024).
+    vec = [1.0] + [0.0] * 1023
+
+    def _doc_with_chunk(folder_id, fname):
+        doc = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=folder_id)
+        doc.filename = fname
+        chunk = DocumentChunk(
+            document_id=doc.id,
+            company_id=test_agent.company_id,
+            chunk_text=f"chunk {fname}",
+            embedding_vec=vec,
+            chunk_index=0,
+        )
+        db_session.add(chunk)
+        db_session.flush()
+        return doc
+
+    _doc_with_chunk(None, "no_folder.txt")
+    _doc_with_chunk(active.id, "active.txt")
+    _doc_with_chunk(inactive.id, "inactive.txt")
+
+    results = search_similar_texts_for_user(
+        vec, test_user.id, db_session, top_k=10, agent_id=test_agent.id, company_id=test_agent.company_id
+    )
+    filenames = {r["filename"] for r in results}
+    assert "no_folder.txt" in filenames
+    assert "active.txt" in filenames
+    assert "inactive.txt" not in filenames
