@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, Document, DocumentChunk, AgentShare, SessionLocal, User
+from database import get_db, Document, DocumentChunk, AgentFolder, AgentShare, SessionLocal, User
 from helpers.agent_helpers import _user_can_access_agent, _user_can_edit_agent
 from helpers.tenant import _get_caller_company_id
 from helpers.rate_limiting import _check_api_rate_limit, _API_UPLOAD_LIMIT
@@ -723,8 +723,6 @@ async def upload_file_for_agent(
                 agent_folder_id = int(raw_folder_id)
             except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail="folder_id must be an integer")
-            from database import AgentFolder
-
             folder = (
                 db.query(AgentFolder)
                 .filter(AgentFolder.id == agent_folder_id, AgentFolder.agent_id == agent_id)
@@ -761,10 +759,7 @@ async def upload_file_for_agent(
                 int(user_id),
                 agent_id,
                 caller_cid,
-                None,   # mission_id
-                False,  # is_company_rag
-                None,   # folder_id (company RAG)
-                agent_folder_id,
+                agent_folder_id=agent_folder_id,
             )
             logger.info(f"Document queued for async processing: {file.filename} (task_id={task_id})")
             return {"filename": file.filename, "task_id": task_id, "agent_id": agent_id, "status": "processing"}

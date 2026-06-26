@@ -284,3 +284,24 @@ async def test_upload_into_folder_sync(
     doc = db_session.query(Document).filter(Document.agent_id == test_agent.id).order_by(Document.id.desc()).first()
     assert doc is not None
     assert doc.agent_folder_id == folder.id
+
+
+@pytest.mark.asyncio
+async def test_upload_into_folder_async(client, auth_cookies, db_session, test_agent, mock_redis, monkeypatch):
+    """With Redis on, /upload-agent schedules the background worker with agent_folder_id."""
+    from unittest.mock import MagicMock
+    import routers.documents as docs_router
+
+    folder = _make_folder(db_session, test_agent, "CibleAsync")
+
+    captured = MagicMock()
+    monkeypatch.setattr(docs_router, "_process_document_background", captured)
+
+    files = {"file": ("note.txt", b"contenu", "text/plain")}
+    data = {"agent_id": str(test_agent.id), "folder_id": str(folder.id)}
+    resp = await client.post("/upload-agent", files=files, data=data, cookies=auth_cookies)
+    assert resp.status_code == 200
+
+    assert captured.called
+    _, kwargs = captured.call_args
+    assert kwargs.get("agent_folder_id") == folder.id
