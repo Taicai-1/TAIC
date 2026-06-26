@@ -8,7 +8,8 @@
   },
   "companyRagFolders": {
     "label": "Dossiers du RAG Entreprise inclus",
-    "allHint": "Tout coché = tous les dossiers (y compris les futurs)"
+    "allHint": "Tout coché = tous les dossiers (y compris les futurs)",
+    "includesSubfolders": "(inclut les sous-dossiers)"
   },
   "types": {
     "conversationnel": {

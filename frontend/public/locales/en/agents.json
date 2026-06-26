@@ -8,7 +8,8 @@
   },
   "companyRagFolders": {
     "label": "Included Company RAG folders",
-    "allHint": "All checked = all folders (including future ones)"
+    "allHint": "All checked = all folders (including future ones)",
+    "includesSubfolders": "(includes subfolders)"
   },
   "types": {
     "conversationnel": {

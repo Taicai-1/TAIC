@@ -48,6 +48,49 @@ export default function AgentsPage() {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [companyFolders, setCompanyFolders] = useState([]);
 
+  const buildFolderTree = (flat) => {
+    const byParent = {};
+    flat.forEach((f) => {
+      const key = f.parent_id ?? 'root';
+      (byParent[key] = byParent[key] || []).push(f);
+    });
+    const make = (parentKey) =>
+      (byParent[parentKey] || [])
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((f) => ({ ...f, children: make(f.id) }));
+    return make('root');
+  };
+
+  const toggleCompanyFolder = (folderId) =>
+    setForm(prev => {
+      const base = (!prev.company_rag_folder_ids || prev.company_rag_folder_ids.length === 0)
+        ? companyFolders.map(x => x.id)
+        : [...prev.company_rag_folder_ids];
+      const next = base.includes(folderId) ? base.filter(id => id !== folderId) : [...base, folderId];
+      return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
+    });
+
+  const renderCompanyFolderCheckboxes = (nodes, depth = 0) =>
+    nodes.map(f => {
+      const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
+      const checked = all || form.company_rag_folder_ids.includes(f.id);
+      return (
+        <div key={f.id} className="space-y-1.5">
+          <div className="flex items-center" style={{ paddingLeft: depth * 16 }}>
+            <label
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
+              <input type="checkbox" checked={checked} onChange={() => toggleCompanyFolder(f.id)} />
+              {f.name}
+              {f.children.length > 0 && (
+                <span className="text-xs text-gray-400">{t('agents:companyRagFolders.includesSubfolders')}</span>
+              )}
+            </label>
+          </div>
+          {f.children.length > 0 && renderCompanyFolderCheckboxes(f.children, depth + 1)}
+        </div>
+      );
+    });
+
   useEffect(() => {
     if (!authenticated) return;
     loadAgents();
@@ -598,25 +641,8 @@ export default function AgentsPage() {
                 {form.include_company_rag && companyFolders.length > 0 && (
                   <div className="mt-3 ml-1 space-y-2">
                     <p className="text-xs text-gray-500">{t('agents:companyRagFolders.label')}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {companyFolders.map(f => {
-                        const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
-                        const checked = all || form.company_rag_folder_ids.includes(f.id);
-                        return (
-                          <label key={f.id}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
-                            <input type="checkbox" checked={checked}
-                              onChange={() => setForm(prev => {
-                                const base = (!prev.company_rag_folder_ids || prev.company_rag_folder_ids.length === 0)
-                                  ? companyFolders.map(x => x.id)
-                                  : [...prev.company_rag_folder_ids];
-                                const next = base.includes(f.id) ? base.filter(id => id !== f.id) : [...base, f.id];
-                                return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
-                              })} />
-                            {f.name}
-                          </label>
-                        );
-                      })}
+                    <div className="space-y-1.5">
+                      {renderCompanyFolderCheckboxes(buildFolderTree(companyFolders))}
                     </div>
                     <p className="text-xs text-gray-400">{t('agents:companyRagFolders.allHint')}</p>
                   </div>
