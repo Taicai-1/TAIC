@@ -47,6 +47,7 @@ async def list_agent_folders(agent_id: int, user_id: str = Depends(verify_token)
                 "id": f.id,
                 "name": f.name,
                 "is_active": f.is_active,
+                "parent_id": f.parent_id,
                 "created_at": f.created_at.isoformat() if f.created_at else None,
                 "document_count": int(counts.get(f.id, 0)),
             }
@@ -67,15 +68,33 @@ async def create_agent_folder(
         raise HTTPException(status_code=400, detail="Folder name is required")
     if len(name) > MAX_FOLDER_NAME_LENGTH:
         raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
-    # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
-    exists = db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id, AgentFolder.name == name).first()
-    if exists:
-        raise HTTPException(status_code=409, detail="A folder with this name already exists")
-    folder = AgentFolder(agent_id=agent_id, company_id=agent.company_id, name=name, is_active=True)
+    parent_id = payload.get("parent_id")
+    if parent_id is not None:
+        try:
+            parent_id = int(parent_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="parent_id must be an integer or null")
+        _folder_or_404(parent_id, agent_id, db)  # parent must belong to this agent
+    # Pre-check for a friendlier 409 (sibling uniqueness); DB constraint is the real race guard.
+    sibling_q = db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id, AgentFolder.name == name)
+    sibling_q = (
+        sibling_q.filter(AgentFolder.parent_id.is_(None))
+        if parent_id is None
+        else sibling_q.filter(AgentFolder.parent_id == parent_id)
+    )
+    if sibling_q.first():
+        raise HTTPException(status_code=409, detail="A folder with this name already exists here")
+    folder = AgentFolder(agent_id=agent_id, company_id=agent.company_id, name=name, is_active=True, parent_id=parent_id)
     db.add(folder)
     db.commit()
     db.refresh(folder)
-    return {"id": folder.id, "name": folder.name, "is_active": folder.is_active, "document_count": 0}
+    return {
+        "id": folder.id,
+        "name": folder.name,
+        "is_active": folder.is_active,
+        "parent_id": folder.parent_id,
+        "document_count": 0,
+    }
 
 
 @router.put("/api/agents/{agent_id}/folders/{folder_id}")
@@ -96,13 +115,16 @@ async def update_agent_folder(
             raise HTTPException(status_code=400, detail="Folder name is required")
         if len(name) > MAX_FOLDER_NAME_LENGTH:
             raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
-        collision = (
-            db.query(AgentFolder)
-            .filter(AgentFolder.agent_id == agent_id, AgentFolder.name == name, AgentFolder.id != folder_id)
-            .first()
+        sibling_q = db.query(AgentFolder).filter(
+            AgentFolder.agent_id == agent_id, AgentFolder.name == name, AgentFolder.id != folder_id
         )
-        if collision:
-            raise HTTPException(status_code=409, detail="A folder with this name already exists")
+        sibling_q = (
+            sibling_q.filter(AgentFolder.parent_id.is_(None))
+            if folder.parent_id is None
+            else sibling_q.filter(AgentFolder.parent_id == folder.parent_id)
+        )
+        if sibling_q.first():
+            raise HTTPException(status_code=409, detail="A folder with this name already exists here")
         folder.name = name
 
     if "is_active" in payload:
@@ -110,7 +132,7 @@ async def update_agent_folder(
 
     db.commit()
     db.refresh(folder)
-    return {"id": folder.id, "name": folder.name, "is_active": folder.is_active}
+    return {"id": folder.id, "name": folder.name, "is_active": folder.is_active, "parent_id": folder.parent_id}
 
 
 @router.delete("/api/agents/{agent_id}/folders/{folder_id}")
@@ -130,7 +152,8 @@ async def delete_agent_folder(
         )
         .scalar()
     )
-    if doc_count:
+    child_count = db.query(func.count(AgentFolder.id)).filter(AgentFolder.parent_id == folder_id).scalar()
+    if doc_count or child_count:
         raise HTTPException(status_code=409, detail="Folder is not empty")
     db.delete(folder)
     db.commit()

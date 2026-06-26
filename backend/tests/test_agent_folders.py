@@ -526,3 +526,76 @@ async def test_retrieval_excludes_inactive_parent_subtree(db_session, test_user,
         vec, test_user.id, db_session, top_k=10, agent_id=test_agent.id, company_id=test_agent.company_id
     )
     assert all(r["document_name"] != "in_child.txt" for r in results)
+
+
+# -- subfolders (companion) --------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_subfolder(client, auth_cookies, db_session, test_agent):
+    parent = _make_folder(db_session, test_agent, "Parent")
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders",
+        json={"name": "Child", "parent_id": parent.id},
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["parent_id"] == parent.id
+
+
+@pytest.mark.asyncio
+async def test_create_subfolder_bad_parent_404(client, auth_cookies, test_agent):
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders",
+        json={"name": "Child", "parent_id": 999999},
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_same_name_under_different_parents_ok(client, auth_cookies, db_session, test_agent):
+    p1 = _make_folder(db_session, test_agent, "P1")
+    p2 = _make_folder(db_session, test_agent, "P2")
+    r1 = await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "2024", "parent_id": p1.id}, cookies=auth_cookies
+    )
+    r2 = await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "2024", "parent_id": p2.id}, cookies=auth_cookies
+    )
+    assert r1.status_code == 200 and r2.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_duplicate_name_same_parent_409(client, auth_cookies, db_session, test_agent):
+    parent = _make_folder(db_session, test_agent, "Parent2")
+    await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "Dup", "parent_id": parent.id}, cookies=auth_cookies
+    )
+    r2 = await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "Dup", "parent_id": parent.id}, cookies=auth_cookies
+    )
+    assert r2.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_list_returns_parent_id(client, auth_cookies, db_session, test_agent):
+    parent = _make_folder(db_session, test_agent, "ListParent")
+    resp = await client.get(f"/api/agents/{test_agent.id}/folders", cookies=auth_cookies)
+    assert resp.status_code == 200
+    match = next(f for f in resp.json()["folders"] if f["id"] == parent.id)
+    assert "parent_id" in match and match["parent_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_delete_folder_with_subfolder_409(client, auth_cookies, db_session, test_agent):
+    parent = _make_folder(db_session, test_agent, "HasChild")
+    from tests.factories import AgentFolderFactory
+
+    child = AgentFolderFactory.build(
+        agent_id=test_agent.id, company_id=test_agent.company_id, name="C", parent_id=parent.id
+    )
+    db_session.add(child)
+    db_session.flush()
+    resp = await client.delete(f"/api/agents/{test_agent.id}/folders/{parent.id}", cookies=auth_cookies)
+    assert resp.status_code == 409
