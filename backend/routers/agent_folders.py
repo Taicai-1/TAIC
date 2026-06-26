@@ -128,7 +128,12 @@ async def delete_agent_folder(
     folder = _folder_or_404(folder_id, agent_id, db)
     doc_count = (
         db.query(func.count(Document.id))
-        .filter(Document.agent_folder_id == folder_id, Document.agent_id == agent_id)
+        .filter(
+            Document.agent_folder_id == folder_id,
+            Document.agent_id == agent_id,
+            Document.document_type == "rag",
+            Document.mission_id.is_(None),
+        )
         .scalar()
     )
     if doc_count:
@@ -159,7 +164,12 @@ async def move_agent_document(
         _folder_or_404(target_folder_id, agent_id, db)
     doc = (
         db.query(Document)
-        .filter(Document.id == document_id, Document.agent_id == agent_id)
+        .filter(
+            Document.id == document_id,
+            Document.agent_id == agent_id,
+            Document.document_type == "rag",
+            Document.mission_id.is_(None),
+        )
         .first()
     )
     if not doc:

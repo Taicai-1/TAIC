@@ -169,3 +169,77 @@ async def test_non_owner_cannot_create_folder(client, db_session, test_agent):
 
     resp = await client.post(f"/api/agents/{test_agent.id}/folders", json={"name": "Nope"}, cookies=other_cookies)
     assert resp.status_code == 403
+
+
+# -- cross-agent isolation ---------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cross_agent_folder_isolation(client, auth_cookies, db_session, test_user, test_agent):
+    """A folder owned by agent B is not reachable through agent A's path (404)."""
+    from tests.factories import AgentFactory
+
+    agent_b = AgentFactory.build(user_id=test_user.id, company_id=test_agent.company_id)
+    db_session.add(agent_b)
+    db_session.flush()
+    folder_b = _make_folder(db_session, agent_b, "B-Folder")
+
+    r_rename = await client.put(
+        f"/api/agents/{test_agent.id}/folders/{folder_b.id}", json={"name": "X"}, cookies=auth_cookies
+    )
+    assert r_rename.status_code == 404
+    r_delete = await client.delete(
+        f"/api/agents/{test_agent.id}/folders/{folder_b.id}", cookies=auth_cookies
+    )
+    assert r_delete.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_move_into_other_agent_folder_404(client, auth_cookies, db_session, test_user, test_agent):
+    """Cannot move agent A's document into agent B's folder (404)."""
+    from tests.factories import AgentFactory
+
+    agent_b = AgentFactory.build(user_id=test_user.id, company_id=test_agent.company_id)
+    db_session.add(agent_b)
+    db_session.flush()
+    folder_b = _make_folder(db_session, agent_b, "B-Folder2")
+    doc_a = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=None)
+
+    resp = await client.put(
+        f"/api/agents/{test_agent.id}/documents/{doc_a.id}/folder",
+        json={"folder_id": folder_b.id},
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_folder_name_too_long_400(client, auth_cookies, test_agent):
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "x" * 101}, cookies=auth_cookies
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_traceability_doc_not_counted_or_blocking(client, auth_cookies, db_session, test_user, test_agent):
+    """A non-rag doc in a folder is excluded from counts and does not block deletion."""
+    from tests.factories import DocumentFactory
+
+    folder = _make_folder(db_session, test_agent, "OnlyTrace")
+    trace = DocumentFactory.build(
+        user_id=test_user.id,
+        agent_id=test_agent.id,
+        company_id=test_agent.company_id,
+        agent_folder_id=folder.id,
+        document_type="traceability",
+    )
+    db_session.add(trace)
+    db_session.flush()
+
+    lst = await client.get(f"/api/agents/{test_agent.id}/folders", cookies=auth_cookies)
+    match = next(f for f in lst.json()["folders"] if f["id"] == folder.id)
+    assert match["document_count"] == 0
+
+    dele = await client.delete(f"/api/agents/{test_agent.id}/folders/{folder.id}", cookies=auth_cookies)
+    assert dele.status_code == 200
