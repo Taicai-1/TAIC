@@ -99,6 +99,31 @@ export default function Organization() {
   const [folders, setFolders] = useState([]);
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [collapsedFolders, setCollapsedFolders] = useState({}); // id -> true (collapsed)
+
+  const buildFolderTree = (flat) => {
+    const byParent = {};
+    flat.forEach((f) => {
+      const key = f.parent_id ?? 'root';
+      (byParent[key] = byParent[key] || []).push(f);
+    });
+    const make = (parentKey) =>
+      (byParent[parentKey] || [])
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((f) => ({ ...f, children: make(f.id) }));
+    return make('root');
+  };
+
+  const folderOptions = () => {
+    const out = [];
+    const walk = (nodes, prefix) =>
+      nodes.forEach((f) => {
+        out.push({ id: f.id, label: prefix + f.name });
+        walk(f.children, prefix + '— ');
+      });
+    walk(buildFolderTree(folders), '');
+    return out;
+  };
 
   useEffect(() => {
     if (!authenticated) return;
@@ -218,6 +243,19 @@ export default function Organization() {
     }
   };
 
+  const handleCreateSubfolder = async (parent) => {
+    const name = (window.prompt(t('organization:companyRag.folderNamePrompt')) || '').trim();
+    if (!name) return;
+    try {
+      const res = await api.post('/api/company-rag/folders', { name, parent_id: parent.id });
+      setCollapsedFolders(c => ({ ...c, [parent.id]: false })); // reveal the new child
+      setSelectedFolderId(res.data.id);
+      await loadFolders();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || t('organization:companyRag.folderCreateError'));
+    }
+  };
+
   const handleRenameFolder = async (folder) => {
     const name = (window.prompt(t('organization:companyRag.folderNamePrompt'), folder.name) || '').trim();
     if (!name || name === folder.name) return;
@@ -297,6 +335,44 @@ export default function Organization() {
       toast.error(e.response?.data?.detail || t('organization:companyRag.moveError'));
     }
   };
+
+  const renderFolderNodes = (nodes, depth = 0) =>
+    nodes.map(f => (
+      <div key={f.id}>
+        <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
+          {f.children.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setCollapsedFolders(c => ({ ...c, [f.id]: !c[f.id] }))}
+              className="w-4 text-gray-400 hover:text-gray-700"
+              title={collapsedFolders[f.id] ? t('organization:companyRag.expand') : t('organization:companyRag.collapse')}>
+              {collapsedFolders[f.id] ? '▸' : '▾'}
+            </button>
+          ) : (
+            <span className="w-4" />
+          )}
+          <div
+            className={`group flex items-center rounded-button border px-3 py-1.5 text-sm cursor-pointer transition-colors ${selectedFolderId === f.id ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+            onClick={() => setSelectedFolderId(f.id)}>
+            <span className="font-medium">{f.name}</span>
+            <span className="ml-2 text-xs text-gray-400">{f.document_count}</span>
+            {canManage && (
+              <span className="ml-2 hidden group-hover:inline-flex items-center gap-1">
+                <button onClick={(ev) => { ev.stopPropagation(); handleCreateSubfolder(f); }}
+                  className="text-gray-400 hover:text-gray-700" title={t('organization:companyRag.addSubfolder')}>+</button>
+                <button onClick={(ev) => { ev.stopPropagation(); handleRenameFolder(f); }}
+                  className="text-gray-400 hover:text-gray-700" title={t('organization:companyRag.folderRename')}>✎</button>
+                <button onClick={(ev) => { ev.stopPropagation(); handleDeleteFolder(f); }}
+                  className="text-red-400 hover:text-red-600" title={t('organization:companyRag.folderDelete')}>🗑</button>
+              </span>
+            )}
+          </div>
+        </div>
+        {!collapsedFolders[f.id] && f.children.length > 0 && (
+          <div className="mt-2 space-y-2">{renderFolderNodes(f.children, depth + 1)}</div>
+        )}
+      </div>
+    ));
 
   const handleCompanyDocDelete = async (docId) => {
     if (!confirm(t('organization:companyRag.deleteConfirm'))) return;
@@ -788,23 +864,8 @@ export default function Organization() {
                     </div>
                     <p className="text-gray-500 text-sm mb-6 ml-13">{t('organization:companyRag.description')}</p>
 
-                    <div className="flex flex-wrap items-center gap-2 mb-4">
-                      {folders.map(f => (
-                        <div key={f.id}
-                          className={`group flex items-center rounded-button border px-3 py-1.5 text-sm cursor-pointer transition-colors ${selectedFolderId === f.id ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                          onClick={() => setSelectedFolderId(f.id)}>
-                          <span className="font-medium">{f.name}</span>
-                          <span className="ml-2 text-xs text-gray-400">{f.document_count}</span>
-                          {canManage && (
-                            <span className="ml-2 hidden group-hover:inline-flex items-center gap-1">
-                              <button onClick={(ev) => { ev.stopPropagation(); handleRenameFolder(f); }}
-                                className="text-gray-400 hover:text-gray-700" title={t('organization:companyRag.folderRename')}>✎</button>
-                              <button onClick={(ev) => { ev.stopPropagation(); handleDeleteFolder(f); }}
-                                className="text-red-400 hover:text-red-600" title={t('organization:companyRag.folderDelete')}>🗑</button>
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                    <div className="space-y-2 mb-4">
+                      {renderFolderNodes(buildFolderTree(folders))}
                       {canManage && (
                         <button onClick={handleCreateFolder} disabled={creatingFolder}
                           className="rounded-button border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-50">
@@ -839,8 +900,8 @@ export default function Organization() {
                                   className="text-xs border border-gray-200 rounded-button px-2 py-1 bg-white text-gray-600"
                                   title={t('organization:companyRag.moveTo')}
                                   aria-label={t('organization:companyRag.moveTo')}>
-                                  {folders.map(f => (
-                                    <option key={f.id} value={f.id}>{f.name}</option>
+                                  {folderOptions().map(o => (
+                                    <option key={o.id} value={o.id}>{o.label}</option>
                                   ))}
                                 </select>
                               )}
