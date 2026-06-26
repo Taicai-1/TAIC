@@ -405,3 +405,19 @@ async def test_inactive_folder_ids_helper_is_agent_scoped(db_session, test_user,
     ids = _inactive_agent_folder_ids(test_agent.id, db_session)
     assert mine_inactive.id in ids
     assert other_inactive.id not in ids
+
+
+# -- sources endpoint --------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sources_includes_folders_and_doc_folder_id(client, auth_cookies, db_session, test_user, test_agent):
+    folder = _make_folder(db_session, test_agent, "SourcesFolder")
+    _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=folder.id)
+
+    resp = await client.get(f"/api/agents/{test_agent.id}/sources", cookies=auth_cookies)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert any(f["id"] == folder.id and f["is_active"] is True for f in body["folders"])
+    assert all("agent_folder_id" in d for d in body["documents"])
+    assert any(d["agent_folder_id"] == folder.id for d in body["documents"])
