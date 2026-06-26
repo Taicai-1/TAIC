@@ -10,6 +10,10 @@ import {
   Globe,
   RefreshCw,
   Plus,
+  Pencil,
+  Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../hooks/useAuth";
@@ -314,7 +318,7 @@ export default function SourcesPage() {
                       className="text-gray-400 hover:text-gray-700"
                       title={f.is_active ? t("sources:folders.deactivate", "Désactiver") : t("sources:folders.activate", "Activer")}
                     >
-                      {f.is_active ? "◉" : "○"}
+                      {f.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                     </button>
                     <button
                       type="button"
@@ -322,7 +326,7 @@ export default function SourcesPage() {
                       className="text-gray-400 hover:text-gray-700"
                       title={t("sources:folders.rename", "Renommer")}
                     >
-                      ✎
+                      <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
@@ -330,7 +334,7 @@ export default function SourcesPage() {
                       className="text-red-400 hover:text-red-600"
                       title={t("sources:folders.delete", "Supprimer")}
                     >
-                      🗑
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </span>
                 )}
