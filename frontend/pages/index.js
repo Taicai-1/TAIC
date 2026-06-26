@@ -77,6 +77,8 @@ export default function CompanionSettings() {
   const [urlInput, setUrlInput] = useState("");
   const [addingUrl, setAddingUrl] = useState(false);
   const [refreshingDocId, setRefreshingDocId] = useState(null);
+  const [agentFolders, setAgentFolders] = useState([]);
+  const [uploadFolderId, setUploadFolderId] = useState(null);
 
   // Traceability docs
   const [traceabilityDocs, setTraceabilityDocs] = useState([]);
@@ -222,6 +224,13 @@ export default function CompanionSettings() {
       const res = await api.get(`/api/agents/${agentId}/drive-links`);
       setDriveLinks(res.data.links || []);
     } catch { setDriveLinks([]); }
+  }, []);
+
+  const loadAgentFolders = useCallback(async (agentId) => {
+    try {
+      const res = await api.get(`/api/agents/${agentId}/folders`);
+      setAgentFolders(res.data.folders || []);
+    } catch { setAgentFolders([]); }
   }, []);
 
   const loadNeo4jData = useCallback(async () => {
@@ -478,6 +487,8 @@ export default function CompanionSettings() {
       loadTraceabilityDocs(urlAgentId);
       loadNotionLinks(urlAgentId);
       loadDriveLinks(urlAgentId);
+      loadAgentFolders(urlAgentId);
+      setUploadFolderId(null);
       loadNeo4jData();
       loadSlackConfig(urlAgentId);
       loadRecaps(urlAgentId);
@@ -592,6 +603,7 @@ export default function CompanionSettings() {
           toast.success(t('agents:toast.documentAdded'));
           const docs = await api.get(`/user/documents?agent_id=${agentId}`);
           setAgentDocuments(docs.data.documents || []);
+          loadAgentFolders(agentId);
           // Clear progress after a short delay so user sees 100%
           setTimeout(() => setUploadProgress(null), 1500);
           return;
@@ -614,6 +626,9 @@ export default function CompanionSettings() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("agent_id", currentAgent.id);
+      if (uploadFolderId) {
+        fd.append("folder_id", String(uploadFolderId));
+      }
       const response = await api.post(`/upload-agent`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -627,6 +642,7 @@ export default function CompanionSettings() {
         await new Promise(r => setTimeout(r, 500));
         const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
         setAgentDocuments(res.data.documents || []);
+        loadAgentFolders(currentAgent.id);
         setTimeout(() => setUploadProgress(null), 1500);
       }
     } catch (error) {
@@ -1341,6 +1357,21 @@ export default function CompanionSettings() {
                     onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
                   <Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span>
                 </label>
+                {agentFolders.length > 0 && (
+                  <div className="mt-3">
+                    <select
+                      value={uploadFolderId ?? ''}
+                      onChange={e => setUploadFolderId(e.target.value === '' ? null : Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-200 rounded-sm text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all bg-white"
+                      title={t('agents:folders.uploadTarget', 'Dossier de destination')}
+                    >
+                      <option value="">{t('agents:folders.noFolder', 'Sans dossier')}</option>
+                      {agentFolders.map(f => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </>
             )}
           </div>
