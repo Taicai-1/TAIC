@@ -243,3 +243,44 @@ async def test_traceability_doc_not_counted_or_blocking(client, auth_cookies, db
 
     dele = await client.delete(f"/api/agents/{test_agent.id}/folders/{folder.id}", cookies=auth_cookies)
     assert dele.status_code == 200
+
+
+# -- upload into a folder ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upload_into_folder_sync(
+    client, auth_cookies, db_session, test_agent, mock_redis_none, mock_gcs, mock_event_tracker, monkeypatch
+):
+    """With Redis off, /upload-agent stores the doc in the given folder (sync path)."""
+    folder = _make_folder(db_session, test_agent, "Cible")
+
+    # Avoid real embeddings: stub ingest to create a Document directly.
+    import rag_engine
+    from database import Document
+
+    def _fake_ingest(text_content, filename, user_id, agent_id, db, **kwargs):
+        doc = Document(
+            filename=filename,
+            content=text_content,
+            user_id=user_id,
+            agent_id=agent_id,
+            company_id=kwargs.get("company_id"),
+            agent_folder_id=kwargs.get("agent_folder_id"),
+            document_type="rag",
+        )
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+        return doc.id
+
+    monkeypatch.setattr(rag_engine, "ingest_text_content", _fake_ingest)
+
+    files = {"file": ("note.txt", b"contenu de test", "text/plain")}
+    data = {"agent_id": str(test_agent.id), "folder_id": str(folder.id)}
+    resp = await client.post("/upload-agent", files=files, data=data, cookies=auth_cookies)
+    assert resp.status_code == 200
+
+    doc = db_session.query(Document).filter(Document.agent_id == test_agent.id).order_by(Document.id.desc()).first()
+    assert doc is not None
+    assert doc.agent_folder_id == folder.id

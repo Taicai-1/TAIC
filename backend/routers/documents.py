@@ -572,6 +572,7 @@ def _process_document_background(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    agent_folder_id: int = None,
 ):
     """Background worker for async document processing. Uses its own DB session."""
     db = SessionLocal()
@@ -628,6 +629,7 @@ def _process_document_background(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            agent_folder_id=agent_folder_id,
         )
 
         logger.info(f"Background processing completed: {filename} -> doc_id={doc_id}")
@@ -713,6 +715,24 @@ async def upload_file_for_agent(
         # Verify agent belongs to the user or user has edit permission
         agent = _user_can_edit_agent(int(user_id), agent_id, db)
 
+        # Optional target folder (companion RAG folders). None => "no folder".
+        raw_folder_id = form.get("folder_id")
+        agent_folder_id = None
+        if raw_folder_id not in (None, "", "null"):
+            try:
+                agent_folder_id = int(raw_folder_id)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="folder_id must be an integer")
+            from database import AgentFolder
+
+            folder = (
+                db.query(AgentFolder)
+                .filter(AgentFolder.id == agent_folder_id, AgentFolder.agent_id == agent_id)
+                .first()
+            )
+            if not folder:
+                raise HTTPException(status_code=404, detail="Folder not found")
+
         content = await file.read()
 
         # If Redis is available, process in background
@@ -734,14 +754,30 @@ async def upload_file_for_agent(
             )
             caller_cid = _get_caller_company_id(user_id, db)
             background_tasks.add_task(
-                _process_document_background, task_id, file.filename, content, int(user_id), agent_id, caller_cid
+                _process_document_background,
+                task_id,
+                file.filename,
+                content,
+                int(user_id),
+                agent_id,
+                caller_cid,
+                None,   # mission_id
+                False,  # is_company_rag
+                None,   # folder_id (company RAG)
+                agent_folder_id,
             )
             logger.info(f"Document queued for async processing: {file.filename} (task_id={task_id})")
             return {"filename": file.filename, "task_id": task_id, "agent_id": agent_id, "status": "processing"}
 
         # Fallback: synchronous processing when Redis is unavailable
         doc_id = process_document_for_user(
-            file.filename, content, int(user_id), db, agent_id, company_id=_get_caller_company_id(user_id, db)
+            file.filename,
+            content,
+            int(user_id),
+            db,
+            agent_id,
+            company_id=_get_caller_company_id(user_id, db),
+            agent_folder_id=agent_folder_id,
         )
         logger.info(f"Document uploaded (sync) for user {user_id}, agent {agent_id}: {file.filename}")
         event_tracker.track_document_upload(int(user_id), file.filename, len(content))

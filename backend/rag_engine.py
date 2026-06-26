@@ -1084,6 +1084,7 @@ def ingest_text_content(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    agent_folder_id: int = None,
     is_mission_recap_source: bool = False,
     recap_schedule_id: int = None,
 ) -> int:
@@ -1125,6 +1126,7 @@ def ingest_text_content(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            agent_folder_id=agent_folder_id,
             is_mission_recap_source=is_mission_recap_source,
             recap_schedule_id=recap_schedule_id,
         )
@@ -1188,6 +1190,7 @@ def process_document_for_user(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    agent_folder_id: int = None,
     is_mission_recap_source: bool = False,
     recap_schedule_id: int = None,
 ) -> int:
@@ -1255,6 +1258,7 @@ def process_document_for_user(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            agent_folder_id=agent_folder_id,
             is_mission_recap_source=is_mission_recap_source,
             recap_schedule_id=recap_schedule_id,
         )
