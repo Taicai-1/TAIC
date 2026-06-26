@@ -360,3 +360,48 @@ async def test_retrieval_excludes_inactive_folder(db_session, test_user, test_ag
     assert "no_folder.txt" in filenames
     assert "active.txt" in filenames
     assert "inactive.txt" not in filenames
+
+
+@pytest.mark.asyncio
+async def test_retrieval_no_inactive_folder_returns_all(db_session, test_user, test_agent):
+    """When all folders are active, agent retrieval returns its docs unchanged."""
+    from rag_engine import search_similar_texts_for_user
+    from database import DocumentChunk
+
+    active = _make_folder(db_session, test_agent, "AlwaysActive", is_active=True)
+    vec = [1.0] + [0.0] * 1023
+    doc = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=active.id)
+    doc.filename = "should_appear.txt"
+    db_session.add(
+        DocumentChunk(
+            document_id=doc.id,
+            company_id=test_agent.company_id,
+            chunk_text="content",
+            embedding_vec=vec,
+            chunk_index=0,
+        )
+    )
+    db_session.flush()
+
+    results = search_similar_texts_for_user(
+        vec, test_user.id, db_session, top_k=10, agent_id=test_agent.id, company_id=test_agent.company_id
+    )
+    assert any(r["filename"] == "should_appear.txt" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_inactive_folder_ids_helper_is_agent_scoped(db_session, test_user, test_agent):
+    """_inactive_agent_folder_ids only returns the queried agent's inactive folders."""
+    from rag_engine import _inactive_agent_folder_ids
+    from tests.factories import AgentFactory
+
+    agent_b = AgentFactory.build(user_id=test_user.id, company_id=test_agent.company_id)
+    db_session.add(agent_b)
+    db_session.flush()
+
+    mine_inactive = _make_folder(db_session, test_agent, "MineInactive", is_active=False)
+    other_inactive = _make_folder(db_session, agent_b, "OtherInactive", is_active=False)
+
+    ids = _inactive_agent_folder_ids(test_agent.id, db_session)
+    assert mine_inactive.id in ids
+    assert other_inactive.id not in ids
