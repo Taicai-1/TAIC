@@ -464,3 +464,65 @@ def test_rag_cache_key_varies_with_inactive_folders():
     assert base != toggled
     # Same inputs => same key (stable).
     assert base == _rag_cache_key(1, "q", [1, 2], "conversationnel", extra="")
+
+
+# -- folder tree expansion (pure, runs locally) ------------------------------
+
+
+def test_descendant_folder_ids_basic():
+    from rag_engine import _descendant_folder_ids
+
+    # tree: 1 -> 2 -> 4, 1 -> 3
+    pairs = [(1, None), (2, 1), (3, 1), (4, 2), (5, None)]
+    assert _descendant_folder_ids([1], pairs) == {1, 2, 3, 4}
+    assert _descendant_folder_ids([2], pairs) == {2, 4}
+    assert _descendant_folder_ids([5], pairs) == {5}
+    assert _descendant_folder_ids([], pairs) == set()
+
+
+def test_descendant_folder_ids_cycle_safe():
+    from rag_engine import _descendant_folder_ids
+
+    # defensive: a malformed cycle must not loop forever
+    pairs = [(1, 2), (2, 1)]
+    assert _descendant_folder_ids([1], pairs) == {1, 2}
+
+
+@pytest.mark.asyncio
+async def test_retrieval_excludes_inactive_parent_subtree(db_session, test_user, test_agent):
+    """An inactive PARENT folder excludes documents sitting in its child subfolder."""
+    from rag_engine import search_similar_texts_for_user
+    from database import DocumentChunk
+    from tests.factories import AgentFolderFactory
+
+    _give_company(db_session, test_user, test_agent)
+
+    parent = AgentFolderFactory.build(
+        agent_id=test_agent.id, company_id=test_agent.company_id, name="Parent", is_active=False
+    )
+    db_session.add(parent)
+    db_session.flush()
+    child = AgentFolderFactory.build(
+        agent_id=test_agent.id, company_id=test_agent.company_id, name="Child", is_active=True, parent_id=parent.id
+    )
+    db_session.add(child)
+    db_session.flush()
+
+    vec = [1.0] + [0.0] * 1023
+    doc = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=child.id)
+    doc.filename = "in_child.txt"
+    db_session.add(
+        DocumentChunk(
+            document_id=doc.id,
+            company_id=test_agent.company_id,
+            chunk_text="content",
+            embedding_vec=vec,
+            chunk_index=0,
+        )
+    )
+    db_session.flush()
+
+    results = search_similar_texts_for_user(
+        vec, test_user.id, db_session, top_k=10, agent_id=test_agent.id, company_id=test_agent.company_id
+    )
+    assert all(r["document_name"] != "in_child.txt" for r in results)
