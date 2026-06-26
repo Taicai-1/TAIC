@@ -24,6 +24,7 @@ from database import (
     QuestionnaireAnswer,
     Mission,
     MissionEvent,
+    AgentFolder,
 )
 from auth import hash_password
 
@@ -58,6 +59,14 @@ class AgentFactory(factory.Factory):
     statut = "privé"
     type = "conversationnel"
     llm_provider = "mistral"
+
+
+class AgentFolderFactory(factory.Factory):
+    class Meta:
+        model = AgentFolder
+
+    name = factory.Sequence(lambda n: f"folder-{n}")
+    is_active = True
 
 
 class DocumentFactory(factory.Factory):
