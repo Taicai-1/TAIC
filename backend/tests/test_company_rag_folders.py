@@ -422,21 +422,40 @@ async def test_company_delete_folder_with_subfolder_409(client, admin_cookies, d
 # -- folder import (company) -------------------------------------------------
 
 
+def _fake_company_ingest(filename, content, user_id, db, company_id=None, is_company_rag=False, folder_id=None, **kw):
+    """Stand-in for process_document_for_user: insert a Document row, skip GCS/embeddings."""
+    from database import Document
+
+    doc = Document(
+        filename=filename,
+        user_id=user_id,
+        company_id=company_id,
+        is_company_rag=is_company_rag,
+        folder_id=folder_id,
+        document_type="rag",
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return doc.id
+
+
 @pytest.mark.asyncio
-async def test_company_import_creates_tree_and_docs(
-    client, admin_cookies, db_session, test_company, mock_gcs, mock_mistral_embedding_fast, mock_redis_none
-):
+async def test_company_import_creates_tree_and_docs(client, admin_cookies, db_session, test_company, mock_redis_none):
+    from unittest.mock import patch
+
     from database import CompanyFolder, Document
 
-    resp = await client.post(
-        "/api/company-rag/folders/import",
-        files=[
-            ("files", ("a.txt", b"hello", "text/plain")),
-            ("files", ("skip.exe", b"MZ", "application/octet-stream")),
-        ],
-        data={"paths": ["Legal/Contracts/a.txt", "Legal/skip.exe"]},
-        cookies=admin_cookies,
-    )
+    with patch("routers.company_rag.process_document_for_user", side_effect=_fake_company_ingest):
+        resp = await client.post(
+            "/api/company-rag/folders/import",
+            files=[
+                ("files", ("a.txt", b"hello", "text/plain")),
+                ("files", ("skip.exe", b"MZ", "application/octet-stream")),
+            ],
+            data={"paths": ["Legal/Contracts/a.txt", "Legal/skip.exe"]},
+            cookies=admin_cookies,
+        )
     assert resp.status_code == 200
     body = resp.json()
     assert body["done"] == 1 and body["skipped"] == 1
