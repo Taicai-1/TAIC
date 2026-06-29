@@ -8,7 +8,7 @@ stay tenant-agnostic and unit-testable without a database.
 import json
 import logging
 
-from redis_client import get_redis
+import redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def run_folder_import(items, destination_parent_id, find_child, create_child, in
 
 def set_import_status(task_id, total, done, skipped, failed, root_folder_id, status, error=None):
     """Write an import task status to Redis (no-op if Redis is unavailable)."""
-    r = get_redis()
+    r = redis_client.get_redis()
     if r is None:
         return
     r.setex(
@@ -122,7 +122,7 @@ def set_import_status(task_id, total, done, skipped, failed, root_folder_id, sta
 
 def get_import_status(task_id):
     """Read an import task status from Redis. Returns dict or None."""
-    r = get_redis()
+    r = redis_client.get_redis()
     if r is None:
         return None
     data = r.get(f"import_task:{task_id}")

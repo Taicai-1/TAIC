@@ -599,3 +599,96 @@ async def test_delete_folder_with_subfolder_409(client, auth_cookies, db_session
     db_session.flush()
     resp = await client.delete(f"/api/agents/{test_agent.id}/folders/{parent.id}", cookies=auth_cookies)
     assert resp.status_code == 409
+
+
+# -- folder import (companion) -----------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_import_creates_tree_and_docs(
+    client, auth_cookies, db_session, test_agent, mock_gcs, mock_mistral_embedding_fast, mock_redis_none
+):
+    """Import recreates the directory tree and attaches docs to the right subfolder."""
+    from database import AgentFolder, Document
+
+    files = [
+        ("files", ("a.txt", b"hello world", "text/plain")),
+        ("files", ("b.txt", b"second file", "text/plain")),
+        ("files", ("skip.exe", b"MZ", "application/octet-stream")),
+    ]
+    data = [
+        ("paths", "Root/Sub/a.txt"),
+        ("paths", "Root/b.txt"),
+        ("paths", "Root/Sub/skip.exe"),
+    ]
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["done"] == 2 and body["skipped"] == 1
+
+    root = (
+        db_session.query(AgentFolder)
+        .filter(
+            AgentFolder.agent_id == test_agent.id,
+            AgentFolder.name == "Root",
+            AgentFolder.parent_id.is_(None),
+        )
+        .first()
+    )
+    assert root is not None
+    sub = (
+        db_session.query(AgentFolder)
+        .filter(
+            AgentFolder.agent_id == test_agent.id,
+            AgentFolder.name == "Sub",
+            AgentFolder.parent_id == root.id,
+        )
+        .first()
+    )
+    assert sub is not None
+    a_doc = db_session.query(Document).filter(Document.agent_id == test_agent.id, Document.filename == "a.txt").first()
+    assert a_doc.agent_folder_id == sub.id
+
+
+@pytest.mark.asyncio
+async def test_import_merges_into_existing_folder(
+    client, auth_cookies, db_session, test_agent, mock_gcs, mock_mistral_embedding_fast, mock_redis_none
+):
+    from database import AgentFolder
+
+    existing = _make_folder(db_session, test_agent, "Root")
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data=[("paths", "Root/a.txt")],
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 200
+    roots = (
+        db_session.query(AgentFolder)
+        .filter(
+            AgentFolder.agent_id == test_agent.id,
+            AgentFolder.name == "Root",
+            AgentFolder.parent_id.is_(None),
+        )
+        .all()
+    )
+    assert len(roots) == 1 and roots[0].id == existing.id  # merged, not duplicated
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_too_many_files(client, auth_cookies, test_agent, monkeypatch):
+    import routers.agent_folders as af
+
+    monkeypatch.setattr(af, "MAX_IMPORT_FILES", 1)
+    files = [
+        ("files", ("a.txt", b"x", "text/plain")),
+        ("files", ("b.txt", b"y", "text/plain")),
+    ]
+    data = [("paths", "R/a.txt"), ("paths", "R/b.txt")]
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
+    )
+    assert resp.status_code == 413
