@@ -434,7 +434,7 @@ async def test_company_import_creates_tree_and_docs(
             ("files", ("a.txt", b"hello", "text/plain")),
             ("files", ("skip.exe", b"MZ", "application/octet-stream")),
         ],
-        data=[("paths", "Legal/Contracts/a.txt"), ("paths", "Legal/skip.exe")],
+        data={"paths": ["Legal/Contracts/a.txt", "Legal/skip.exe"]},
         cookies=admin_cookies,
     )
     assert resp.status_code == 200
@@ -472,7 +472,7 @@ async def test_company_import_requires_admin(client, member_cookies, mock_redis_
     resp = await client.post(
         "/api/company-rag/folders/import",
         files=[("files", ("a.txt", b"hi", "text/plain"))],
-        data=[("paths", "R/a.txt")],
+        data={"paths": ["R/a.txt"]},
         cookies=member_cookies,
     )
     assert resp.status_code == 403

@@ -616,11 +616,7 @@ async def test_import_creates_tree_and_docs(
         ("files", ("b.txt", b"second file", "text/plain")),
         ("files", ("skip.exe", b"MZ", "application/octet-stream")),
     ]
-    data = [
-        ("paths", "Root/Sub/a.txt"),
-        ("paths", "Root/b.txt"),
-        ("paths", "Root/Sub/skip.exe"),
-    ]
+    data = {"paths": ["Root/Sub/a.txt", "Root/b.txt", "Root/Sub/skip.exe"]}
     resp = await client.post(
         f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
     )
@@ -662,7 +658,7 @@ async def test_import_merges_into_existing_folder(
     resp = await client.post(
         f"/api/agents/{test_agent.id}/folders/import",
         files=[("files", ("a.txt", b"hi", "text/plain"))],
-        data=[("paths", "Root/a.txt")],
+        data={"paths": ["Root/a.txt"]},
         cookies=auth_cookies,
     )
     assert resp.status_code == 200
@@ -687,7 +683,7 @@ async def test_import_rejects_too_many_files(client, auth_cookies, test_agent, m
         ("files", ("a.txt", b"x", "text/plain")),
         ("files", ("b.txt", b"y", "text/plain")),
     ]
-    data = [("paths", "R/a.txt"), ("paths", "R/b.txt")]
+    data = {"paths": ["R/a.txt", "R/b.txt"]}
     resp = await client.post(
         f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
     )
