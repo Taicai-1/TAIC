@@ -8,7 +8,8 @@
   },
   "companyRagFolders": {
     "label": "Dossiers du RAG Entreprise inclus",
-    "allHint": "Tout coché = tous les dossiers (y compris les futurs)"
+    "allHint": "Tout coché = tous les dossiers (y compris les futurs)",
+    "includesSubfolders": "(inclut les sous-dossiers)"
   },
   "types": {
     "conversationnel": {
@@ -47,6 +48,10 @@
     "choosePhoto": "Choisir une photo",
     "uploading": "Upload...",
     "clickToChoose": "Ou cliquez pour choisir",
+    "importFolder": "Importer un dossier",
+    "importingFolder": "Import en cours…",
+    "importDone": "{{done}} importés, {{skipped}} ignorés",
+    "importNoSupported": "Aucun fichier supporté dans ce dossier.",
     "sendRecapNow": "Envoyer le recap maintenant",
     "sendingRecap": "Envoi en cours...",
     "improving": "Amélioration en cours...",

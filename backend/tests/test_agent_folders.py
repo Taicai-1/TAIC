@@ -464,3 +464,231 @@ def test_rag_cache_key_varies_with_inactive_folders():
     assert base != toggled
     # Same inputs => same key (stable).
     assert base == _rag_cache_key(1, "q", [1, 2], "conversationnel", extra="")
+
+
+# -- folder tree expansion (pure, runs locally) ------------------------------
+
+
+def test_descendant_folder_ids_basic():
+    from rag_engine import _descendant_folder_ids
+
+    # tree: 1 -> 2 -> 4, 1 -> 3
+    pairs = [(1, None), (2, 1), (3, 1), (4, 2), (5, None)]
+    assert _descendant_folder_ids([1], pairs) == {1, 2, 3, 4}
+    assert _descendant_folder_ids([2], pairs) == {2, 4}
+    assert _descendant_folder_ids([5], pairs) == {5}
+    assert _descendant_folder_ids([], pairs) == set()
+
+
+def test_descendant_folder_ids_cycle_safe():
+    from rag_engine import _descendant_folder_ids
+
+    # defensive: a malformed cycle must not loop forever
+    pairs = [(1, 2), (2, 1)]
+    assert _descendant_folder_ids([1], pairs) == {1, 2}
+
+
+@pytest.mark.asyncio
+async def test_retrieval_excludes_inactive_parent_subtree(db_session, test_user, test_agent):
+    """An inactive PARENT folder excludes documents sitting in its child subfolder."""
+    from rag_engine import search_similar_texts_for_user
+    from database import DocumentChunk
+    from tests.factories import AgentFolderFactory
+
+    _give_company(db_session, test_user, test_agent)
+
+    parent = AgentFolderFactory.build(
+        agent_id=test_agent.id, company_id=test_agent.company_id, name="Parent", is_active=False
+    )
+    db_session.add(parent)
+    db_session.flush()
+    child = AgentFolderFactory.build(
+        agent_id=test_agent.id, company_id=test_agent.company_id, name="Child", is_active=True, parent_id=parent.id
+    )
+    db_session.add(child)
+    db_session.flush()
+
+    vec = [1.0] + [0.0] * 1023
+    doc = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=child.id)
+    doc.filename = "in_child.txt"
+    db_session.add(
+        DocumentChunk(
+            document_id=doc.id,
+            company_id=test_agent.company_id,
+            chunk_text="content",
+            embedding_vec=vec,
+            chunk_index=0,
+        )
+    )
+    db_session.flush()
+
+    results = search_similar_texts_for_user(
+        vec, test_user.id, db_session, top_k=10, agent_id=test_agent.id, company_id=test_agent.company_id
+    )
+    assert all(r["document_name"] != "in_child.txt" for r in results)
+
+
+# -- subfolders (companion) --------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_subfolder(client, auth_cookies, db_session, test_agent):
+    parent = _make_folder(db_session, test_agent, "Parent")
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders",
+        json={"name": "Child", "parent_id": parent.id},
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["parent_id"] == parent.id
+
+
+@pytest.mark.asyncio
+async def test_create_subfolder_bad_parent_404(client, auth_cookies, test_agent):
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders",
+        json={"name": "Child", "parent_id": 999999},
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_same_name_under_different_parents_ok(client, auth_cookies, db_session, test_agent):
+    p1 = _make_folder(db_session, test_agent, "P1")
+    p2 = _make_folder(db_session, test_agent, "P2")
+    r1 = await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "2024", "parent_id": p1.id}, cookies=auth_cookies
+    )
+    r2 = await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "2024", "parent_id": p2.id}, cookies=auth_cookies
+    )
+    assert r1.status_code == 200 and r2.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_duplicate_name_same_parent_409(client, auth_cookies, db_session, test_agent):
+    parent = _make_folder(db_session, test_agent, "Parent2")
+    await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "Dup", "parent_id": parent.id}, cookies=auth_cookies
+    )
+    r2 = await client.post(
+        f"/api/agents/{test_agent.id}/folders", json={"name": "Dup", "parent_id": parent.id}, cookies=auth_cookies
+    )
+    assert r2.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_list_returns_parent_id(client, auth_cookies, db_session, test_agent):
+    parent = _make_folder(db_session, test_agent, "ListParent")
+    resp = await client.get(f"/api/agents/{test_agent.id}/folders", cookies=auth_cookies)
+    assert resp.status_code == 200
+    match = next(f for f in resp.json()["folders"] if f["id"] == parent.id)
+    assert "parent_id" in match and match["parent_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_delete_folder_with_subfolder_409(client, auth_cookies, db_session, test_agent):
+    parent = _make_folder(db_session, test_agent, "HasChild")
+    from tests.factories import AgentFolderFactory
+
+    child = AgentFolderFactory.build(
+        agent_id=test_agent.id, company_id=test_agent.company_id, name="C", parent_id=parent.id
+    )
+    db_session.add(child)
+    db_session.flush()
+    resp = await client.delete(f"/api/agents/{test_agent.id}/folders/{parent.id}", cookies=auth_cookies)
+    assert resp.status_code == 409
+
+
+# -- folder import (companion) -----------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_import_creates_tree_and_docs(
+    client, auth_cookies, db_session, test_agent, mock_gcs, mock_mistral_embedding_fast, mock_redis_none
+):
+    """Import recreates the directory tree and attaches docs to the right subfolder."""
+    from database import AgentFolder, Document
+
+    files = [
+        ("files", ("a.txt", b"hello world", "text/plain")),
+        ("files", ("b.txt", b"second file", "text/plain")),
+        ("files", ("skip.exe", b"MZ", "application/octet-stream")),
+    ]
+    data = [
+        ("paths", "Root/Sub/a.txt"),
+        ("paths", "Root/b.txt"),
+        ("paths", "Root/Sub/skip.exe"),
+    ]
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["done"] == 2 and body["skipped"] == 1
+
+    root = (
+        db_session.query(AgentFolder)
+        .filter(
+            AgentFolder.agent_id == test_agent.id,
+            AgentFolder.name == "Root",
+            AgentFolder.parent_id.is_(None),
+        )
+        .first()
+    )
+    assert root is not None
+    sub = (
+        db_session.query(AgentFolder)
+        .filter(
+            AgentFolder.agent_id == test_agent.id,
+            AgentFolder.name == "Sub",
+            AgentFolder.parent_id == root.id,
+        )
+        .first()
+    )
+    assert sub is not None
+    a_doc = db_session.query(Document).filter(Document.agent_id == test_agent.id, Document.filename == "a.txt").first()
+    assert a_doc.agent_folder_id == sub.id
+
+
+@pytest.mark.asyncio
+async def test_import_merges_into_existing_folder(
+    client, auth_cookies, db_session, test_agent, mock_gcs, mock_mistral_embedding_fast, mock_redis_none
+):
+    from database import AgentFolder
+
+    existing = _make_folder(db_session, test_agent, "Root")
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data=[("paths", "Root/a.txt")],
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 200
+    roots = (
+        db_session.query(AgentFolder)
+        .filter(
+            AgentFolder.agent_id == test_agent.id,
+            AgentFolder.name == "Root",
+            AgentFolder.parent_id.is_(None),
+        )
+        .all()
+    )
+    assert len(roots) == 1 and roots[0].id == existing.id  # merged, not duplicated
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_too_many_files(client, auth_cookies, test_agent, monkeypatch):
+    import routers.agent_folders as af
+
+    monkeypatch.setattr(af, "MAX_IMPORT_FILES", 1)
+    files = [
+        ("files", ("a.txt", b"x", "text/plain")),
+        ("files", ("b.txt", b"y", "text/plain")),
+    ]
+    data = [("paths", "R/a.txt"), ("paths", "R/b.txt")]
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
+    )
+    assert resp.status_code == 413

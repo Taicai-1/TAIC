@@ -836,16 +836,45 @@ def get_answer_stream(
         yield sse_event("error", {"message": str(e), "code": "llm_error"})
 
 
-def _inactive_agent_folder_ids(agent_id: int, db: Session) -> list:
-    """Return the ids of this agent's folders whose is_active is False.
+def _descendant_folder_ids(start_ids, pairs) -> set:
+    """Return start_ids plus all their descendants.
 
-    Documents in these folders are excluded from RAG retrieval; documents with
-    agent_folder_id IS NULL (no folder) are always included.
+    pairs: iterable of (folder_id, parent_id). Cycle-safe (already-visited ids are
+    skipped, so a malformed parent cycle cannot loop forever).
+    """
+    children = {}
+    for fid, pid in pairs:
+        children.setdefault(pid, []).append(fid)
+    result = set()
+    stack = list(start_ids)
+    while stack:
+        cur = stack.pop()
+        if cur in result:
+            continue
+        result.add(cur)
+        stack.extend(children.get(cur, []))
+    return result
+
+
+def _inactive_agent_folder_ids(agent_id: int, db: Session) -> list:
+    """Return the ids of this agent's inactive folders AND all their descendants.
+
+    Documents in these folders (or any subfolder of an inactive folder) are excluded
+    from RAG retrieval; documents with agent_folder_id IS NULL (no folder) are always
+    included. Subtree semantics: deactivating a parent excludes its whole subtree.
     """
     from database import AgentFolder
 
-    rows = db.query(AgentFolder.id).filter(AgentFolder.agent_id == agent_id, AgentFolder.is_active.is_(False)).all()
-    return [r[0] for r in rows]
+    rows = (
+        db.query(AgentFolder.id, AgentFolder.parent_id, AgentFolder.is_active)
+        .filter(AgentFolder.agent_id == agent_id)
+        .all()
+    )
+    inactive_roots = [r[0] for r in rows if not r[2]]
+    if not inactive_roots:
+        return []
+    pairs = [(r[0], r[1]) for r in rows]
+    return list(_descendant_folder_ids(inactive_roots, pairs))
 
 
 def search_similar_texts_for_user(
@@ -945,7 +974,15 @@ def search_similar_texts_for_user(
             if include_company_rag:
                 company_scope = Document.is_company_rag.is_(True)
                 if company_rag_folder_ids:
-                    company_scope = and_(company_scope, Document.folder_id.in_(company_rag_folder_ids))
+                    from database import CompanyFolder
+
+                    crows = (
+                        db.query(CompanyFolder.id, CompanyFolder.parent_id)
+                        .filter(CompanyFolder.company_id == company_id)
+                        .all()
+                    )
+                    expanded = _descendant_folder_ids(company_rag_folder_ids, [(r[0], r[1]) for r in crows])
+                    company_scope = and_(company_scope, Document.folder_id.in_(expanded))
                 query = query.filter(or_(agent_scope, company_scope))
             else:
                 query = query.filter(agent_scope, Document.is_company_rag.is_(False))

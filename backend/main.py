@@ -32,6 +32,7 @@ from database import (
     engine,
     ensure_columns,
     ensure_company_rag_default_folders,
+    ensure_folder_hierarchy_constraints,
     ensure_llm_usage_table,
     ensure_support_tables,
     ensure_pgvector,
@@ -432,6 +433,8 @@ async def startup_event():
             # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
             ensure_columns()
             logger.info("ensure_columns done (%s)", _elapsed())
+            ensure_folder_hierarchy_constraints()
+            logger.info("ensure_folder_hierarchy_constraints done (%s)", _elapsed())
             ensure_company_rag_default_folders()
             logger.info("ensure_company_rag_default_folders done (%s)", _elapsed())
             # Add RLS bypass policies for service operations (email ingestion, etc.)

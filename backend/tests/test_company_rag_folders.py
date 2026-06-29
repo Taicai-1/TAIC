@@ -366,3 +366,113 @@ async def test_tenant_isolation_delete_404(client, db_session, test_company):
         cookies=other_cookies,
     )
     assert resp.status_code == 404
+
+
+# -- subfolders (company) ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_company_create_subfolder(client, admin_cookies, db_session, test_company):
+    parent = _make_folder(db_session, test_company.id, "Parent")
+    resp = await client.post(
+        "/api/company-rag/folders", json={"name": "Child", "parent_id": parent.id}, cookies=admin_cookies
+    )
+    assert resp.status_code == 200
+    assert resp.json()["parent_id"] == parent.id
+
+
+@pytest.mark.asyncio
+async def test_company_create_subfolder_bad_parent_404(client, admin_cookies):
+    resp = await client.post(
+        "/api/company-rag/folders", json={"name": "Child", "parent_id": 999999}, cookies=admin_cookies
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_company_same_name_diff_parents_ok(client, admin_cookies, db_session, test_company):
+    p1 = _make_folder(db_session, test_company.id, "P1")
+    p2 = _make_folder(db_session, test_company.id, "P2")
+    r1 = await client.post("/api/company-rag/folders", json={"name": "2024", "parent_id": p1.id}, cookies=admin_cookies)
+    r2 = await client.post("/api/company-rag/folders", json={"name": "2024", "parent_id": p2.id}, cookies=admin_cookies)
+    assert r1.status_code == 200 and r2.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_company_list_returns_parent_id(client, admin_cookies, member_cookies, db_session, test_company):
+    parent = _make_folder(db_session, test_company.id, "ListParent")
+    resp = await client.get("/api/company-rag/folders", cookies=member_cookies)
+    assert resp.status_code == 200
+    match = next(f for f in resp.json()["folders"] if f["id"] == parent.id)
+    assert "parent_id" in match and match["parent_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_company_delete_folder_with_subfolder_409(client, admin_cookies, db_session, test_company):
+    parent = _make_folder(db_session, test_company.id, "HasChild")
+    from database import CompanyFolder
+
+    child = CompanyFolder(company_id=test_company.id, name="C", parent_id=parent.id)
+    db_session.add(child)
+    db_session.flush()
+    resp = await client.delete(f"/api/company-rag/folders/{parent.id}", cookies=admin_cookies)
+    assert resp.status_code == 409
+
+
+# -- folder import (company) -------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_company_import_creates_tree_and_docs(
+    client, admin_cookies, db_session, test_company, mock_gcs, mock_mistral_embedding_fast, mock_redis_none
+):
+    from database import CompanyFolder, Document
+
+    resp = await client.post(
+        "/api/company-rag/folders/import",
+        files=[
+            ("files", ("a.txt", b"hello", "text/plain")),
+            ("files", ("skip.exe", b"MZ", "application/octet-stream")),
+        ],
+        data=[("paths", "Legal/Contracts/a.txt"), ("paths", "Legal/skip.exe")],
+        cookies=admin_cookies,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["done"] == 1 and body["skipped"] == 1
+
+    legal = (
+        db_session.query(CompanyFolder)
+        .filter(
+            CompanyFolder.company_id == test_company.id,
+            CompanyFolder.name == "Legal",
+            CompanyFolder.parent_id.is_(None),
+        )
+        .first()
+    )
+    assert legal is not None
+    contracts = (
+        db_session.query(CompanyFolder)
+        .filter(
+            CompanyFolder.company_id == test_company.id,
+            CompanyFolder.name == "Contracts",
+            CompanyFolder.parent_id == legal.id,
+        )
+        .first()
+    )
+    assert contracts is not None
+    a_doc = (
+        db_session.query(Document).filter(Document.company_id == test_company.id, Document.filename == "a.txt").first()
+    )
+    assert a_doc.folder_id == contracts.id and a_doc.is_company_rag is True
+
+
+@pytest.mark.asyncio
+async def test_company_import_requires_admin(client, member_cookies, mock_redis_none):
+    resp = await client.post(
+        "/api/company-rag/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data=[("paths", "R/a.txt")],
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 403

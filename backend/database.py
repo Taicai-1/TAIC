@@ -575,21 +575,27 @@ class AgentShare(Base):
 
 class CompanyFolder(Base):
     __tablename__ = "company_folders"
-    __table_args__ = (UniqueConstraint("company_id", "name", name="uq_company_folder_name"),)
+    __table_args__ = (UniqueConstraint("company_id", "parent_id", "name", name="uq_company_folder_parent_name"),)
 
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    parent_id = Column(
+        Integer, ForeignKey("company_folders.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # NULL = top-level folder
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class AgentFolder(Base):
     __tablename__ = "agent_folders"
-    __table_args__ = (UniqueConstraint("agent_id", "name", name="uq_agent_folder_name"),)
+    __table_args__ = (UniqueConstraint("agent_id", "parent_id", "name", name="uq_agent_folder_parent_name"),)
 
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)  # Tenant isolation
+    parent_id = Column(
+        Integer, ForeignKey("agent_folders.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # NULL = top-level folder
     name = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False, server_default="true")
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -1171,6 +1177,9 @@ def ensure_columns():
             "recap_schedule_id",
             "INTEGER REFERENCES mission_recap_schedules(id) ON DELETE CASCADE",
         ),
+        # RAG folder hierarchy (subfolders)
+        ("company_folders", "parent_id", "INTEGER REFERENCES company_folders(id) ON DELETE CASCADE"),
+        ("agent_folders", "parent_id", "INTEGER REFERENCES agent_folders(id) ON DELETE CASCADE"),
     ]
     try:
         with engine.connect() as conn:
@@ -1224,6 +1233,50 @@ def ensure_columns():
         logger.error(f"ensure_columns failed: {e}")
 
 
+def ensure_folder_hierarchy_constraints():
+    """Idempotently migrate folder uniqueness from (tenant, name) to (tenant, parent_id, name).
+
+    create_all / ensure_columns do not alter existing constraints, so on an existing DB the old
+    company-wide / agent-wide unique constraints would block same-named subfolders under different
+    parents. Drop the old constraints and add the parent-aware ones. A multi-column UNIQUE cannot
+    enforce/dedup top-level folders (parent_id IS NULL) because Postgres treats NULLs as distinct,
+    so we ALSO add a partial unique index for the (tenant, name) WHERE parent_id IS NULL case.
+    Safe on every startup; each statement runs in its own transaction.
+    """
+    statements = [
+        "ALTER TABLE company_folders DROP CONSTRAINT IF EXISTS uq_company_folder_name",
+        """
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_company_folder_parent_name') THEN
+                ALTER TABLE company_folders
+                    ADD CONSTRAINT uq_company_folder_parent_name UNIQUE (company_id, parent_id, name);
+            END IF;
+        END $$;
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_company_folder_root_name "
+        "ON company_folders (company_id, name) WHERE parent_id IS NULL",
+        "ALTER TABLE agent_folders DROP CONSTRAINT IF EXISTS uq_agent_folder_name",
+        """
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_agent_folder_parent_name') THEN
+                ALTER TABLE agent_folders
+                    ADD CONSTRAINT uq_agent_folder_parent_name UNIQUE (agent_id, parent_id, name);
+            END IF;
+        END $$;
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_folder_root_name "
+        "ON agent_folders (agent_id, name) WHERE parent_id IS NULL",
+    ]
+    with engine.connect() as conn:
+        for stmt in statements:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                logger.warning(f"ensure_folder_hierarchy_constraints: statement skipped: {e}")
+
+
 def ensure_company_rag_default_folders():
     """Idempotent: attach orphan company-RAG docs (folder_id IS NULL) to a per-company
     'Général' folder, creating it if needed. Runs at startup, safe to re-run."""
@@ -1249,7 +1302,10 @@ def ensure_company_rag_default_folders():
                 db.execute(
                     pg_insert(CompanyFolder)
                     .values(company_id=cid, name="Général")
-                    .on_conflict_do_nothing(index_elements=["company_id", "name"])
+                    .on_conflict_do_nothing(
+                        index_elements=["company_id", "name"],
+                        index_where=CompanyFolder.parent_id.is_(None),
+                    )
                 )
                 db.flush()
                 folder = (

@@ -79,6 +79,16 @@ export default function CompanionSettings() {
   const [refreshingDocId, setRefreshingDocId] = useState(null);
   const [agentFolders, setAgentFolders] = useState([]);
   const [uploadFolderId, setUploadFolderId] = useState(null);
+  const folderImportRef = useRef(null);
+  const [importingFolder, setImportingFolder] = useState(false);
+  const [importProgress, setImportProgress] = useState(null); // { total, done, skipped, failed }
+
+  useEffect(() => {
+    if (folderImportRef.current) {
+      folderImportRef.current.setAttribute('webkitdirectory', '');
+      folderImportRef.current.setAttribute('directory', '');
+    }
+  }, []);
 
   // Traceability docs
   const [traceabilityDocs, setTraceabilityDocs] = useState([]);
@@ -649,6 +659,73 @@ export default function CompanionSettings() {
       setUploadProgress(null);
       toast.error(error.response?.data?.detail || t('agents:toast.documentAddError'));
     } finally { setUploadingDoc(false); }
+  };
+
+  const ALLOWED_IMPORT_EXT = ['pdf', 'txt', 'docx', 'doc', 'json'];
+
+  const pollImportStatus = async (taskId, agentId) => {
+    for (let i = 0; i < 200; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const res = await api.get(`/api/agents/${agentId}/folders/import-status/${taskId}`);
+        const s = res.data;
+        setImportProgress({ total: s.total, done: s.done, skipped: s.skipped, failed: s.failed });
+        if (s.status === 'completed') {
+          toast.success(t('agents:buttons.importDone', { done: s.done, skipped: s.skipped }));
+          const docs = await api.get(`/user/documents?agent_id=${agentId}`);
+          setAgentDocuments(docs.data.documents || []);
+          loadAgentFolders(agentId);
+          setTimeout(() => setImportProgress(null), 2000);
+          return;
+        }
+        if (s.status === 'failed') {
+          toast.error(s.error || t('agents:toast.documentAddError'));
+          setImportProgress(null);
+          return;
+        }
+      } catch { /* keep polling */ }
+    }
+    setImportProgress(null);
+    toast.error(t('agents:toast.documentAddError'));
+  };
+
+  const handleFolderImport = async (e) => {
+    const all = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!all.length || !currentAgent) return;
+    const fd = new FormData();
+    let count = 0;
+    for (const file of all) {
+      const rel = file.webkitRelativePath || file.name;
+      const ext = rel.split('.').pop().toLowerCase();
+      if (!ALLOWED_IMPORT_EXT.includes(ext)) continue;
+      fd.append('files', file);
+      fd.append('paths', rel);
+      count++;
+    }
+    if (!count) { toast.error(t('agents:buttons.importNoSupported')); return; }
+    if (uploadFolderId) fd.append('parent_id', String(uploadFolderId));
+    try {
+      setImportingFolder(true);
+      setImportProgress({ total: count, done: 0, skipped: 0, failed: 0 });
+      const res = await api.post(`/api/agents/${currentAgent.id}/folders/import`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data.import_task_id) {
+        await pollImportStatus(res.data.import_task_id, currentAgent.id);
+      } else {
+        toast.success(t('agents:buttons.importDone', { done: res.data.done, skipped: res.data.skipped }));
+        const docs = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
+        setAgentDocuments(docs.data.documents || []);
+        loadAgentFolders(currentAgent.id);
+        setImportProgress(null);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('agents:toast.documentAddError'));
+      setImportProgress(null);
+    } finally {
+      setImportingFolder(false);
+    }
   };
 
   const deleteDocument = async (docId) => {
@@ -1352,11 +1429,28 @@ export default function CompanionSettings() {
                   {isDragging ? t('agents:documents.dropHere') : t('agents:documents.dragDrop')}
                 </p>
                 <p className="text-xs text-gray-500 mb-3">{t('agents:documents.formats')}</p>
-                <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
-                  <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.json" disabled={uploadingDoc}
-                    onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
-                  <Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span>
-                </label>
+                <div className="inline-flex items-center gap-2">
+                  <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
+                    <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.json" disabled={uploadingDoc}
+                      onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
+                    <Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span>
+                  </label>
+                  <label className={`cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-sm hover:bg-purple-50 transition-all font-medium text-sm ${importingFolder ? 'opacity-60 pointer-events-none' : ''}`}>
+                    <input ref={folderImportRef} type="file" multiple className="hidden" disabled={importingFolder}
+                      onChange={handleFolderImport} />
+                    {importingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    <span>{importingFolder ? t('agents:buttons.importingFolder') : t('agents:buttons.importFolder')}</span>
+                  </label>
+                </div>
+                {importProgress && (
+                  <div className="mt-3 text-xs text-gray-600 max-w-xs mx-auto">
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-purple-600 transition-all"
+                        style={{ width: `${importProgress.total ? Math.round(((importProgress.done + importProgress.skipped + importProgress.failed) / importProgress.total) * 100) : 0}%` }} />
+                    </div>
+                    <span>{importProgress.done + importProgress.skipped + importProgress.failed}/{importProgress.total} · {t('agents:buttons.importDone', { done: importProgress.done, skipped: importProgress.skipped })}</span>
+                  </div>
+                )}
                 {agentFolders.length > 0 && (
                   <div className="mt-3">
                     <select
