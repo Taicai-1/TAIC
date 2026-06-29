@@ -207,44 +207,47 @@ async def move_agent_document(
     return {"status": "moved", "id": document_id, "folder_id": doc.agent_folder_id}
 
 
+def _agent_folder_import_with_db(task_id, agent_id, company_id, user_id, destination_parent_id, items, db):
+    """Run a companion folder import using the provided DB session."""
+
+    def find_child(parent_id, name):
+        q = db.query(AgentFolder.id).filter(AgentFolder.agent_id == agent_id, AgentFolder.name == name)
+        q = (
+            q.filter(AgentFolder.parent_id.is_(None))
+            if parent_id is None
+            else q.filter(AgentFolder.parent_id == parent_id)
+        )
+        row = q.first()
+        return row[0] if row else None
+
+    def create_child(parent_id, name):
+        folder = AgentFolder(agent_id=agent_id, company_id=company_id, name=name, is_active=True, parent_id=parent_id)
+        db.add(folder)
+        db.commit()
+        db.refresh(folder)
+        return folder.id
+
+    def is_supported(filename, content):
+        return validate_file_extension(filename) and validate_file_content(content, filename)
+
+    def ingest_file(filename, content, folder_id):
+        process_document_for_user(
+            filename, content, user_id, db, agent_id=agent_id, company_id=company_id, agent_folder_id=folder_id
+        )
+
+    def set_status(total, done, skipped, failed, root_folder_id, status):
+        set_import_status(task_id, total, done, skipped, failed, root_folder_id, status)
+
+    return run_folder_import(
+        items, destination_parent_id, find_child, create_child, ingest_file, is_supported, set_status
+    )
+
+
 def _run_agent_folder_import(task_id, agent_id, company_id, user_id, destination_parent_id, items):
-    """Background job: import a directory tree of files into this agent's folders."""
+    """Background job: owns its own DB session (the request session is gone by then)."""
     db = SessionLocal()
     try:
-
-        def find_child(parent_id, name):
-            q = db.query(AgentFolder.id).filter(AgentFolder.agent_id == agent_id, AgentFolder.name == name)
-            q = (
-                q.filter(AgentFolder.parent_id.is_(None))
-                if parent_id is None
-                else q.filter(AgentFolder.parent_id == parent_id)
-            )
-            row = q.first()
-            return row[0] if row else None
-
-        def create_child(parent_id, name):
-            folder = AgentFolder(
-                agent_id=agent_id, company_id=company_id, name=name, is_active=True, parent_id=parent_id
-            )
-            db.add(folder)
-            db.commit()
-            db.refresh(folder)
-            return folder.id
-
-        def is_supported(filename, content):
-            return validate_file_extension(filename) and validate_file_content(content, filename)
-
-        def ingest_file(filename, content, folder_id):
-            process_document_for_user(
-                filename, content, user_id, db, agent_id=agent_id, company_id=company_id, agent_folder_id=folder_id
-            )
-
-        def set_status(total, done, skipped, failed, root_folder_id, status):
-            set_import_status(task_id, total, done, skipped, failed, root_folder_id, status)
-
-        return run_folder_import(
-            items, destination_parent_id, find_child, create_child, ingest_file, is_supported, set_status
-        )
+        return _agent_folder_import_with_db(task_id, agent_id, company_id, user_id, destination_parent_id, items, db)
     except Exception as e:
         set_import_status(task_id, 0, 0, 0, 0, None, "failed", error=str(e))
         raise
@@ -292,8 +295,8 @@ async def import_agent_folder(
             _run_agent_folder_import, task_id, agent_id, agent.company_id, int(user_id), dest_parent_id, items
         )
         return {"import_task_id": task_id, "status": "processing"}
-    # Synchronous fallback: do the work now and return the summary.
-    summary = _run_agent_folder_import(task_id, agent_id, agent.company_id, int(user_id), dest_parent_id, items)
+    # Synchronous fallback: reuse the request session and return the summary now.
+    summary = _agent_folder_import_with_db(task_id, agent_id, agent.company_id, int(user_id), dest_parent_id, items, db)
     return {**summary, "status": "completed"}
 
 

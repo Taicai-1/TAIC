@@ -604,11 +604,29 @@ async def test_delete_folder_with_subfolder_409(client, auth_cookies, db_session
 # -- folder import (companion) -----------------------------------------------
 
 
+def _fake_agent_ingest(filename, content, user_id, db, agent_id=None, company_id=None, agent_folder_id=None, **kw):
+    """Stand-in for process_document_for_user: insert a Document row, skip GCS/embeddings."""
+    from database import Document
+
+    doc = Document(
+        filename=filename,
+        user_id=user_id,
+        agent_id=agent_id,
+        company_id=company_id,
+        agent_folder_id=agent_folder_id,
+        document_type="rag",
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return doc.id
+
+
 @pytest.mark.asyncio
-async def test_import_creates_tree_and_docs(
-    client, auth_cookies, db_session, test_agent, mock_gcs, mock_mistral_embedding_fast, mock_redis_none
-):
+async def test_import_creates_tree_and_docs(client, auth_cookies, db_session, test_agent, mock_redis_none):
     """Import recreates the directory tree and attaches docs to the right subfolder."""
+    from unittest.mock import patch
+
     from database import AgentFolder, Document
 
     files = [
@@ -617,9 +635,10 @@ async def test_import_creates_tree_and_docs(
         ("files", ("skip.exe", b"MZ", "application/octet-stream")),
     ]
     data = {"paths": ["Root/Sub/a.txt", "Root/b.txt", "Root/Sub/skip.exe"]}
-    resp = await client.post(
-        f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
-    )
+    with patch("routers.agent_folders.process_document_for_user", side_effect=_fake_agent_ingest):
+        resp = await client.post(
+            f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
+        )
     assert resp.status_code == 200
     body = resp.json()
     assert body["done"] == 2 and body["skipped"] == 1
@@ -649,18 +668,19 @@ async def test_import_creates_tree_and_docs(
 
 
 @pytest.mark.asyncio
-async def test_import_merges_into_existing_folder(
-    client, auth_cookies, db_session, test_agent, mock_gcs, mock_mistral_embedding_fast, mock_redis_none
-):
+async def test_import_merges_into_existing_folder(client, auth_cookies, db_session, test_agent, mock_redis_none):
+    from unittest.mock import patch
+
     from database import AgentFolder
 
     existing = _make_folder(db_session, test_agent, "Root")
-    resp = await client.post(
-        f"/api/agents/{test_agent.id}/folders/import",
-        files=[("files", ("a.txt", b"hi", "text/plain"))],
-        data={"paths": ["Root/a.txt"]},
-        cookies=auth_cookies,
-    )
+    with patch("routers.agent_folders.process_document_for_user", side_effect=_fake_agent_ingest):
+        resp = await client.post(
+            f"/api/agents/{test_agent.id}/folders/import",
+            files=[("files", ("a.txt", b"hi", "text/plain"))],
+            data={"paths": ["Root/a.txt"]},
+            cookies=auth_cookies,
+        )
     assert resp.status_code == 200
     roots = (
         db_session.query(AgentFolder)

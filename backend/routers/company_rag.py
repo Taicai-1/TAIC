@@ -418,42 +418,47 @@ async def move_company_document(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+def _company_folder_import_with_db(task_id, company_id, user_id, destination_parent_id, items, db):
+    """Run a company folder import using the provided DB session."""
+
+    def find_child(parent_id, name):
+        q = db.query(CompanyFolder.id).filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name)
+        q = (
+            q.filter(CompanyFolder.parent_id.is_(None))
+            if parent_id is None
+            else q.filter(CompanyFolder.parent_id == parent_id)
+        )
+        row = q.first()
+        return row[0] if row else None
+
+    def create_child(parent_id, name):
+        folder = CompanyFolder(company_id=company_id, name=name, parent_id=parent_id)
+        db.add(folder)
+        db.commit()
+        db.refresh(folder)
+        return folder.id
+
+    def is_supported(filename, content):
+        return validate_file_extension(filename) and validate_file_content(content, filename)
+
+    def ingest_file(filename, content, folder_id):
+        process_document_for_user(
+            filename, content, user_id, db, company_id=company_id, is_company_rag=True, folder_id=folder_id
+        )
+
+    def set_status(total, done, skipped, failed, root_folder_id, status):
+        set_import_status(task_id, total, done, skipped, failed, root_folder_id, status)
+
+    return run_folder_import(
+        items, destination_parent_id, find_child, create_child, ingest_file, is_supported, set_status
+    )
+
+
 def _run_company_folder_import(task_id, company_id, user_id, destination_parent_id, items):
-    """Background job: import a directory tree of files into the company RAG folders."""
+    """Background job: owns its own DB session (the request session is gone by then)."""
     db = SessionLocal()
     try:
-
-        def find_child(parent_id, name):
-            q = db.query(CompanyFolder.id).filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name)
-            q = (
-                q.filter(CompanyFolder.parent_id.is_(None))
-                if parent_id is None
-                else q.filter(CompanyFolder.parent_id == parent_id)
-            )
-            row = q.first()
-            return row[0] if row else None
-
-        def create_child(parent_id, name):
-            folder = CompanyFolder(company_id=company_id, name=name, parent_id=parent_id)
-            db.add(folder)
-            db.commit()
-            db.refresh(folder)
-            return folder.id
-
-        def is_supported(filename, content):
-            return validate_file_extension(filename) and validate_file_content(content, filename)
-
-        def ingest_file(filename, content, folder_id):
-            process_document_for_user(
-                filename, content, user_id, db, company_id=company_id, is_company_rag=True, folder_id=folder_id
-            )
-
-        def set_status(total, done, skipped, failed, root_folder_id, status):
-            set_import_status(task_id, total, done, skipped, failed, root_folder_id, status)
-
-        return run_folder_import(
-            items, destination_parent_id, find_child, create_child, ingest_file, is_supported, set_status
-        )
+        return _company_folder_import_with_db(task_id, company_id, user_id, destination_parent_id, items, db)
     except Exception as e:
         set_import_status(task_id, 0, 0, 0, 0, None, "failed", error=str(e))
         raise
@@ -499,7 +504,7 @@ async def import_company_folder(
         set_import_status(task_id, len(items), 0, 0, 0, None, "processing")
         background_tasks.add_task(_run_company_folder_import, task_id, company_id, int(user_id), dest_parent_id, items)
         return {"import_task_id": task_id, "status": "processing"}
-    summary = _run_company_folder_import(task_id, company_id, int(user_id), dest_parent_id, items)
+    summary = _company_folder_import_with_db(task_id, company_id, int(user_id), dest_parent_id, items, db)
     return {**summary, "status": "completed"}
 
 
