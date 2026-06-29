@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -96,6 +96,16 @@ export default function Organization() {
   const [companyDocs, setCompanyDocs] = useState([]);
   const [companyDocsLoading, setCompanyDocsLoading] = useState(false);
   const [companyDocUploading, setCompanyDocUploading] = useState(false);
+  const folderImportRef = useRef(null);
+  const [importingFolder, setImportingFolder] = useState(false);
+  const [importProgress, setImportProgress] = useState(null);
+
+  useEffect(() => {
+    if (folderImportRef.current) {
+      folderImportRef.current.setAttribute('webkitdirectory', '');
+      folderImportRef.current.setAttribute('directory', '');
+    }
+  }, []);
   const [folders, setFolders] = useState([]);
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -322,6 +332,71 @@ export default function Organization() {
     } finally {
       setCompanyDocUploading(false);
       e.target.value = '';
+    }
+  };
+
+  const ALLOWED_IMPORT_EXT = ['pdf', 'txt', 'docx', 'doc', 'json'];
+
+  const pollCompanyImport = async (taskId) => {
+    for (let i = 0; i < 200; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const res = await api.get(`/api/company-rag/folders/import-status/${taskId}`);
+        const s = res.data;
+        setImportProgress({ total: s.total, done: s.done, skipped: s.skipped, failed: s.failed });
+        if (s.status === 'completed') {
+          toast.success(t('organization:companyRag.importDone', { done: s.done, skipped: s.skipped }));
+          await loadCompanyDocs();
+          await loadFolders();
+          setTimeout(() => setImportProgress(null), 2000);
+          return;
+        }
+        if (s.status === 'failed') {
+          toast.error(s.error || t('organization:companyRag.uploadError'));
+          setImportProgress(null);
+          return;
+        }
+      } catch { /* keep polling */ }
+    }
+    setImportProgress(null);
+    toast.error(t('organization:companyRag.uploadError'));
+  };
+
+  const handleCompanyFolderImport = async (e) => {
+    const all = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!all.length) return;
+    const fd = new FormData();
+    let count = 0;
+    for (const file of all) {
+      const rel = file.webkitRelativePath || file.name;
+      const ext = rel.split('.').pop().toLowerCase();
+      if (!ALLOWED_IMPORT_EXT.includes(ext)) continue;
+      fd.append('files', file);
+      fd.append('paths', rel);
+      count++;
+    }
+    if (!count) { toast.error(t('organization:companyRag.importNoSupported')); return; }
+    if (selectedFolderId) fd.append('parent_id', String(selectedFolderId));
+    try {
+      setImportingFolder(true);
+      setImportProgress({ total: count, done: 0, skipped: 0, failed: 0 });
+      const res = await api.post('/api/company-rag/folders/import', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data.import_task_id) {
+        await pollCompanyImport(res.data.import_task_id);
+      } else {
+        toast.success(t('organization:companyRag.importDone', { done: res.data.done, skipped: res.data.skipped }));
+        await loadCompanyDocs();
+        await loadFolders();
+        setImportProgress(null);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('organization:companyRag.uploadError'));
+      setImportProgress(null);
+    } finally {
+      setImportingFolder(false);
     }
   };
 
@@ -853,13 +928,20 @@ export default function Organization() {
                         <h2 className="text-xl font-heading font-bold text-gray-900">{t('organization:companyRag.title')}</h2>
                       </div>
                       {canManage && (
-                        <label className={`flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white text-sm font-semibold rounded-button shadow-card hover:shadow-elevated transition-all cursor-pointer ${companyDocUploading ? 'opacity-60 pointer-events-none' : ''}`}>
-                          {companyDocUploading
-                            ? <Loader2 className="w-4 h-4 animate-spin" />
-                            : <Upload className="w-4 h-4" />}
-                          <span>{companyDocUploading ? t('organization:companyRag.uploading') : t('organization:companyRag.upload')}</span>
-                          <input type="file" className="hidden" accept=".pdf,.txt,.docx,.ics,.json" onChange={handleCompanyDocUpload} />
-                        </label>
+                        <div className="flex items-center gap-2">
+                          <label className={`flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white text-sm font-semibold rounded-button shadow-card hover:shadow-elevated transition-all cursor-pointer ${companyDocUploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                            {companyDocUploading
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Upload className="w-4 h-4" />}
+                            <span>{companyDocUploading ? t('organization:companyRag.uploading') : t('organization:companyRag.upload')}</span>
+                            <input type="file" className="hidden" accept=".pdf,.txt,.docx,.ics,.json" onChange={handleCompanyDocUpload} />
+                          </label>
+                          <label className={`flex items-center space-x-2 px-4 py-2 bg-white border border-teal-300 text-teal-700 text-sm font-semibold rounded-button hover:bg-teal-50 transition-all cursor-pointer ${importingFolder ? 'opacity-60 pointer-events-none' : ''}`}>
+                            {importingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                            <span>{importingFolder ? t('organization:companyRag.importingFolder') : t('organization:companyRag.importFolder')}</span>
+                            <input ref={folderImportRef} type="file" multiple className="hidden" onChange={handleCompanyFolderImport} />
+                          </label>
+                        </div>
                       )}
                     </div>
                     <p className="text-gray-500 text-sm mb-6 ml-13">{t('organization:companyRag.description')}</p>
@@ -873,6 +955,16 @@ export default function Organization() {
                         </button>
                       )}
                     </div>
+
+                    {importProgress && (
+                      <div className="mb-4 text-xs text-gray-600">
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-teal-600 transition-all"
+                            style={{ width: `${importProgress.total ? Math.round(((importProgress.done + importProgress.skipped + importProgress.failed) / importProgress.total) * 100) : 0}%` }} />
+                        </div>
+                        <span>{importProgress.done + importProgress.skipped + importProgress.failed}/{importProgress.total} · {t('organization:companyRag.importDone', { done: importProgress.done, skipped: importProgress.skipped })}</span>
+                      </div>
+                    )}
 
                     {companyDocsLoading ? (
                       <p className="text-sm text-gray-400">{t('common:loading')}</p>
