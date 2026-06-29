@@ -14,15 +14,23 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPE
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import redis_client
 from auth import verify_token
-from database import get_db, Document, CompanyFolder
+from database import get_db, Document, CompanyFolder, SessionLocal
+from folder_import import (
+    MAX_IMPORT_FILES,
+    MAX_IMPORT_TOTAL_SIZE,
+    get_import_status,
+    run_folder_import,
+    set_import_status,
+)
 from helpers.tenant import _get_caller_company_id
 from permissions import require_role
 from rag_engine import process_document_for_user
 from redis_client import get_redis
 from routers.documents import _process_document_background
 from utils import event_tracker
-from validation import MAX_FILE_SIZE
+from validation import MAX_FILE_SIZE, validate_file_content, validate_file_extension
 
 logger = logging.getLogger(__name__)
 
@@ -408,3 +416,100 @@ async def move_company_document(
         logger.error(f"Error moving company document {document_id}: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def _run_company_folder_import(task_id, company_id, user_id, destination_parent_id, items):
+    """Background job: import a directory tree of files into the company RAG folders."""
+    db = SessionLocal()
+    try:
+
+        def find_child(parent_id, name):
+            q = db.query(CompanyFolder.id).filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name)
+            q = (
+                q.filter(CompanyFolder.parent_id.is_(None))
+                if parent_id is None
+                else q.filter(CompanyFolder.parent_id == parent_id)
+            )
+            row = q.first()
+            return row[0] if row else None
+
+        def create_child(parent_id, name):
+            folder = CompanyFolder(company_id=company_id, name=name, parent_id=parent_id)
+            db.add(folder)
+            db.commit()
+            db.refresh(folder)
+            return folder.id
+
+        def is_supported(filename, content):
+            return validate_file_extension(filename) and validate_file_content(content, filename)
+
+        def ingest_file(filename, content, folder_id):
+            process_document_for_user(
+                filename, content, user_id, db, company_id=company_id, is_company_rag=True, folder_id=folder_id
+            )
+
+        def set_status(total, done, skipped, failed, root_folder_id, status):
+            set_import_status(task_id, total, done, skipped, failed, root_folder_id, status)
+
+        return run_folder_import(
+            items, destination_parent_id, find_child, create_child, ingest_file, is_supported, set_status
+        )
+    except Exception as e:
+        set_import_status(task_id, 0, 0, 0, 0, None, "failed", error=str(e))
+        raise
+    finally:
+        db.close()
+
+
+@router.post("/api/company-rag/folders/import")
+async def import_company_folder(
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    paths: list[str] = Form(...),
+    parent_id: str | None = Form(None),
+    user_id: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Import a whole directory tree of documents into the company RAG folders (admin)."""
+    require_role(int(user_id), db, "admin")
+    company_id = _require_company_id(user_id, db)
+    if len(files) != len(paths):
+        raise HTTPException(status_code=400, detail="files and paths length mismatch")
+    if len(files) > MAX_IMPORT_FILES:
+        raise HTTPException(status_code=413, detail=f"Too many files (max {MAX_IMPORT_FILES})")
+    dest_parent_id = None
+    if parent_id not in (None, ""):
+        try:
+            dest_parent_id = int(parent_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="parent_id must be an integer or null")
+        _folder_or_404(dest_parent_id, company_id, db)
+
+    items = []
+    total_size = 0
+    for f, rel in zip(files, paths):
+        content = await f.read()
+        total_size += len(content)
+        if total_size > MAX_IMPORT_TOTAL_SIZE:
+            raise HTTPException(status_code=413, detail="Import too large")
+        items.append((f.filename, rel, content))
+
+    task_id = str(uuid4())
+    if redis_client.get_redis() is not None:
+        set_import_status(task_id, len(items), 0, 0, 0, None, "processing")
+        background_tasks.add_task(_run_company_folder_import, task_id, company_id, int(user_id), dest_parent_id, items)
+        return {"import_task_id": task_id, "status": "processing"}
+    summary = _run_company_folder_import(task_id, company_id, int(user_id), dest_parent_id, items)
+    return {**summary, "status": "completed"}
+
+
+@router.get("/api/company-rag/folders/import-status/{task_id}")
+async def company_folder_import_status(
+    task_id: str, user_id: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """Poll the status of a company folder-import task."""
+    require_role(int(user_id), db, "member")
+    status = get_import_status(task_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Task not found or expired")
+    return status
