@@ -105,3 +105,33 @@ def test_get_embeddings_batch_preserves_order_and_uses_cache(monkeypatch):
 
 def test_get_embeddings_batch_empty():
     assert mistral_embeddings.get_embeddings_batch([]) == []
+
+
+def test_get_embeddings_batch_mixes_cache_hits_and_misses(monkeypatch):
+    # "cc" is a cache hit; the others miss and go to the API.
+    def fake_cache_get(t):
+        return [99.0] if t == "cc" else None
+
+    monkeypatch.setattr(mistral_embeddings, "_get_cached_embedding", fake_cache_get)
+    monkeypatch.setattr(mistral_embeddings, "_set_cached_embedding", lambda t, e: None)
+
+    sent = {"inputs": []}
+
+    class _Resp:
+        def __init__(self, inputs):
+            self.data = [type("D", (), {"embedding": [float(len(s))]})() for s in inputs]
+
+    class _Client:
+        class embeddings:
+            @staticmethod
+            def create(model, inputs):
+                sent["inputs"].extend(inputs)
+                return _Resp(inputs)
+
+    monkeypatch.setattr(mistral_embeddings, "_get_client", lambda: _Client())
+
+    out = mistral_embeddings.get_embeddings_batch(["a", "cc", "bbb"])
+    # cache hit lands at its original index; misses come from the API, order preserved
+    assert out == [[1.0], [99.0], [3.0]]
+    # only the misses were sent to the API (the cache hit was NOT re-fetched)
+    assert sent["inputs"] == ["a", "bbb"]
