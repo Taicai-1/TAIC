@@ -1,4 +1,4 @@
-from cv_extraction import normalize_skill, normalize_skills
+from cv_extraction import CV_EXTRACTION_SCHEMA, coerce_cv_profile, normalize_skill, normalize_skills
 
 
 def test_normalize_skill_lowercases_and_trims():
@@ -12,9 +12,6 @@ def test_normalize_skills_dedupes_and_drops_empty():
     assert normalize_skills(["React", "react.js", "", None, "Python"]) == ["react", "python"]
     assert normalize_skills(None) == []
     assert normalize_skills("not a list") == []
-
-
-from cv_extraction import CV_EXTRACTION_SCHEMA, coerce_cv_profile
 
 
 def test_coerce_cv_profile_happy_path():
