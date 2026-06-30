@@ -25,7 +25,7 @@ from folder_import import (
 )
 from helpers.agent_helpers import _user_can_access_agent, _user_can_edit_agent
 from rag_engine import process_document_for_user
-from validation import validate_file_content, validate_file_extension
+from validation import MAX_FILE_SIZE, validate_file_content, validate_file_extension
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +239,15 @@ def _agent_folder_import_with_db(task_id, agent_id, company_id, user_id, destina
         set_import_status(task_id, total, done, skipped, failed, root_folder_id, status)
 
     return run_folder_import(
-        items, destination_parent_id, find_child, create_child, ingest_file, is_supported, set_status
+        items,
+        destination_parent_id,
+        find_child,
+        create_child,
+        ingest_file,
+        is_supported,
+        set_status,
+        rollback=db.rollback,
+        max_name_len=MAX_FOLDER_NAME_LENGTH,
     )
 
 
@@ -281,8 +289,16 @@ async def import_agent_folder(
 
     items = []
     total_size = 0
+    max_mb = MAX_FILE_SIZE // (1024 * 1024)
     for f, rel in zip(files, paths):
+        # Reject by declared size BEFORE buffering the file into memory (OOM/DoS guard).
+        if f.size and f.size > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail=f"A file exceeds the {max_mb}MB limit")
+        if f.size and total_size + f.size > MAX_IMPORT_TOTAL_SIZE:
+            raise HTTPException(status_code=413, detail="Import too large")
         content = await f.read()
+        if len(content) > MAX_FILE_SIZE:  # fallback when Content-Length is absent
+            raise HTTPException(status_code=413, detail=f"A file exceeds the {max_mb}MB limit")
         total_size += len(content)
         if total_size > MAX_IMPORT_TOTAL_SIZE:
             raise HTTPException(status_code=413, detail="Import too large")

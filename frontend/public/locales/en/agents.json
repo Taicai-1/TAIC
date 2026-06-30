@@ -9,7 +9,8 @@
   "companyRagFolders": {
     "label": "Included Company RAG folders",
     "allHint": "All checked = all folders (including future ones)",
-    "includesSubfolders": "(includes subfolders)"
+    "includesSubfolders": "(includes subfolders)",
+    "includedViaParent": "(included via parent folder)"
   },
   "folders": {
     "uploadTarget": "Destination folder",

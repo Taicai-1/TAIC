@@ -37,5 +37,28 @@
     "urlRefreshSuccess": "Content refreshed successfully ({{chunks}} chunks)",
     "urlRefreshError": "Error refreshing URL content"
   },
+  "folders": {
+    "uploadTarget": "Destination folder",
+    "uncategorized": "No folder",
+    "newPlaceholder": "New folder",
+    "newSubfolderPlaceholder": "New subfolder",
+    "newSubfolderIn": "New subfolder in:",
+    "create": "Create",
+    "addSubfolder": "Subfolder",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "rename": "Rename",
+    "renamePrompt": "New folder name",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this folder? (it must be empty)",
+    "moveTo": "Move to",
+    "createError": "Could not create folder",
+    "renameError": "Could not rename folder",
+    "toggleError": "Error",
+    "deleteError": "Could not delete folder (not empty?)",
+    "moveError": "Could not move document"
+  },
   "loading": "Loading sources..."
 }

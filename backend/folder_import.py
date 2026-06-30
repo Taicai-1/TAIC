@@ -40,12 +40,15 @@ def split_relative_path(rel_path):
     return parts[:-1], parts[-1]
 
 
-def resolve_folder_for_path(dir_segments, destination_parent_id, find_child, create_child, cache):
+def resolve_folder_for_path(dir_segments, destination_parent_id, find_child, create_child, cache, max_name_len=None):
     """Ensure the folder chain for dir_segments exists under destination_parent_id.
 
     Merges into existing same-named children (find_child) and lazily creates the rest
     (create_child). Returns the leaf folder id, or destination_parent_id if dir_segments
     is empty. Results are memoised per (destination_parent_id, path-so-far) in ``cache``.
+    When ``max_name_len`` is set, each segment is truncated to that length BEFORE both the
+    find and the create so import-created folders obey the same length cap as interactive
+    creation (and never overflow the column / poison the session with a DataError).
 
     find_child(parent_id, name) -> folder_id | None
     create_child(parent_id, name) -> folder_id
@@ -53,6 +56,8 @@ def resolve_folder_for_path(dir_segments, destination_parent_id, find_child, cre
     parent = destination_parent_id
     path_key = ()
     for seg in dir_segments:
+        if max_name_len:
+            seg = seg[:max_name_len]
         path_key = path_key + (seg,)
         cache_key = (destination_parent_id, path_key)
         if cache_key in cache:
@@ -65,13 +70,26 @@ def resolve_folder_for_path(dir_segments, destination_parent_id, find_child, cre
     return parent
 
 
-def run_folder_import(items, destination_parent_id, find_child, create_child, ingest_file, is_supported, set_status):
+def run_folder_import(
+    items,
+    destination_parent_id,
+    find_child,
+    create_child,
+    ingest_file,
+    is_supported,
+    set_status,
+    rollback=None,
+    max_name_len=None,
+):
     """Import each (filename, rel_path, content) item under destination_parent_id.
 
     Skips unsupported files (is_supported), creates folders lazily (no empty folders),
     ingests supported files into their resolved folder, and reports progress via
-    set_status(total, done, skipped, failed, root_folder_id, status). Per-file ingestion
-    errors are counted as ``failed`` without aborting the batch. Returns a summary dict.
+    set_status(total, done, skipped, failed, root_folder_id, status). Per-file errors are
+    counted as ``failed`` without aborting the batch; ``rollback`` (e.g. db.rollback) is
+    called after each failure so a folder-creation/query error cannot poison the shared
+    session and cascade the rest of the batch to failure. ``max_name_len`` caps folder
+    segment names. Returns a summary dict.
     """
     cache = {}
     total = len(items)
@@ -84,14 +102,24 @@ def run_folder_import(items, destination_parent_id, find_child, create_child, in
             continue
         dir_segments, _ = split_relative_path(rel_path)
         try:
-            folder_id = resolve_folder_for_path(dir_segments, destination_parent_id, find_child, create_child, cache)
+            folder_id = resolve_folder_for_path(
+                dir_segments, destination_parent_id, find_child, create_child, cache, max_name_len=max_name_len
+            )
             if root_folder_id is None and dir_segments:
-                root_folder_id = cache[(destination_parent_id, (dir_segments[0],))]
+                first_seg = dir_segments[0][:max_name_len] if max_name_len else dir_segments[0]
+                root_folder_id = cache[(destination_parent_id, (first_seg,))]
             ingest_file(filename, content, folder_id)
             done += 1
         except Exception as e:
             logger.warning(f"folder import: failed on {rel_path}: {e}")
             failed += 1
+            # Recover the session so a poisoned transaction doesn't cascade to every
+            # remaining file (find_child/create_child run on the shared session).
+            if rollback is not None:
+                try:
+                    rollback()
+                except Exception:
+                    pass
         set_status(total, done, skipped, failed, root_folder_id, "processing")
     set_status(total, done, skipped, failed, root_folder_id, "completed")
     return {"total": total, "done": done, "skipped": skipped, "failed": failed, "root_folder_id": root_folder_id}

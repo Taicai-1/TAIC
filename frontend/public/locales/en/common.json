@@ -1,4 +1,6 @@
 {
+  "cancel": "Cancel",
+  "loading": "Loading...",
   "buttons": {
     "create": "Create",
     "add": "Add",

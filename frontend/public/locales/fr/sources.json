@@ -37,5 +37,28 @@
     "urlRefreshSuccess": "Contenu mis à jour avec succès ({{chunks}} chunks)",
     "urlRefreshError": "Erreur lors du rafraîchissement de l'URL"
   },
+  "folders": {
+    "uploadTarget": "Dossier de destination",
+    "uncategorized": "Sans dossier",
+    "newPlaceholder": "Nouveau dossier",
+    "newSubfolderPlaceholder": "Nouveau sous-dossier",
+    "newSubfolderIn": "Nouveau sous-dossier dans :",
+    "create": "Créer",
+    "addSubfolder": "Sous-dossier",
+    "expand": "Déplier",
+    "collapse": "Replier",
+    "rename": "Renommer",
+    "renamePrompt": "Nouveau nom du dossier",
+    "deactivate": "Désactiver",
+    "activate": "Activer",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer ce dossier ? (il doit être vide)",
+    "moveTo": "Déplacer vers",
+    "createError": "Erreur lors de la création du dossier",
+    "renameError": "Erreur lors du renommage",
+    "toggleError": "Erreur",
+    "deleteError": "Impossible de supprimer le dossier (non vide ?)",
+    "moveError": "Impossible de déplacer le document"
+  },
   "loading": "Chargement des sources..."
 }
