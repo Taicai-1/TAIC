@@ -4,7 +4,18 @@ the logic is unit-testable without a database or an LLM."""
 
 import logging
 
+from openai_client import get_chat_response_json
+
 logger = logging.getLogger(__name__)
+
+# Cap the text we send to the extractor; CVs are short and this bounds cost/latency.
+_MAX_EXTRACT_CHARS = 24000
+
+_EXTRACTION_SYSTEM_PROMPT = (
+    "You extract structured data from a single candidate CV. "
+    "Return ONLY a JSON object matching the schema. Use null for unknown fields. "
+    "skills and languages must be arrays of short lowercase tokens."
+)
 
 # Canonical aliases applied AFTER lowercasing + stripping common suffixes.
 _SKILL_ALIASES = {
@@ -90,3 +101,18 @@ def coerce_cv_profile(raw):
     profile["languages"] = normalize_skills(raw.get("languages"))
     profile["raw_extraction"] = raw
     return profile
+
+
+def extract_cv_metadata(text, model_id=None):
+    """Run one JSON-mode LLM call to extract candidate metadata from CV text.
+
+    Returns a coerced profile dict (see ``coerce_cv_profile``). Raises if the LLM
+    call itself fails after its internal retries.
+    """
+    snippet = (text or "")[:_MAX_EXTRACT_CHARS]
+    messages = [
+        {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
+        {"role": "user", "content": "CV:\n" + snippet},
+    ]
+    raw = get_chat_response_json(messages, schema=CV_EXTRACTION_SCHEMA, model_id=model_id, retries=2)
+    return coerce_cv_profile(raw)
