@@ -11,6 +11,30 @@
     "allHint": "Tout coché = tous les dossiers (y compris les futurs)",
     "includesSubfolders": "(inclut les sous-dossiers)"
   },
+  "folders": {
+    "uploadTarget": "Dossier de destination",
+    "noFolder": "Sans dossier",
+    "all": "Tous les documents",
+    "create": "Créer",
+    "newPlaceholder": "Nouveau dossier",
+    "newSubfolderPlaceholder": "Nouveau sous-dossier",
+    "newSubfolderIn": "Nouveau sous-dossier dans :",
+    "addSubfolder": "Sous-dossier",
+    "expand": "Déplier",
+    "collapse": "Replier",
+    "rename": "Renommer",
+    "renamePrompt": "Nouveau nom du dossier",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer ce dossier ? (il doit être vide)",
+    "deactivate": "Désactiver",
+    "activate": "Activer",
+    "moveTo": "Déplacer vers",
+    "createError": "Erreur lors de la création du dossier",
+    "renameError": "Erreur lors du renommage",
+    "toggleError": "Erreur",
+    "deleteError": "Impossible de supprimer (non vide ?)",
+    "moveError": "Impossible de déplacer le document"
+  },
   "types": {
     "conversationnel": {
       "name": "Conversationnel",
