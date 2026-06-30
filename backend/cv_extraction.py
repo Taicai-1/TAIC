@@ -37,3 +37,56 @@ def normalize_skills(raw):
         if norm and norm not in seen:
             seen.append(norm)
     return seen
+
+
+CV_EXTRACTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_name": {"type": "string"},
+        "current_title": {"type": "string"},
+        "seniority": {"type": "string", "description": "junior / confirmé / senior / lead"},
+        "years_experience": {"type": "integer"},
+        "skills": {"type": "array", "items": {"type": "string"}},
+        "languages": {"type": "array", "items": {"type": "string"}},
+        "education_level": {"type": "string"},
+        "location": {"type": "string"},
+        "last_company": {"type": "string"},
+        "summary": {"type": "string"},
+    },
+}
+
+# Scalar string fields copied through verbatim (trimmed).
+_STR_FIELDS = ("full_name", "current_title", "seniority", "education_level", "location", "last_company", "summary")
+
+
+def _coerce_int(value):
+    """Best-effort int coercion. Returns None when not parseable."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_str(value):
+    if not value or not isinstance(value, str):
+        return None
+    return value.strip() or None
+
+
+def coerce_cv_profile(raw):
+    """Coerce a raw LLM extraction dict into a clean profile dict with stable types.
+
+    Always preserves the untouched LLM output under ``raw_extraction`` so we can
+    re-derive fields later without re-calling the model. Never raises on bad input.
+    """
+    raw = raw if isinstance(raw, dict) else {}
+    profile = {field: _coerce_str(raw.get(field)) for field in _STR_FIELDS}
+    profile["years_experience"] = _coerce_int(raw.get("years_experience"))
+    profile["skills"] = normalize_skills(raw.get("skills"))
+    profile["languages"] = normalize_skills(raw.get("languages"))
+    profile["raw_extraction"] = raw
+    return profile
