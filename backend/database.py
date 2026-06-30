@@ -10,6 +10,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import UniqueConstraint
 from pgvector.sqlalchemy import Vector
+from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime, timedelta
 
 # Tenant context variable — set by middleware, read by get_db
@@ -666,6 +667,33 @@ class DocumentChunk(Base):
 
     # Relation avec le document
     document = relationship("Document", back_populates="chunks")
+
+
+class CandidateProfile(Base):
+    __tablename__ = "candidate_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(
+        Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    folder_id = Column(Integer, ForeignKey("company_folders.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    full_name = Column(Text, nullable=True)
+    current_title = Column(Text, nullable=True)
+    location = Column(Text, nullable=True, index=True)
+    seniority = Column(Text, nullable=True, index=True)
+    years_experience = Column(Integer, nullable=True, index=True)
+
+    skills = Column(JSONB, nullable=True)
+    languages = Column(JSONB, nullable=True)
+    education_level = Column(Text, nullable=True)
+    last_company = Column(Text, nullable=True)
+
+    raw_extraction = Column(JSONB, nullable=True)
+    extraction_status = Column(String(20), nullable=False, default="done", server_default="done")
+    extraction_model = Column(String(64), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class AgentAction(Base):
@@ -1493,6 +1521,24 @@ def ensure_support_tables():
         print("ensure_support_tables completed", flush=True)
     except Exception as e:
         print(f"ensure_support_tables failed: {e}", flush=True)
+
+
+def ensure_candidate_profile_indexes():
+    """GIN index on candidate_profiles.skills for skill filter + aggregation. Idempotent."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SET lock_timeout = '5s'"))
+            conn.execute(text("SET statement_timeout = '30s'"))
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_candidate_profiles_skills_gin "
+                    "ON candidate_profiles USING gin (skills)"
+                )
+            )
+            conn.commit()
+            logger.info("ensure_candidate_profile_indexes: OK")
+    except Exception as e:
+        logger.warning(f"ensure_candidate_profile_indexes skipped: {e}")
 
 
 # App-wide advisory lock id for serializing startup schema migrations.
