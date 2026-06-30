@@ -1,4 +1,5 @@
 import rag_engine
+import routers.company_rag as company_rag
 from database import Document, DocumentChunk, CandidateProfile, CompanyFolder
 from cv_extraction import upsert_candidate_profile
 
@@ -95,3 +96,63 @@ def test_upsert_candidate_profile_creates_then_skips(db_session, test_user, test
     )
     assert again is False
     assert db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc.id).count() == 1
+
+
+def test_ingest_file_extracts_when_cv_base(db_session, test_user, monkeypatch):
+    folder = CompanyFolder(company_id=test_user.company_id, name="CVs", is_cv_base=True)
+    db_session.add(folder)
+    db_session.flush()
+
+    # Stub the heavy bits: document ingestion returns a doc id; extraction returns a profile.
+    doc = Document(filename="a.pdf", content="x", user_id=test_user.id,
+                   company_id=test_user.company_id, is_company_rag=True, folder_id=folder.id)
+    db_session.add(doc)
+    db_session.flush()
+
+    # Accept the dummy bytes as a supported file (real validators reject non-PDF bytes).
+    monkeypatch.setattr(company_rag, "validate_file_extension", lambda fn: True)
+    monkeypatch.setattr(company_rag, "validate_file_content", lambda content, fn: True)
+    monkeypatch.setattr(company_rag, "process_document_for_user", lambda *a, **k: doc.id)
+    monkeypatch.setattr(
+        company_rag, "extract_cv_metadata",
+        lambda text, model_id=None: {"full_name": "Bob", "skills": ["python"], "languages": [],
+                                     "years_experience": 3, "raw_extraction": {}},
+    )
+
+    summary = company_rag._company_folder_import_with_db(
+        task_id="t1", company_id=test_user.company_id, user_id=test_user.id,
+        destination_parent_id=folder.id,
+        items=[("a.pdf", "a.pdf", b"PDFBYTES")], db=db_session,
+    )
+
+    assert summary["done"] == 1
+    prof = db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc.id).first()
+    assert prof is not None and prof.full_name == "Bob"
+
+
+def test_ingest_file_skips_extraction_when_not_cv_base(db_session, test_user, monkeypatch):
+    folder = CompanyFolder(company_id=test_user.company_id, name="Docs", is_cv_base=False)
+    db_session.add(folder)
+    db_session.flush()
+    doc = Document(filename="b.pdf", content="x", user_id=test_user.id,
+                   company_id=test_user.company_id, is_company_rag=True, folder_id=folder.id)
+    db_session.add(doc)
+    db_session.flush()
+
+    called = {"extract": 0}
+    monkeypatch.setattr(company_rag, "validate_file_extension", lambda fn: True)
+    monkeypatch.setattr(company_rag, "validate_file_content", lambda content, fn: True)
+    monkeypatch.setattr(company_rag, "process_document_for_user", lambda *a, **k: doc.id)
+
+    def _extract(*a, **k):
+        called["extract"] += 1
+        return {}
+
+    monkeypatch.setattr(company_rag, "extract_cv_metadata", _extract)
+
+    company_rag._company_folder_import_with_db(
+        task_id="t2", company_id=test_user.company_id, user_id=test_user.id,
+        destination_parent_id=folder.id, items=[("b.pdf", "b.pdf", b"X")], db=db_session,
+    )
+    assert called["extract"] == 0
+    assert db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc.id).count() == 0

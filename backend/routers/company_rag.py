@@ -31,8 +31,12 @@ from redis_client import get_redis
 from routers.documents import _process_document_background
 from utils import event_tracker
 from validation import MAX_FILE_SIZE, validate_file_content, validate_file_extension
+from cv_extraction import extract_cv_metadata, upsert_candidate_profile
 
 logger = logging.getLogger(__name__)
+
+# Default small model for CV metadata extraction (Phase 1; tune via POC, see spec section 8).
+CV_EXTRACTION_MODEL = "gpt-4o-mini"
 
 router = APIRouter()
 
@@ -441,10 +445,33 @@ def _company_folder_import_with_db(task_id, company_id, user_id, destination_par
     def is_supported(filename, content):
         return validate_file_extension(filename) and validate_file_content(content, filename)
 
+    def _folder_is_cv_base(folder_id):
+        if folder_id is None:
+            return False
+        row = db.query(CompanyFolder.is_cv_base).filter(CompanyFolder.id == folder_id).first()
+        return bool(row[0]) if row else False
+
     def ingest_file(filename, content, folder_id):
-        process_document_for_user(
+        document_id = process_document_for_user(
             filename, content, user_id, db, company_id=company_id, is_company_rag=True, folder_id=folder_id
         )
+        if document_id and _folder_is_cv_base(folder_id):
+            text_content = (
+                db.query(Document.content).filter(Document.id == document_id).scalar() or ""
+            )
+            try:
+                profile = extract_cv_metadata(text_content, model_id=CV_EXTRACTION_MODEL)
+                upsert_candidate_profile(
+                    db, document_id=document_id, company_id=company_id, folder_id=folder_id,
+                    profile=profile, model_id=CV_EXTRACTION_MODEL, status="done",
+                )
+            except Exception as e:
+                logger.warning(f"CV extraction failed for {filename}: {e}")
+                upsert_candidate_profile(
+                    db, document_id=document_id, company_id=company_id, folder_id=folder_id,
+                    profile={"raw_extraction": {}}, model_id=CV_EXTRACTION_MODEL, status="failed",
+                )
+            db.commit()
 
     def set_status(total, done, skipped, failed, root_folder_id, status):
         set_import_status(task_id, total, done, skipped, failed, root_folder_id, status)
