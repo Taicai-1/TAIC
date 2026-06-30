@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -96,16 +96,17 @@ export default function Organization() {
   const [companyDocs, setCompanyDocs] = useState([]);
   const [companyDocsLoading, setCompanyDocsLoading] = useState(false);
   const [companyDocUploading, setCompanyDocUploading] = useState(false);
-  const folderImportRef = useRef(null);
   const [importingFolder, setImportingFolder] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
 
-  useEffect(() => {
-    if (folderImportRef.current) {
-      folderImportRef.current.setAttribute('webkitdirectory', '');
-      folderImportRef.current.setAttribute('directory', '');
+  // Callback ref: set the directory-picker attributes whenever the input mounts
+  // (a mount-time effect misses it because the input is in a conditionally-rendered section).
+  const setFolderInputRef = (el) => {
+    if (el) {
+      el.setAttribute('webkitdirectory', '');
+      el.setAttribute('directory', '');
     }
-  }, []);
+  };
   const [folders, setFolders] = useState([]);
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -941,7 +942,7 @@ export default function Organization() {
                           <label className={`flex items-center space-x-2 px-4 py-2 bg-white border border-teal-300 text-teal-700 text-sm font-semibold rounded-button hover:bg-teal-50 transition-all cursor-pointer ${importingFolder ? 'opacity-60 pointer-events-none' : ''}`}>
                             {importingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                             <span>{importingFolder ? t('organization:companyRag.importingFolder') : t('organization:companyRag.importFolder')}</span>
-                            <input ref={folderImportRef} type="file" multiple className="hidden" onChange={handleCompanyFolderImport} />
+                            <input ref={setFolderInputRef} type="file" multiple className="hidden" onChange={handleCompanyFolderImport} />
                           </label>
                         </div>
                       )}

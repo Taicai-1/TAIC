@@ -862,6 +862,7 @@ async def get_user_documents(
                 # Safely try to add agent_id if it exists
                 if hasattr(doc, "agent_id"):
                     doc_data["agent_id"] = doc.agent_id
+                doc_data["agent_folder_id"] = getattr(doc, "agent_folder_id", None)
                 result.append(doc_data)
             except Exception as doc_error:
                 logger.error(f"Error processing document {doc.id}: {doc_error}")
