@@ -122,6 +122,7 @@ def upsert_candidate_profile(db, document_id, company_id, folder_id, profile, mo
     """Insert a CandidateProfile for ``document_id`` if none exists yet.
 
     Returns True if a row was created, False if one already existed (idempotent skip).
+    An existing row is never updated; to refresh a profile, delete the row first.
     Caller is responsible for committing the surrounding transaction.
     """
     from database import CandidateProfile
@@ -143,7 +144,7 @@ def upsert_candidate_profile(db, document_id, company_id, folder_id, profile, mo
         languages=profile.get("languages") or [],
         education_level=profile.get("education_level"),
         last_company=profile.get("last_company"),
-        raw_extraction=profile.get("raw_extraction") or {},
+        raw_extraction=profile.get("raw_extraction") or {},  # 'summary' from the profile dict is captured here (no summary column)
         extraction_status=status,
         extraction_model=model_id,
     )
