@@ -1268,6 +1268,17 @@ def ensure_folder_hierarchy_constraints():
         "ON agent_folders (agent_id, name) WHERE parent_id IS NULL",
     ]
     with engine.connect() as conn:
+        # Prevent a blocked ALTER/CREATE INDEX from hanging startup (or stalling live
+        # instances' reads behind a queued ACCESS EXCLUSIVE lock) during a rolling deploy.
+        # Session-level SET persists across the per-statement commits below; a statement
+        # skipped on lock_timeout simply retries on the next boot (the function is idempotent).
+        try:
+            conn.execute(text("SET lock_timeout = '5s'"))
+            conn.execute(text("SET statement_timeout = '30s'"))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            logger.warning(f"ensure_folder_hierarchy_constraints: could not set timeouts: {e}")
         for stmt in statements:
             try:
                 conn.execute(text(stmt))

@@ -1,4 +1,6 @@
 {
+  "cancel": "Annuler",
+  "loading": "Chargement...",
   "buttons": {
     "create": "Créer",
     "add": "Ajouter",

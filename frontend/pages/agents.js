@@ -70,23 +70,31 @@ export default function AgentsPage() {
       return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
     });
 
-  const renderCompanyFolderCheckboxes = (nodes, depth = 0) =>
+  // A selected parent folder is expanded to its whole subtree by the backend, so any
+  // descendant of an explicitly-selected folder is force-included and shown checked +
+  // disabled (unchecking it would be a no-op). To exclude a subfolder, uncheck the parent.
+  const renderCompanyFolderCheckboxes = (nodes, depth = 0, ancestorForcesInclude = false) =>
     nodes.map(f => {
       const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
-      const checked = all || form.company_rag_folder_ids.includes(f.id);
+      const explicitlySelected = !all && form.company_rag_folder_ids.includes(f.id);
+      const checked = all || explicitlySelected || ancestorForcesInclude;
+      const disabled = ancestorForcesInclude;
+      const childForces = ancestorForcesInclude || explicitlySelected;
       return (
         <div key={f.id} className="space-y-1.5">
           <div className="flex items-center" style={{ paddingLeft: depth * 16 }}>
             <label
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
-              <input type="checkbox" checked={checked} onChange={() => toggleCompanyFolder(f.id)} />
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
+              <input type="checkbox" checked={checked} disabled={disabled} onChange={() => toggleCompanyFolder(f.id)} />
               {f.name}
-              {f.children.length > 0 && (
+              {disabled ? (
+                <span className="text-xs text-gray-400">{t('agents:companyRagFolders.includedViaParent')}</span>
+              ) : f.children.length > 0 ? (
                 <span className="text-xs text-gray-400">{t('agents:companyRagFolders.includesSubfolders')}</span>
-              )}
+              ) : null}
             </label>
           </div>
-          {f.children.length > 0 && renderCompanyFolderCheckboxes(f.children, depth + 1)}
+          {f.children.length > 0 && renderCompanyFolderCheckboxes(f.children, depth + 1, childForces)}
         </div>
       );
     });
