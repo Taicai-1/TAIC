@@ -1,4 +1,5 @@
 import cv_extraction
+import mistral_embeddings
 from cv_extraction import CV_EXTRACTION_SCHEMA, coerce_cv_profile, normalize_skill, normalize_skills
 
 
@@ -74,3 +75,33 @@ def test_extract_cv_metadata_truncates_long_text(monkeypatch):
     monkeypatch.setattr(cv_extraction, "get_chat_response_json", lambda *a, **k: {})
     # Should not raise on very long input.
     cv_extraction.extract_cv_metadata("x" * 100_000)
+
+
+def test_get_embeddings_batch_preserves_order_and_uses_cache(monkeypatch):
+    # No Redis cache in the test: force misses.
+    monkeypatch.setattr(mistral_embeddings, "_get_cached_embedding", lambda t: None)
+    monkeypatch.setattr(mistral_embeddings, "_set_cached_embedding", lambda t, e: None)
+
+    calls = {"n": 0}
+
+    class _Resp:
+        def __init__(self, inputs):
+            # One data item per input, embedding encodes the input length for assertion.
+            self.data = [type("D", (), {"embedding": [float(len(s))]})() for s in inputs]
+
+    class _Client:
+        class embeddings:
+            @staticmethod
+            def create(model, inputs):
+                calls["n"] += 1
+                return _Resp(inputs)
+
+    monkeypatch.setattr(mistral_embeddings, "_get_client", lambda: _Client())
+
+    out = mistral_embeddings.get_embeddings_batch(["a", "bbb", "cc"], batch_size=2)
+    assert out == [[1.0], [3.0], [2.0]]   # order preserved
+    assert calls["n"] == 2                 # 3 items, batch_size 2 -> 2 API calls
+
+
+def test_get_embeddings_batch_empty():
+    assert mistral_embeddings.get_embeddings_batch([]) == []
