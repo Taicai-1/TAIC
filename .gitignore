@@ -206,3 +206,6 @@ test_openai.py
 
 # Claude Code
 .claude/
+
+# Git worktrees (isolated workspaces)
+.worktrees/
