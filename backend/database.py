@@ -584,6 +584,7 @@ class CompanyFolder(Base):
         Integer, ForeignKey("company_folders.id", ondelete="CASCADE"), nullable=True, index=True
     )  # NULL = top-level folder
     name = Column(String(255), nullable=False)
+    is_cv_base = Column(Boolean, default=False, nullable=False, server_default="false")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -1208,6 +1209,8 @@ def ensure_columns():
         # RAG folder hierarchy (subfolders)
         ("company_folders", "parent_id", "INTEGER REFERENCES company_folders(id) ON DELETE CASCADE"),
         ("agent_folders", "parent_id", "INTEGER REFERENCES agent_folders(id) ON DELETE CASCADE"),
+        # Companion CV base
+        ("company_folders", "is_cv_base", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ]
     try:
         with engine.connect() as conn:

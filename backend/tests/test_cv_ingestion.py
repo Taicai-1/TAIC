@@ -1,5 +1,5 @@
 import rag_engine
-from database import Document, DocumentChunk, CandidateProfile
+from database import Document, DocumentChunk, CandidateProfile, CompanyFolder
 
 
 def test_ingest_text_content_batches_embeddings(db_session, test_user, test_agent, monkeypatch):
@@ -52,3 +52,16 @@ def test_candidate_profile_crud(db_session, test_user, test_agent):
     assert fetched.full_name == "Jean Dupont"
     assert fetched.skills == ["python", "react"]
     assert fetched.years_experience == 8
+
+
+def test_company_folder_is_cv_base_defaults_false(db_session, test_user):
+    folder = CompanyFolder(company_id=test_user.company_id, name="CVs")
+    db_session.add(folder)
+    db_session.flush()
+    db_session.refresh(folder)
+    assert folder.is_cv_base is False
+
+    folder.is_cv_base = True
+    db_session.flush()
+    db_session.refresh(folder)
+    assert folder.is_cv_base is True
