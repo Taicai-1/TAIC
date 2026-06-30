@@ -5,7 +5,7 @@ import {
   ArrowLeft, Bot, MessageCircle, Check, Camera, Trash2, Plus,
   Upload, Loader2, FileText, Database, Link, Zap, Users, TrendingUp,
   LogOut, UserCircle, Mail, ChevronDown, ChevronUp, Hash, Copy, CheckCircle, XCircle, Send, RefreshCw, HardDrive, Globe,
-  Pencil, Sparkles, AlertCircle, ImageIcon, Calendar, ClipboardList
+  Pencil, Sparkles, AlertCircle, ImageIcon, Calendar, ClipboardList, Eye, EyeOff
 } from "lucide-react";
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
@@ -77,6 +77,23 @@ export default function CompanionSettings() {
   const [urlInput, setUrlInput] = useState("");
   const [addingUrl, setAddingUrl] = useState(false);
   const [refreshingDocId, setRefreshingDocId] = useState(null);
+  const [agentFolders, setAgentFolders] = useState([]);
+  const [uploadFolderId, setUploadFolderId] = useState(null);
+  const [importingFolder, setImportingFolder] = useState(false);
+  const [importProgress, setImportProgress] = useState(null); // { total, done, skipped, failed }
+  const [selectedFolderId, setSelectedFolderId] = useState(null); // null = all documents
+  const [collapsedFolders, setCollapsedFolders] = useState({}); // id -> true (collapsed)
+  const [createParentId, setCreateParentId] = useState(null); // parent for the next created folder
+  const [newFolderName, setNewFolderName] = useState('');
+
+  // Callback ref: set the directory-picker attributes whenever the input mounts
+  // (a mount-time effect misses it because the input is in a conditionally-rendered section).
+  const setFolderInputRef = (el) => {
+    if (el) {
+      el.setAttribute('webkitdirectory', '');
+      el.setAttribute('directory', '');
+    }
+  };
 
   // Traceability docs
   const [traceabilityDocs, setTraceabilityDocs] = useState([]);
@@ -222,6 +239,13 @@ export default function CompanionSettings() {
       const res = await api.get(`/api/agents/${agentId}/drive-links`);
       setDriveLinks(res.data.links || []);
     } catch { setDriveLinks([]); }
+  }, []);
+
+  const loadAgentFolders = useCallback(async (agentId) => {
+    try {
+      const res = await api.get(`/api/agents/${agentId}/folders`);
+      setAgentFolders(res.data.folders || []);
+    } catch { setAgentFolders([]); }
   }, []);
 
   const loadNeo4jData = useCallback(async () => {
@@ -478,6 +502,8 @@ export default function CompanionSettings() {
       loadTraceabilityDocs(urlAgentId);
       loadNotionLinks(urlAgentId);
       loadDriveLinks(urlAgentId);
+      loadAgentFolders(urlAgentId);
+      setUploadFolderId(null);
       loadNeo4jData();
       loadSlackConfig(urlAgentId);
       loadRecaps(urlAgentId);
@@ -592,6 +618,7 @@ export default function CompanionSettings() {
           toast.success(t('agents:toast.documentAdded'));
           const docs = await api.get(`/user/documents?agent_id=${agentId}`);
           setAgentDocuments(docs.data.documents || []);
+          loadAgentFolders(agentId);
           // Clear progress after a short delay so user sees 100%
           setTimeout(() => setUploadProgress(null), 1500);
           return;
@@ -614,6 +641,9 @@ export default function CompanionSettings() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("agent_id", currentAgent.id);
+      if (uploadFolderId) {
+        fd.append("folder_id", String(uploadFolderId));
+      }
       const response = await api.post(`/upload-agent`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -627,6 +657,7 @@ export default function CompanionSettings() {
         await new Promise(r => setTimeout(r, 500));
         const res = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
         setAgentDocuments(res.data.documents || []);
+        loadAgentFolders(currentAgent.id);
         setTimeout(() => setUploadProgress(null), 1500);
       }
     } catch (error) {
@@ -634,6 +665,234 @@ export default function CompanionSettings() {
       toast.error(error.response?.data?.detail || t('agents:toast.documentAddError'));
     } finally { setUploadingDoc(false); }
   };
+
+  const ALLOWED_IMPORT_EXT = ['pdf', 'txt', 'docx', 'doc', 'json'];
+
+  const pollImportStatus = async (taskId, agentId) => {
+    for (let i = 0; i < 200; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const res = await api.get(`/api/agents/${agentId}/folders/import-status/${taskId}`);
+        const s = res.data;
+        setImportProgress({ total: s.total, done: s.done, skipped: s.skipped, failed: s.failed });
+        if (s.status === 'completed') {
+          toast.success(t('agents:buttons.importDone', { done: s.done, skipped: s.skipped }));
+          const docs = await api.get(`/user/documents?agent_id=${agentId}`);
+          setAgentDocuments(docs.data.documents || []);
+          loadAgentFolders(agentId);
+          setTimeout(() => setImportProgress(null), 2000);
+          return;
+        }
+        if (s.status === 'failed') {
+          toast.error(s.error || t('agents:toast.documentAddError'));
+          setImportProgress(null);
+          return;
+        }
+      } catch { /* keep polling */ }
+    }
+    setImportProgress(null);
+    toast.error(t('agents:toast.documentAddError'));
+  };
+
+  const handleFolderImport = async (e) => {
+    const all = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!all.length || !currentAgent) return;
+    const fd = new FormData();
+    let count = 0;
+    for (const file of all) {
+      const rel = file.webkitRelativePath || file.name;
+      const ext = rel.split('.').pop().toLowerCase();
+      if (!ALLOWED_IMPORT_EXT.includes(ext)) continue;
+      fd.append('files', file);
+      fd.append('paths', rel);
+      count++;
+    }
+    if (!count) { toast.error(t('agents:buttons.importNoSupported')); return; }
+    if (uploadFolderId) fd.append('parent_id', String(uploadFolderId));
+    try {
+      setImportingFolder(true);
+      setImportProgress({ total: count, done: 0, skipped: 0, failed: 0 });
+      const res = await api.post(`/api/agents/${currentAgent.id}/folders/import`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data.import_task_id) {
+        await pollImportStatus(res.data.import_task_id, currentAgent.id);
+      } else {
+        toast.success(t('agents:buttons.importDone', { done: res.data.done, skipped: res.data.skipped }));
+        const docs = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
+        setAgentDocuments(docs.data.documents || []);
+        loadAgentFolders(currentAgent.id);
+        setImportProgress(null);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('agents:toast.documentAddError'));
+      setImportProgress(null);
+    } finally {
+      setImportingFolder(false);
+    }
+  };
+
+  // ---- Companion RAG folders (sections) ----
+  const buildFolderTree = (flat) => {
+    const byParent = {};
+    flat.forEach((f) => {
+      const key = f.parent_id ?? 'root';
+      (byParent[key] = byParent[key] || []).push(f);
+    });
+    const make = (parentKey) =>
+      (byParent[parentKey] || [])
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((f) => ({ ...f, children: make(f.id) }));
+    return make('root');
+  };
+
+  const folderOptions = () => {
+    const out = [];
+    const walk = (nodes, prefix) =>
+      nodes.forEach((f) => {
+        out.push({ id: f.id, label: prefix + f.name + (f.is_active ? '' : ' (inactif)') });
+        walk(f.children, prefix + '— ');
+      });
+    walk(buildFolderTree(agentFolders), '');
+    return out;
+  };
+
+  // Company-RAG folder selection (tree). A selected parent is expanded to its whole
+  // subtree by the backend, so descendants of a selected folder are shown checked +
+  // disabled (unchecking would be a no-op). To exclude a subfolder, uncheck the parent.
+  const toggleCompanyRagFolder = (folderId) =>
+    setForm(prev => {
+      const base = (!prev.company_rag_folder_ids || prev.company_rag_folder_ids.length === 0)
+        ? companyFolders.map(x => x.id)
+        : [...prev.company_rag_folder_ids];
+      const next = base.includes(folderId) ? base.filter(id => id !== folderId) : [...base, folderId];
+      return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
+    });
+
+  const renderCompanyRagCheckboxes = (nodes, depth = 0, ancestorForcesInclude = false) =>
+    nodes.map(f => {
+      const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
+      const explicitlySelected = !all && form.company_rag_folder_ids.includes(f.id);
+      const checked = all || explicitlySelected || ancestorForcesInclude;
+      const disabled = ancestorForcesInclude;
+      const childForces = ancestorForcesInclude || explicitlySelected;
+      return (
+        <div key={f.id} className="space-y-1.5">
+          <div className="flex items-center" style={{ paddingLeft: depth * 16 }}>
+            <label className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
+              <input type="checkbox" checked={checked} disabled={disabled} onChange={() => toggleCompanyRagFolder(f.id)} />
+              {f.name}
+              {disabled ? (
+                <span className="text-xs text-gray-400">{t('agents:companyRagFolders.includedViaParent')}</span>
+              ) : f.children.length > 0 ? (
+                <span className="text-xs text-gray-400">{t('agents:companyRagFolders.includesSubfolders')}</span>
+              ) : null}
+            </label>
+          </div>
+          {f.children.length > 0 && renderCompanyRagCheckboxes(f.children, depth + 1, childForces)}
+        </div>
+      );
+    });
+
+  const handleCreateAgentFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name || !currentAgent) return;
+    try {
+      await api.post(`/api/agents/${currentAgent.id}/folders`, { name, parent_id: createParentId });
+      setNewFolderName('');
+      if (createParentId) setCollapsedFolders((c) => ({ ...c, [createParentId]: false }));
+      setCreateParentId(null);
+      await loadAgentFolders(currentAgent.id);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || t('agents:folders.createError', 'Erreur lors de la création du dossier'));
+    }
+  };
+
+  const handleRenameAgentFolder = async (folder) => {
+    const name = (window.prompt(t('agents:folders.renamePrompt', 'Nouveau nom du dossier'), folder.name) || '').trim();
+    if (!name || name === folder.name) return;
+    try {
+      await api.put(`/api/agents/${currentAgent.id}/folders/${folder.id}`, { name });
+      await loadAgentFolders(currentAgent.id);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || t('agents:folders.renameError', 'Erreur lors du renommage'));
+    }
+  };
+
+  const handleToggleAgentFolder = async (folder) => {
+    try {
+      await api.put(`/api/agents/${currentAgent.id}/folders/${folder.id}`, { is_active: !folder.is_active });
+      await loadAgentFolders(currentAgent.id);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || t('agents:folders.toggleError', 'Erreur'));
+    }
+  };
+
+  const handleDeleteAgentFolder = async (folder) => {
+    if (!confirm(t('agents:folders.deleteConfirm', 'Supprimer ce dossier ? (il doit être vide)'))) return;
+    try {
+      await api.delete(`/api/agents/${currentAgent.id}/folders/${folder.id}`);
+      if (selectedFolderId === folder.id) setSelectedFolderId(null);
+      await loadAgentFolders(currentAgent.id);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || t('agents:folders.deleteError', 'Impossible de supprimer (non vide ?)'));
+    }
+  };
+
+  const handleMoveAgentDoc = async (docId, targetFolderId) => {
+    try {
+      await api.put(`/api/agents/${currentAgent.id}/documents/${docId}/folder`, {
+        folder_id: targetFolderId === '' ? null : Number(targetFolderId),
+      });
+      const docs = await api.get(`/user/documents?agent_id=${currentAgent.id}`);
+      setAgentDocuments(docs.data.documents || []);
+      loadAgentFolders(currentAgent.id);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || t('agents:folders.moveError', 'Impossible de déplacer le document'));
+    }
+  };
+
+  const renderAgentFolderNodes = (nodes, depth = 0) =>
+    nodes.map((f) => (
+      <div key={f.id}>
+        <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
+          {f.children.length > 0 ? (
+            <button type="button"
+              onClick={() => setCollapsedFolders((c) => ({ ...c, [f.id]: !c[f.id] }))}
+              className="w-4 text-gray-400 hover:text-gray-700"
+              title={collapsedFolders[f.id] ? t('agents:folders.expand', 'Déplier') : t('agents:folders.collapse', 'Replier')}>
+              {collapsedFolders[f.id] ? '▸' : '▾'}
+            </button>
+          ) : (
+            <span className="w-4" />
+          )}
+          <div
+            onClick={() => setSelectedFolderId(f.id)}
+            className={`group flex items-center rounded-button border px-3 py-1.5 text-sm cursor-pointer transition-colors ${selectedFolderId === f.id ? 'bg-purple-50 border-purple-300 text-purple-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'} ${!f.is_active ? 'opacity-50' : ''}`}>
+            <span className="font-medium">{f.name}</span>
+            <span className="ml-2 text-xs text-gray-400">{f.document_count}</span>
+            <span className="ml-2 hidden group-hover:inline-flex items-center gap-1.5">
+              <button type="button" title={t('agents:folders.addSubfolder', 'Sous-dossier')}
+                onClick={(ev) => { ev.stopPropagation(); setCreateParentId(f.id); }}
+                className="text-gray-400 hover:text-gray-700"><Plus className="w-3.5 h-3.5" /></button>
+              <button type="button" title={f.is_active ? t('agents:folders.deactivate', 'Désactiver') : t('agents:folders.activate', 'Activer')}
+                onClick={(ev) => { ev.stopPropagation(); handleToggleAgentFolder(f); }}
+                className="text-gray-400 hover:text-gray-700">{f.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}</button>
+              <button type="button" title={t('agents:folders.rename', 'Renommer')}
+                onClick={(ev) => { ev.stopPropagation(); handleRenameAgentFolder(f); }}
+                className="text-gray-400 hover:text-gray-700"><Pencil className="w-3.5 h-3.5" /></button>
+              <button type="button" title={t('agents:folders.delete', 'Supprimer')}
+                onClick={(ev) => { ev.stopPropagation(); handleDeleteAgentFolder(f); }}
+                className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+            </span>
+          </div>
+        </div>
+        {!collapsedFolders[f.id] && f.children.length > 0 && (
+          <div className="mt-2 space-y-2">{renderAgentFolderNodes(f.children, depth + 1)}</div>
+        )}
+      </div>
+    ));
 
   const deleteDocument = async (docId) => {
     if (!confirm(t('agents:toast.documentDeleteConfirm'))) return;
@@ -1253,25 +1512,8 @@ export default function CompanionSettings() {
           {form.include_company_rag && companyFolders.length > 0 && (
             <div className="mt-3 ml-1 space-y-2">
               <p className="text-xs text-gray-500">{t('agents:companyRagFolders.label')}</p>
-              <div className="flex flex-wrap gap-2">
-                {companyFolders.map(f => {
-                  const all = !form.company_rag_folder_ids || form.company_rag_folder_ids.length === 0;
-                  const checked = all || form.company_rag_folder_ids.includes(f.id);
-                  return (
-                    <label key={f.id}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-button border text-sm cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-gray-200 text-gray-600'}`}>
-                      <input type="checkbox" checked={checked}
-                        onChange={() => setForm(prev => {
-                          const base = (!prev.company_rag_folder_ids || prev.company_rag_folder_ids.length === 0)
-                            ? companyFolders.map(x => x.id)
-                            : [...prev.company_rag_folder_ids];
-                          const next = base.includes(f.id) ? base.filter(id => id !== f.id) : [...base, f.id];
-                          return { ...prev, company_rag_folder_ids: next.length === companyFolders.length ? [] : next };
-                        })} />
-                      {f.name}
-                    </label>
-                  );
-                })}
+              <div className="space-y-1.5">
+                {renderCompanyRagCheckboxes(buildFolderTree(companyFolders))}
               </div>
               <p className="text-xs text-gray-400">{t('agents:companyRagFolders.allHint')}</p>
             </div>
@@ -1336,11 +1578,43 @@ export default function CompanionSettings() {
                   {isDragging ? t('agents:documents.dropHere') : t('agents:documents.dragDrop')}
                 </p>
                 <p className="text-xs text-gray-500 mb-3">{t('agents:documents.formats')}</p>
-                <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
-                  <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.json" disabled={uploadingDoc}
-                    onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
-                  <Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span>
-                </label>
+                <div className="inline-flex items-center gap-2">
+                  <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-sm hover:from-purple-700 hover:to-blue-700 transition-all font-medium text-sm shadow-card hover:shadow-elevated">
+                    <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.json" disabled={uploadingDoc}
+                      onChange={e => { if (e.target.files?.[0]) { uploadDocument(e.target.files[0]); e.target.value = ''; } }} />
+                    <Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span>
+                  </label>
+                  <label className={`cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-sm hover:bg-purple-50 transition-all font-medium text-sm ${importingFolder ? 'opacity-60 pointer-events-none' : ''}`}>
+                    <input ref={setFolderInputRef} type="file" multiple className="hidden" disabled={importingFolder}
+                      onChange={handleFolderImport} />
+                    {importingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    <span>{importingFolder ? t('agents:buttons.importingFolder') : t('agents:buttons.importFolder')}</span>
+                  </label>
+                </div>
+                {importProgress && (
+                  <div className="mt-3 text-xs text-gray-600 max-w-xs mx-auto">
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-purple-600 transition-all"
+                        style={{ width: `${importProgress.total ? Math.round(((importProgress.done + importProgress.skipped + importProgress.failed) / importProgress.total) * 100) : 0}%` }} />
+                    </div>
+                    <span>{importProgress.done + importProgress.skipped + importProgress.failed}/{importProgress.total} · {t('agents:buttons.importDone', { done: importProgress.done, skipped: importProgress.skipped })}</span>
+                  </div>
+                )}
+                {agentFolders.length > 0 && (
+                  <div className="mt-3">
+                    <select
+                      value={uploadFolderId ?? ''}
+                      onChange={e => setUploadFolderId(e.target.value === '' ? null : Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-200 rounded-sm text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all bg-white"
+                      title={t('agents:folders.uploadTarget', 'Dossier de destination')}
+                    >
+                      <option value="">{t('agents:folders.noFolder', 'Sans dossier')}</option>
+                      {folderOptions().map(o => (
+                        <option key={o.id} value={o.id}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -1365,14 +1639,59 @@ export default function CompanionSettings() {
             </button>
           </div>
 
+          {/* Folder tree (sections) */}
+          <div className="mb-4">
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setSelectedFolderId(null)}
+                className={`px-3 py-1.5 rounded-button border text-sm transition-colors ${selectedFolderId === null ? 'bg-purple-50 border-purple-300 text-purple-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+              >
+                {t('agents:folders.all', 'Tous les documents')}
+              </button>
+              {renderAgentFolderNodes(buildFolderTree(agentFolders))}
+            </div>
+            <div className="mt-3">
+              {createParentId !== null && (
+                <div className="mb-2 flex items-center gap-2 text-xs text-gray-500">
+                  <span>
+                    {t('agents:folders.newSubfolderIn', 'Nouveau sous-dossier dans :')}{' '}
+                    <span className="font-medium text-gray-700">{agentFolders.find(f => f.id === createParentId)?.name || ''}</span>
+                  </span>
+                  <button type="button" onClick={() => setCreateParentId(null)} className="text-gray-400 hover:text-gray-700 underline">
+                    {t('common:cancel', 'Annuler')}
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCreateAgentFolder(); } }}
+                  placeholder={createParentId !== null ? t('agents:folders.newSubfolderPlaceholder', 'Nouveau sous-dossier') : t('agents:folders.newPlaceholder', 'Nouveau dossier')}
+                  className="px-3 py-1.5 border border-gray-200 rounded-sm text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateAgentFolder}
+                  disabled={!newFolderName.trim()}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" /><span>{t('agents:folders.create', 'Créer')}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Documents list */}
           <div className="space-y-2 max-h-64 overflow-y-auto">
-            {agentDocuments.length === 0 ? (
+            {(selectedFolderId === null ? agentDocuments : agentDocuments.filter(d => d.agent_folder_id === selectedFolderId)).length === 0 ? (
               <div className="text-center py-6 text-gray-400">
                 <FileText className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">{t('agents:documents.noDocuments')}</p>
               </div>
-            ) : agentDocuments.map(doc => (
+            ) : (selectedFolderId === null ? agentDocuments : agentDocuments.filter(d => d.agent_folder_id === selectedFolderId)).map(doc => (
               <div key={doc.id} className="flex items-center justify-between p-3 bg-white rounded-button border border-gray-200 hover:border-purple-300 transition-all group">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   {doc.source_url ? <Globe className="w-5 h-5 text-primary-600 flex-shrink-0" /> : <FileText className="w-5 h-5 text-purple-600 flex-shrink-0" />}
@@ -1391,6 +1710,21 @@ export default function CompanionSettings() {
                   )}
                 </div>
                 <div className="flex items-center space-x-1">
+                  {agentFolders.length > 0 && (
+                    <select
+                      value={doc.agent_folder_id ?? ''}
+                      onChange={e => handleMoveAgentDoc(doc.id, e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      className="text-xs border border-gray-200 rounded-sm px-2 py-1 bg-white text-gray-600 opacity-0 group-hover:opacity-100"
+                      title={t('agents:folders.moveTo', 'Déplacer vers')}
+                      aria-label={t('agents:folders.moveTo', 'Déplacer vers')}
+                    >
+                      <option value="">{t('agents:folders.noFolder', 'Sans dossier')}</option>
+                      {folderOptions().map(o => (
+                        <option key={o.id} value={o.id}>{o.label}</option>
+                      ))}
+                    </select>
+                  )}
                   {doc.source_url && (
                     <button
                       onClick={() => handleRefreshUrl(doc.id)}

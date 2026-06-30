@@ -47,10 +47,10 @@ export default function Sidebar({ collapsed: controlledCollapsed, onToggle }) {
       ? router.pathname === '/agents' || router.pathname === '/'
       : router.pathname.startsWith(href);
 
-  // Admin-only items appended to the base nav.
+  // Admin area is reserved for the platform support account.
   const navItems = [
     ...NAV_ITEMS,
-    ...(user?.role === 'admin'
+    ...(user?.is_support
       ? [{ href: '/admin/llm-cost', labelKey: 'navigation.llmCost', labelFallback: 'Coût LLM', Icon: Wallet }]
       : []),
   ];

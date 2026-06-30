@@ -8,7 +8,33 @@
   },
   "companyRagFolders": {
     "label": "Included Company RAG folders",
-    "allHint": "All checked = all folders (including future ones)"
+    "allHint": "All checked = all folders (including future ones)",
+    "includesSubfolders": "(includes subfolders)",
+    "includedViaParent": "(included via parent folder)"
+  },
+  "folders": {
+    "uploadTarget": "Destination folder",
+    "noFolder": "No folder",
+    "all": "All documents",
+    "create": "Create",
+    "newPlaceholder": "New folder",
+    "newSubfolderPlaceholder": "New subfolder",
+    "newSubfolderIn": "New subfolder in:",
+    "addSubfolder": "Subfolder",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "rename": "Rename",
+    "renamePrompt": "New folder name",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this folder? (it must be empty)",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "moveTo": "Move to",
+    "createError": "Could not create folder",
+    "renameError": "Could not rename folder",
+    "toggleError": "Error",
+    "deleteError": "Could not delete (not empty?)",
+    "moveError": "Could not move document"
   },
   "types": {
     "conversationnel": {
@@ -47,6 +73,10 @@
     "choosePhoto": "Choose a photo",
     "uploading": "Uploading...",
     "clickToChoose": "Or click to choose",
+    "importFolder": "Import a folder",
+    "importingFolder": "Importing…",
+    "importDone": "{{done}} imported, {{skipped}} skipped",
+    "importNoSupported": "No supported files in this folder.",
     "sendRecapNow": "Send recap now",
     "sendingRecap": "Sending...",
     "improving": "Improving...",

@@ -10,6 +10,10 @@ import {
   Globe,
   RefreshCw,
   Plus,
+  Pencil,
+  Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../hooks/useAuth";
@@ -44,6 +48,36 @@ export default function SourcesPage() {
   const [urlInput, setUrlInput] = useState("");
   const [addingUrl, setAddingUrl] = useState(false);
   const [refreshingDocId, setRefreshingDocId] = useState(null);
+  const [folders, setFolders] = useState([]);
+  const [selectedFolderId, setSelectedFolderId] = useState(null); // null = "Sans dossier"
+  const [newFolderName, setNewFolderName] = useState("");
+  const [uploadFolderId, setUploadFolderId] = useState(null); // target folder for new sources
+  const [collapsedFolders, setCollapsedFolders] = useState({}); // id -> true (collapsed)
+  const [createParentId, setCreateParentId] = useState(null);   // parent for the next created folder
+
+  const buildFolderTree = (flat) => {
+    const byParent = {};
+    flat.forEach((f) => {
+      const key = f.parent_id ?? "root";
+      (byParent[key] = byParent[key] || []).push(f);
+    });
+    const make = (parentKey) =>
+      (byParent[parentKey] || [])
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((f) => ({ ...f, children: make(f.id) }));
+    return make("root");
+  };
+
+  const folderOptions = () => {
+    const out = [];
+    const walk = (nodes, prefix) =>
+      nodes.forEach((f) => {
+        out.push({ id: f.id, label: prefix + f.name + (f.is_active ? "" : " (inactif)") });
+        walk(f.children, prefix + "— ");
+      });
+    walk(buildFolderTree(folders), "");
+    return out;
+  };
 
   useEffect(() => {
     if (!authenticated || !agentId) return;
@@ -62,6 +96,7 @@ export default function SourcesPage() {
       setAgentName(res.data.agent_name || "");
       setDocuments(res.data.documents || []);
       setCanEdit(res.data.can_edit || false);
+      setFolders(res.data.folders || []);
     } catch {
       showToast(t("errors:generic", "Error loading sources"), "error");
     } finally {
@@ -97,7 +132,17 @@ export default function SourcesPage() {
     if (!urlInput.trim() || addingUrl) return;
     try {
       setAddingUrl(true);
-      await api.post("/upload-url", { url: urlInput.trim(), agent_id: parseInt(agentId) });
+      const res = await api.post("/upload-url", { url: urlInput.trim(), agent_id: parseInt(agentId) });
+      // /upload-url has no folder field; place the new source via the move endpoint.
+      if (uploadFolderId && res.data.document_id) {
+        try {
+          await api.put(`/api/agents/${agentId}/documents/${res.data.document_id}/folder`, {
+            folder_id: Number(uploadFolderId),
+          });
+        } catch {
+          /* non-fatal: source is created, just stays "Sans dossier" */
+        }
+      }
       showToast(t("sources:toast.urlAddSuccess"));
       setUrlInput("");
       loadSources(agentId);
@@ -105,6 +150,70 @@ export default function SourcesPage() {
       showToast(t("sources:toast.urlAddError"), "error");
     } finally {
       setAddingUrl(false);
+    }
+  };
+
+  const reloadFolders = async () => {
+    try {
+      const res = await api.get(`/api/agents/${agentId}/folders`);
+      setFolders(res.data.folders || []);
+    } catch {
+      showToast(t("errors:generic", "Error loading sources"), "error");
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    try {
+      await api.post(`/api/agents/${agentId}/folders`, { name, parent_id: createParentId });
+      setNewFolderName("");
+      setCreateParentId(null);
+      await reloadFolders();
+    } catch (e) {
+      showToast(e?.response?.data?.detail || t("sources:folders.createError", "Erreur lors de la création du dossier"), "error");
+    }
+  };
+
+  const handleRenameFolder = async (folder) => {
+    const name = window.prompt(t("sources:folders.renamePrompt", "Nouveau nom du dossier"), folder.name);
+    if (!name || !name.trim()) return;
+    try {
+      await api.put(`/api/agents/${agentId}/folders/${folder.id}`, { name: name.trim() });
+      await reloadFolders();
+    } catch (e) {
+      showToast(e?.response?.data?.detail || t("sources:folders.renameError", "Erreur lors du renommage"), "error");
+    }
+  };
+
+  const handleToggleFolder = async (folder) => {
+    try {
+      await api.put(`/api/agents/${agentId}/folders/${folder.id}`, { is_active: !folder.is_active });
+      await reloadFolders();
+    } catch (e) {
+      showToast(e?.response?.data?.detail || t("sources:folders.toggleError", "Erreur lors du changement d'état"), "error");
+    }
+  };
+
+  const handleDeleteFolder = async (folder) => {
+    if (!window.confirm(t("sources:folders.deleteConfirm", `Supprimer le dossier "${folder.name}" ?`))) return;
+    try {
+      await api.delete(`/api/agents/${agentId}/folders/${folder.id}`);
+      if (selectedFolderId === folder.id) setSelectedFolderId(null);
+      await reloadFolders();
+    } catch (e) {
+      showToast(e?.response?.data?.detail || t("sources:folders.deleteError", "Le dossier doit être vide pour être supprimé"), "error");
+    }
+  };
+
+  const handleMoveDoc = async (docId, folderId) => {
+    try {
+      await api.put(`/api/agents/${agentId}/documents/${docId}/folder`, {
+        folder_id: folderId === "" ? null : Number(folderId),
+      });
+      await loadSources(agentId);
+    } catch (e) {
+      showToast(e?.response?.data?.detail || t("sources:folders.moveError", "Erreur lors du déplacement"), "error");
     }
   };
 
@@ -122,6 +231,76 @@ export default function SourcesPage() {
     }
   };
 
+  const renderFolderNodes = (nodes, depth = 0) =>
+    nodes.map((f) => (
+      <div key={f.id}>
+        <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
+          {f.children.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setCollapsedFolders((c) => ({ ...c, [f.id]: !c[f.id] }))}
+              className="w-4 text-gray-500 hover:text-gray-700"
+              title={collapsedFolders[f.id] ? t("sources:folders.expand", "Déplier") : t("sources:folders.collapse", "Replier")}
+            >
+              {collapsedFolders[f.id] ? "▸" : "▾"}
+            </button>
+          ) : (
+            <span className="w-4" />
+          )}
+          <div
+            onClick={() => setSelectedFolderId(f.id)}
+            className={`group flex items-center rounded-button border px-3 py-1.5 text-sm cursor-pointer transition-colors ${
+              selectedFolderId === f.id
+                ? "bg-primary-50 border-primary-300 text-primary-700"
+                : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+            } ${!f.is_active ? "opacity-50" : ""}`}
+          >
+            <span className="font-medium">{f.name}</span>
+            <span className="ml-2 text-xs text-gray-400">{f.document_count}</span>
+            {canEdit && (
+              <span className="ml-2 hidden group-hover:inline-flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={(ev) => { ev.stopPropagation(); setCreateParentId(f.id); }}
+                  className="text-gray-400 hover:text-gray-700"
+                  title={t("sources:folders.addSubfolder", "Sous-dossier")}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(ev) => { ev.stopPropagation(); handleToggleFolder(f); }}
+                  className="text-gray-400 hover:text-gray-700"
+                  title={f.is_active ? t("sources:folders.deactivate", "Désactiver") : t("sources:folders.activate", "Activer")}
+                >
+                  {f.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={(ev) => { ev.stopPropagation(); handleRenameFolder(f); }}
+                  className="text-gray-400 hover:text-gray-700"
+                  title={t("sources:folders.rename", "Renommer")}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(ev) => { ev.stopPropagation(); handleDeleteFolder(f); }}
+                  className="text-red-400 hover:text-red-600"
+                  title={t("sources:folders.delete", "Supprimer")}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+          </div>
+        </div>
+        {!collapsedFolders[f.id] && f.children.length > 0 && (
+          <div className="mt-2 space-y-2">{renderFolderNodes(f.children, depth + 1)}</div>
+        )}
+      </div>
+    ));
+
   if (authLoading || loading) {
     return (
       <Layout showBack backHref="/agents" title={t("sources:pageTitle")}>
@@ -134,6 +313,10 @@ export default function SourcesPage() {
       </Layout>
     );
   }
+
+  const visibleDocuments = documents.filter((d) =>
+    selectedFolderId === null ? !d.agent_folder_id : d.agent_folder_id === selectedFolderId
+  );
 
   return (
     <Layout showBack backHref="/agents" title={t("sources:pageTitle")}>
@@ -166,6 +349,18 @@ export default function SourcesPage() {
                 disabled={addingUrl}
               />
             </div>
+            <select
+              value={uploadFolderId ?? ""}
+              onChange={(e) => setUploadFolderId(e.target.value === "" ? null : Number(e.target.value))}
+              className="px-3 py-2.5 border border-gray-200 rounded-input text-sm bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              title={t("sources:folders.uploadTarget", "Dossier cible")}
+              aria-label={t("sources:folders.uploadTarget", "Dossier cible")}
+            >
+              <option value="">{t("sources:folders.uncategorized", "Sans dossier")}</option>
+              {folderOptions().map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
             <button
               type="submit"
               disabled={!urlInput.trim() || addingUrl}
@@ -186,22 +381,82 @@ export default function SourcesPage() {
           </form>
         )}
 
+        {/* Folder bar */}
+        <div className="mb-6">
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setSelectedFolderId(null)}
+              className={`rounded-button border px-3 py-1.5 text-sm transition-colors ${
+                selectedFolderId === null
+                  ? "bg-primary-50 border-primary-300 text-primary-700"
+                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {t("sources:folders.uncategorized", "Sans dossier")}
+            </button>
+            {renderFolderNodes(buildFolderTree(folders))}
+          </div>
+          {canEdit && (
+            <div className="mt-3">
+              {createParentId !== null && (
+                <div className="mb-2 flex items-center gap-2 text-xs text-gray-500">
+                  <span>
+                    {t("sources:folders.newSubfolderIn", "Nouveau sous-dossier dans :")}{" "}
+                    <span className="font-medium text-gray-700">
+                      {folders.find((f) => f.id === createParentId)?.name || ""}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCreateParentId(null)}
+                    className="text-gray-400 hover:text-gray-700 underline"
+                  >
+                    {t("common:cancel", "Annuler")}
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreateFolder(); } }}
+                  placeholder={createParentId !== null
+                    ? t("sources:folders.newSubfolderPlaceholder", "Nouveau sous-dossier")
+                    : t("sources:folders.newPlaceholder", "Nouveau dossier")}
+                  className="px-3 py-1.5 border border-gray-200 rounded-input text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateFolder}
+                  disabled={!newFolderName.trim()}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-button transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{t("sources:folders.create", "Créer")}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* RAG Documents */}
         <section>
           <h2 className="text-lg font-semibold font-heading mb-4 flex items-center space-x-2">
             <FileText className="w-5 h-5 text-primary-600" />
             <span>{t("sources:sections.documents")}</span>
-            <span className="text-sm text-gray-400 font-normal">({documents.length})</span>
+            <span className="text-sm text-gray-400 font-normal">({visibleDocuments.length})</span>
           </h2>
 
-          {documents.length === 0 ? (
+          {visibleDocuments.length === 0 ? (
             <div className="text-center py-12 text-gray-500 bg-white rounded-card border border-gray-200 shadow-card">
               <FileText className="w-10 h-10 mx-auto mb-3 opacity-50" />
               <p>{t("sources:documents.empty")}</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {documents.map((doc) => {
+              {visibleDocuments.map((doc) => {
                 const ext = getFileExtension(doc.filename);
                 const isNotion = !!doc.notion_link_id;
                 const isUrl = !!doc.source_url;
@@ -239,6 +494,20 @@ export default function SourcesPage() {
                       )}
                     </div>
                     <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                      {canEdit && (
+                        <select
+                          value={doc.agent_folder_id ?? ""}
+                          onChange={(e) => handleMoveDoc(doc.id, e.target.value)}
+                          className="text-xs border border-gray-200 rounded-button px-2 py-1 bg-white text-gray-600"
+                          title={t("sources:folders.moveTo", "Déplacer vers")}
+                          aria-label={t("sources:folders.moveTo", "Déplacer vers")}
+                        >
+                          <option value="">{t("sources:folders.uncategorized", "Sans dossier")}</option>
+                          {folderOptions().map((o) => (
+                            <option key={o.id} value={o.id}>{o.label}</option>
+                          ))}
+                        </select>
+                      )}
                       {isUrl && canEdit && (
                         <button
                           onClick={() => handleRefreshUrl(doc.id)}

@@ -32,6 +32,7 @@ from database import (
     engine,
     ensure_columns,
     ensure_company_rag_default_folders,
+    ensure_folder_hierarchy_constraints,
     ensure_llm_usage_table,
     ensure_support_tables,
     ensure_pgvector,
@@ -432,6 +433,8 @@ async def startup_event():
             # Add any new columns to existing tables (safe: uses ADD COLUMN IF NOT EXISTS)
             ensure_columns()
             logger.info("ensure_columns done (%s)", _elapsed())
+            ensure_folder_hierarchy_constraints()
+            logger.info("ensure_folder_hierarchy_constraints done (%s)", _elapsed())
             ensure_company_rag_default_folders()
             logger.info("ensure_company_rag_default_folders done (%s)", _elapsed())
             # Add RLS bypass policies for service operations (email ingestion, etc.)
@@ -613,6 +616,7 @@ from routers.action_executions import router as action_executions_router  # noqa
 from routers.automations import router as automations_router  # noqa: E402
 from routers.missions import router as missions_router  # noqa: E402
 from routers.company_rag import router as company_rag_router  # noqa: E402
+from routers.agent_folders import router as agent_folders_router  # noqa: E402
 
 # Discover and register all plugins
 from plugins import discover_plugins  # noqa: E402
@@ -642,3 +646,4 @@ app.include_router(action_executions_router)
 app.include_router(automations_router)
 app.include_router(missions_router)
 app.include_router(company_rag_router)
+app.include_router(agent_folders_router)

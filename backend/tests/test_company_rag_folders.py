@@ -366,3 +366,198 @@ async def test_tenant_isolation_delete_404(client, db_session, test_company):
         cookies=other_cookies,
     )
     assert resp.status_code == 404
+
+
+# -- subfolders (company) ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_company_create_subfolder(client, admin_cookies, db_session, test_company):
+    parent = _make_folder(db_session, test_company.id, "Parent")
+    resp = await client.post(
+        "/api/company-rag/folders", json={"name": "Child", "parent_id": parent.id}, cookies=admin_cookies
+    )
+    assert resp.status_code == 200
+    assert resp.json()["parent_id"] == parent.id
+
+
+@pytest.mark.asyncio
+async def test_company_create_subfolder_bad_parent_404(client, admin_cookies):
+    resp = await client.post(
+        "/api/company-rag/folders", json={"name": "Child", "parent_id": 999999}, cookies=admin_cookies
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_company_same_name_diff_parents_ok(client, admin_cookies, db_session, test_company):
+    p1 = _make_folder(db_session, test_company.id, "P1")
+    p2 = _make_folder(db_session, test_company.id, "P2")
+    r1 = await client.post("/api/company-rag/folders", json={"name": "2024", "parent_id": p1.id}, cookies=admin_cookies)
+    r2 = await client.post("/api/company-rag/folders", json={"name": "2024", "parent_id": p2.id}, cookies=admin_cookies)
+    assert r1.status_code == 200 and r2.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_company_list_returns_parent_id(client, admin_cookies, member_cookies, db_session, test_company):
+    parent = _make_folder(db_session, test_company.id, "ListParent")
+    resp = await client.get("/api/company-rag/folders", cookies=member_cookies)
+    assert resp.status_code == 200
+    match = next(f for f in resp.json()["folders"] if f["id"] == parent.id)
+    assert "parent_id" in match and match["parent_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_company_delete_folder_with_subfolder_409(client, admin_cookies, db_session, test_company):
+    parent = _make_folder(db_session, test_company.id, "HasChild")
+    from database import CompanyFolder
+
+    child = CompanyFolder(company_id=test_company.id, name="C", parent_id=parent.id)
+    db_session.add(child)
+    db_session.flush()
+    resp = await client.delete(f"/api/company-rag/folders/{parent.id}", cookies=admin_cookies)
+    assert resp.status_code == 409
+
+
+# -- folder import (company) -------------------------------------------------
+
+
+def _fake_company_ingest(filename, content, user_id, db, company_id=None, is_company_rag=False, folder_id=None, **kw):
+    """Stand-in for process_document_for_user: insert a Document row, skip GCS/embeddings."""
+    from database import Document
+
+    doc = Document(
+        filename=filename,
+        user_id=user_id,
+        company_id=company_id,
+        is_company_rag=is_company_rag,
+        folder_id=folder_id,
+        document_type="rag",
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return doc.id
+
+
+@pytest.mark.asyncio
+async def test_company_import_creates_tree_and_docs(client, admin_cookies, db_session, test_company, mock_redis_none):
+    from unittest.mock import patch
+
+    from database import CompanyFolder, Document
+
+    with patch("routers.company_rag.process_document_for_user", side_effect=_fake_company_ingest):
+        resp = await client.post(
+            "/api/company-rag/folders/import",
+            files=[
+                ("files", ("a.txt", b"hello", "text/plain")),
+                ("files", ("skip.exe", b"MZ", "application/octet-stream")),
+            ],
+            data={"paths": ["Legal/Contracts/a.txt", "Legal/skip.exe"]},
+            cookies=admin_cookies,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["done"] == 1 and body["skipped"] == 1
+
+    legal = (
+        db_session.query(CompanyFolder)
+        .filter(
+            CompanyFolder.company_id == test_company.id,
+            CompanyFolder.name == "Legal",
+            CompanyFolder.parent_id.is_(None),
+        )
+        .first()
+    )
+    assert legal is not None
+    contracts = (
+        db_session.query(CompanyFolder)
+        .filter(
+            CompanyFolder.company_id == test_company.id,
+            CompanyFolder.name == "Contracts",
+            CompanyFolder.parent_id == legal.id,
+        )
+        .first()
+    )
+    assert contracts is not None
+    a_doc = (
+        db_session.query(Document).filter(Document.company_id == test_company.id, Document.filename == "a.txt").first()
+    )
+    assert a_doc.folder_id == contracts.id and a_doc.is_company_rag is True
+
+
+@pytest.mark.asyncio
+async def test_company_import_requires_admin(client, member_cookies, mock_redis_none):
+    resp = await client.post(
+        "/api/company-rag/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data={"paths": ["R/a.txt"]},
+        cookies=member_cookies,
+    )
+    assert resp.status_code == 403
+
+
+# -- folder import: subtree retrieval + status (company) ----------------------
+
+
+@pytest.mark.asyncio
+async def test_company_retrieval_parent_selection_includes_subtree(db_session, test_company, test_admin_user):
+    """Selecting a PARENT company folder includes docs that live in its subfolder."""
+    from rag_engine import search_similar_texts_for_user
+    from database import CompanyFolder, DocumentChunk
+    from tests.factories import AgentFactory
+
+    agent = AgentFactory.build(user_id=test_admin_user.id, company_id=test_company.id, include_company_rag=True)
+    db_session.add(agent)
+    db_session.flush()
+
+    parent = _make_folder(db_session, test_company.id, "Legal")
+    child = CompanyFolder(company_id=test_company.id, name="Contracts", parent_id=parent.id)
+    db_session.add(child)
+    db_session.flush()
+
+    vec = [1.0] + [0.0] * 1023
+    doc = _make_company_doc(db_session, test_admin_user.id, test_company.id, child.id)
+    doc.filename = "in_subfolder.txt"
+    db_session.add(
+        DocumentChunk(document_id=doc.id, company_id=test_company.id, chunk_text="c", embedding_vec=vec, chunk_index=0)
+    )
+    db_session.flush()
+
+    results = search_similar_texts_for_user(
+        vec,
+        test_admin_user.id,
+        db_session,
+        top_k=10,
+        agent_id=agent.id,
+        company_id=test_company.id,
+        include_company_rag=True,
+        company_rag_folder_ids=[parent.id],  # select only the parent
+    )
+    assert any(r["document_name"] == "in_subfolder.txt" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_company_import_async_path_and_status(client, admin_cookies, mock_redis, monkeypatch):
+    import routers.company_rag as cr
+
+    monkeypatch.setattr(cr, "_run_company_folder_import", lambda *a, **k: None)
+    resp = await client.post(
+        "/api/company-rag/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data={"paths": ["Root/a.txt"]},
+        cookies=admin_cookies,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "processing" and body["import_task_id"]
+
+    status = await client.get(f"/api/company-rag/folders/import-status/{body['import_task_id']}", cookies=admin_cookies)
+    assert status.status_code == 200
+    assert status.json()["status"] == "processing" and status.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_company_import_status_unknown_404(client, admin_cookies, mock_redis):
+    resp = await client.get("/api/company-rag/folders/import-status/does-not-exist", cookies=admin_cookies)
+    assert resp.status_code == 404

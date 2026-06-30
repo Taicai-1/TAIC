@@ -11,7 +11,7 @@ from google.cloud import storage
 from sqlalchemy.orm import Session
 
 from auth import verify_token
-from database import get_db, Agent, AgentShare, Document, DocumentChunk, NotionLink, DriveLink
+from database import get_db, Agent, AgentShare, AgentFolder, Document, DocumentChunk, NotionLink, DriveLink
 from helpers.agent_helpers import _user_can_access_agent, _user_can_edit_agent
 from helpers.tenant import _get_caller_company_id
 from redis_client import get_cached_user
@@ -336,6 +336,13 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
     # Drive links
     drive_links = db.query(DriveLink).filter(DriveLink.agent_id == agent_id).order_by(DriveLink.created_at.desc()).all()
 
+    # Companion RAG folders + per-folder document counts
+    folders = db.query(AgentFolder).filter(AgentFolder.agent_id == agent_id).order_by(AgentFolder.name.asc()).all()
+    folder_counts = {}
+    for d in docs:
+        if d.agent_folder_id is not None:
+            folder_counts[d.agent_folder_id] = folder_counts.get(d.agent_folder_id, 0) + 1
+
     return {
         "agent_name": agent.name,
         "documents": [
@@ -347,6 +354,7 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
                 "notion_link_id": d.notion_link_id,
                 "drive_link_id": getattr(d, "drive_link_id", None),
                 "source_url": _clean_source_url(getattr(d, "source_url", None)),
+                "agent_folder_id": d.agent_folder_id,
             }
             for d in docs
         ],
@@ -371,6 +379,15 @@ async def get_agent_sources(agent_id: int, user_id: str = Depends(verify_token),
             for dl in drive_links
         ],
         "can_edit": can_edit,
+        "folders": [
+            {
+                "id": f.id,
+                "name": f.name,
+                "is_active": f.is_active,
+                "document_count": folder_counts.get(f.id, 0),
+            }
+            for f in folders
+        ],
     }
 
 

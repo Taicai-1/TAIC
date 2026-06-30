@@ -57,9 +57,9 @@ _answer_cache = {}
 _RAG_CACHE_TTL = 300  # 5 minutes
 
 
-def _rag_cache_key(user_id: int, question: str, doc_ids, agent_type: str) -> str:
+def _rag_cache_key(user_id: int, question: str, doc_ids, agent_type: str, extra: str = "") -> str:
     q_hash = hashlib.md5(question.encode()).hexdigest()[:12]
-    d_hash = hashlib.md5(str(doc_ids).encode()).hexdigest()[:12]
+    d_hash = hashlib.md5((str(doc_ids) + "|" + extra).encode()).hexdigest()[:12]
     return f"rag_cache:{user_id}:{q_hash}:{d_hash}:{agent_type}"
 
 
@@ -269,6 +269,9 @@ def get_answer(
         include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
         company_rag_folder_ids = _agent_folder_ids(agent) if include_company_rag else None
         company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
+        # Expand the selection to descendants so a parent folder includes docs in its
+        # subfolders for BOTH the doc-listing gate below and the retrieval scope.
+        company_rag_folder_ids = _expand_company_folder_ids(company_rag_folder_ids, company_scope_id, db)
 
         # Get documents to consider for RAG
         # If selected_doc_ids provided, use those (and respect agent_id if present).
@@ -575,6 +578,9 @@ def get_answer_stream(
         include_company_rag = bool(getattr(agent, "include_company_rag", False)) if agent else False
         company_rag_folder_ids = _agent_folder_ids(agent) if include_company_rag else None
         company_scope_id = company_id or (getattr(agent, "company_id", None) if agent else None)
+        # Expand the selection to descendants so a parent folder includes docs in its
+        # subfolders for BOTH the doc-listing gate below and the retrieval scope.
+        company_rag_folder_ids = _expand_company_folder_ids(company_rag_folder_ids, company_scope_id, db)
 
         # --- Document retrieval (same as get_answer) ---
         # Folder filter intentionally not applied to an explicit selected_doc_ids set
@@ -802,7 +808,10 @@ def get_answer_stream(
         # --- Check RAG cache ---
         doc_ids_for_cache = selected_doc_ids or ([d.id for d in user_docs] if user_docs else [])
         agent_type_str = getattr(agent, "type", "conversationnel") if agent else "conversationnel"
-        cache_key = _rag_cache_key(user_id, question, doc_ids_for_cache, agent_type_str)
+        inactive_sig = ""
+        if agent is not None and getattr(agent, "id", None):
+            inactive_sig = ",".join(str(i) for i in sorted(_inactive_agent_folder_ids(agent.id, db)))
+        cache_key = _rag_cache_key(user_id, question, doc_ids_for_cache, agent_type_str, extra=inactive_sig)
         cached = _get_rag_cache(cache_key)
         if cached is not None:
             logger.info("Stream: returning cached answer")
@@ -831,6 +840,63 @@ def get_answer_stream(
     except Exception as e:
         logger.error(f"Error in get_answer_stream: {e}")
         yield sse_event("error", {"message": str(e), "code": "llm_error"})
+
+
+def _descendant_folder_ids(start_ids, pairs) -> set:
+    """Return start_ids plus all their descendants.
+
+    pairs: iterable of (folder_id, parent_id). Cycle-safe (already-visited ids are
+    skipped, so a malformed parent cycle cannot loop forever).
+    """
+    children = {}
+    for fid, pid in pairs:
+        children.setdefault(pid, []).append(fid)
+    result = set()
+    stack = list(start_ids)
+    while stack:
+        cur = stack.pop()
+        if cur in result:
+            continue
+        result.add(cur)
+        stack.extend(children.get(cur, []))
+    return result
+
+
+def _expand_company_folder_ids(folder_ids, company_id, db) -> list:
+    """Expand a company-RAG folder selection to include all descendant subfolders.
+
+    Selecting a parent folder must include documents that live in its subfolders, so the
+    doc-listing gate and the retrieval scope agree. Returns the input unchanged when there
+    is nothing to expand. Tenant-bounded by company_id. Idempotent (expanding an already
+    expanded set is a no-op).
+    """
+    if not folder_ids or not company_id:
+        return folder_ids
+    from database import CompanyFolder
+
+    rows = db.query(CompanyFolder.id, CompanyFolder.parent_id).filter(CompanyFolder.company_id == company_id).all()
+    return list(_descendant_folder_ids(folder_ids, [(r[0], r[1]) for r in rows]))
+
+
+def _inactive_agent_folder_ids(agent_id: int, db: Session) -> list:
+    """Return the ids of this agent's inactive folders AND all their descendants.
+
+    Documents in these folders (or any subfolder of an inactive folder) are excluded
+    from RAG retrieval; documents with agent_folder_id IS NULL (no folder) are always
+    included. Subtree semantics: deactivating a parent excludes its whole subtree.
+    """
+    from database import AgentFolder
+
+    rows = (
+        db.query(AgentFolder.id, AgentFolder.parent_id, AgentFolder.is_active)
+        .filter(AgentFolder.agent_id == agent_id)
+        .all()
+    )
+    inactive_roots = [r[0] for r in rows if not r[2]]
+    if not inactive_roots:
+        return []
+    pairs = [(r[0], r[1]) for r in rows]
+    return list(_descendant_folder_ids(inactive_roots, pairs))
 
 
 def search_similar_texts_for_user(
@@ -916,12 +982,22 @@ def search_similar_texts_for_user(
                     )
                 )
         elif agent_id:
-            # Agent-scoped docs; optionally union the company-shared docs
+            # Agent-scoped docs; exclude docs sitting in an inactive folder.
+            inactive_folder_ids = _inactive_agent_folder_ids(agent_id, db)
             agent_scope = and_(Document.agent_id == agent_id, Document.mission_id.is_(None))
+            if inactive_folder_ids:
+                agent_scope = and_(
+                    agent_scope,
+                    or_(
+                        Document.agent_folder_id.is_(None),
+                        Document.agent_folder_id.notin_(inactive_folder_ids),
+                    ),
+                )
             if include_company_rag:
                 company_scope = Document.is_company_rag.is_(True)
                 if company_rag_folder_ids:
-                    company_scope = and_(company_scope, Document.folder_id.in_(company_rag_folder_ids))
+                    expanded = _expand_company_folder_ids(company_rag_folder_ids, company_id, db)
+                    company_scope = and_(company_scope, Document.folder_id.in_(expanded))
                 query = query.filter(or_(agent_scope, company_scope))
             else:
                 query = query.filter(agent_scope, Document.is_company_rag.is_(False))
@@ -1084,6 +1160,7 @@ def ingest_text_content(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    agent_folder_id: int = None,
     is_mission_recap_source: bool = False,
     recap_schedule_id: int = None,
 ) -> int:
@@ -1125,6 +1202,7 @@ def ingest_text_content(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            agent_folder_id=agent_folder_id,
             is_mission_recap_source=is_mission_recap_source,
             recap_schedule_id=recap_schedule_id,
         )
@@ -1188,6 +1266,7 @@ def process_document_for_user(
     mission_id: int = None,
     is_company_rag: bool = False,
     folder_id: int = None,
+    agent_folder_id: int = None,
     is_mission_recap_source: bool = False,
     recap_schedule_id: int = None,
 ) -> int:
@@ -1255,6 +1334,7 @@ def process_document_for_user(
             mission_id=mission_id,
             is_company_rag=is_company_rag,
             folder_id=folder_id,
+            agent_folder_id=agent_folder_id,
             is_mission_recap_source=is_mission_recap_source,
             recap_schedule_id=recap_schedule_id,
         )

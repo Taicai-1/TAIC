@@ -94,14 +94,21 @@ def _check_admin_protection() -> dict[str, Any]:
         route_pattern = r'@router\.(get|post|put|delete|patch)\(["\'](/api/admin/[^"\']+)'
         for match in re.finditer(route_pattern, content):
             path = match.group(2)
-            # Find the function body after this decorator
-            func_start = match.end()
-            # Look for require_role in the next ~500 chars (function body)
-            func_body = content[func_start : func_start + 500]
             # Token-based auth routes (org request) are intentionally unprotected
             if "/companies/request/" in path:
                 continue
-            if "require_role" not in func_body and "verify_admin_or_scheduler" not in func_body:
+            # Scan the function body up to the next route decorator (capped for
+            # safety). Strip docstrings and comments first so a long docstring
+            # can't push the auth guard out of the scanned window.
+            func_start = match.end()
+            raw = content[func_start : func_start + 2000]
+            next_route = re.search(r"@router\.", raw)
+            if next_route:
+                raw = raw[: next_route.start()]
+            func_body = re.sub(r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'', "", raw)
+            func_body = re.sub(r"#.*", "", func_body)
+            protection_markers = ("require_role", "verify_admin_or_scheduler", "is_support")
+            if not any(marker in func_body for marker in protection_markers):
                 rel = os.path.relpath(py_file, _BACKEND_DIR)
                 unprotected.append(f"{rel}:{path}")
 
