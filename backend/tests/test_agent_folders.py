@@ -509,23 +509,33 @@ async def test_retrieval_excludes_inactive_parent_subtree(db_session, test_user,
     db_session.flush()
 
     vec = [1.0] + [0.0] * 1023
-    doc = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=child.id)
-    doc.filename = "in_child.txt"
-    db_session.add(
-        DocumentChunk(
-            document_id=doc.id,
-            company_id=test_agent.company_id,
-            chunk_text="content",
-            embedding_vec=vec,
-            chunk_index=0,
+
+    def _doc_with_chunk(folder_id, fname):
+        doc = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=folder_id)
+        doc.filename = fname
+        db_session.add(
+            DocumentChunk(
+                document_id=doc.id,
+                company_id=test_agent.company_id,
+                chunk_text="content",
+                embedding_vec=vec,
+                chunk_index=0,
+            )
         )
-    )
-    db_session.flush()
+        db_session.flush()
+
+    _doc_with_chunk(child.id, "in_child.txt")
+    # Positive control: an active folder's doc MUST still be returned, so the exclusion
+    # assertion below cannot pass vacuously (i.e. retrieval returning nothing).
+    visible = _make_folder(db_session, test_agent, "Visible", is_active=True)
+    _doc_with_chunk(visible.id, "visible.txt")
 
     results = search_similar_texts_for_user(
         vec, test_user.id, db_session, top_k=10, agent_id=test_agent.id, company_id=test_agent.company_id
     )
-    assert all(r["document_name"] != "in_child.txt" for r in results)
+    filenames = {r["document_name"] for r in results}
+    assert "visible.txt" in filenames  # positive control
+    assert "in_child.txt" not in filenames  # excluded via inactive parent
 
 
 # -- subfolders (companion) --------------------------------------------------
@@ -708,3 +718,90 @@ async def test_import_rejects_too_many_files(client, auth_cookies, test_agent, m
         f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
     )
     assert resp.status_code == 413
+
+
+# -- folder import: status, caps, permissions (companion) --------------------
+
+
+@pytest.mark.asyncio
+async def test_import_async_path_returns_task_and_status(client, auth_cookies, test_agent, mock_redis, monkeypatch):
+    """With Redis available the import is queued and import-status reports the seeded task."""
+    import routers.agent_folders as af
+
+    # Don't actually run the background job (it would open its own SessionLocal); we only
+    # assert the async branch + status round-trip through Redis.
+    monkeypatch.setattr(af, "_run_agent_folder_import", lambda *a, **k: None)
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data={"paths": ["Root/a.txt"]},
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "processing" and body["import_task_id"]
+
+    status = await client.get(
+        f"/api/agents/{test_agent.id}/folders/import-status/{body['import_task_id']}", cookies=auth_cookies
+    )
+    assert status.status_code == 200
+    assert status.json()["status"] == "processing" and status.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_import_status_unknown_task_404(client, auth_cookies, test_agent, mock_redis):
+    resp = await client.get(f"/api/agents/{test_agent.id}/folders/import-status/does-not-exist", cookies=auth_cookies)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_total_too_large(client, auth_cookies, test_agent, monkeypatch):
+    import routers.agent_folders as af
+
+    monkeypatch.setattr(af, "MAX_IMPORT_TOTAL_SIZE", 5)  # 5 bytes total
+    files = [
+        ("files", ("a.txt", b"0123456789", "text/plain")),
+        ("files", ("b.txt", b"0123456789", "text/plain")),
+    ]
+    data = {"paths": ["R/a.txt", "R/b.txt"]}
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import", files=files, data=data, cookies=auth_cookies
+    )
+    assert resp.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_non_owner_cannot_import_folder(client, db_session, test_agent):
+    from auth import create_access_token
+    from tests.factories import UserFactory
+
+    other = UserFactory.build()
+    db_session.add(other)
+    db_session.flush()
+    other_cookies = {"token": create_access_token(data={"sub": str(other.id)})}
+
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data={"paths": ["R/a.txt"]},
+        cookies=other_cookies,
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_import_foreign_parent_404(client, auth_cookies, test_agent, mock_redis_none):
+    resp = await client.post(
+        f"/api/agents/{test_agent.id}/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data={"paths": ["R/a.txt"], "parent_id": "999999"},
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_move_document_missing_folder_id_400(client, auth_cookies, db_session, test_user, test_agent):
+    doc = _make_agent_doc(db_session, test_user.id, test_agent, agent_folder_id=None)
+    resp = await client.put(f"/api/agents/{test_agent.id}/documents/{doc.id}/folder", json={}, cookies=auth_cookies)
+    assert resp.status_code == 400
