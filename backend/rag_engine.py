@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
-from mistral_embeddings import get_embedding, get_embedding_fast, get_embeddings_batch
+from mistral_embeddings import get_embedding, get_embeddings_batch
 from openai_client import get_chat_response, get_chat_response_stream
 from database import Document, DocumentChunk, User, Agent
 from file_loader import load_text_from_pdf, chunk_text
