@@ -411,8 +411,9 @@ export default function Organization() {
     }
   };
 
-  const renderFolderNodes = (nodes, depth = 0) =>
-    nodes.map(f => (
+  const renderFolderNodes = (nodes, depth = 0) => {
+    const canManage = company && ['owner', 'admin'].includes(company.role);
+    return nodes.map(f => (
       <div key={f.id}>
         <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
           {f.children.length > 0 ? (
@@ -448,6 +449,7 @@ export default function Organization() {
         )}
       </div>
     ));
+  };
 
   const handleCompanyDocDelete = async (docId) => {
     if (!confirm(t('organization:companyRag.deleteConfirm'))) return;
