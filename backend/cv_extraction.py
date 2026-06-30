@@ -116,3 +116,37 @@ def extract_cv_metadata(text, model_id=None):
     ]
     raw = get_chat_response_json(messages, schema=CV_EXTRACTION_SCHEMA, model_id=model_id, retries=2)
     return coerce_cv_profile(raw)
+
+
+def upsert_candidate_profile(db, document_id, company_id, folder_id, profile, model_id, status="done"):
+    """Insert a CandidateProfile for ``document_id`` if none exists yet.
+
+    Returns True if a row was created, False if one already existed (idempotent skip).
+    Caller is responsible for committing the surrounding transaction.
+    """
+    from database import CandidateProfile
+
+    exists = db.query(CandidateProfile.id).filter(CandidateProfile.document_id == document_id).first()
+    if exists:
+        return False
+
+    row = CandidateProfile(
+        document_id=document_id,
+        company_id=company_id,
+        folder_id=folder_id,
+        full_name=profile.get("full_name"),
+        current_title=profile.get("current_title"),
+        location=profile.get("location"),
+        seniority=profile.get("seniority"),
+        years_experience=profile.get("years_experience"),
+        skills=profile.get("skills") or [],
+        languages=profile.get("languages") or [],
+        education_level=profile.get("education_level"),
+        last_company=profile.get("last_company"),
+        raw_extraction=profile.get("raw_extraction") or {},
+        extraction_status=status,
+        extraction_model=model_id,
+    )
+    db.add(row)
+    db.flush()
+    return True

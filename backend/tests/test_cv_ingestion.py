@@ -1,5 +1,6 @@
 import rag_engine
 from database import Document, DocumentChunk, CandidateProfile, CompanyFolder
+from cv_extraction import upsert_candidate_profile
 
 
 def test_ingest_text_content_batches_embeddings(db_session, test_user, test_agent, monkeypatch):
@@ -65,3 +66,32 @@ def test_company_folder_is_cv_base_defaults_false(db_session, test_user):
     db_session.flush()
     db_session.refresh(folder)
     assert folder.is_cv_base is True
+
+
+def _make_cv_doc(db_session, test_user, test_agent):
+    doc = Document(filename="cv.pdf", content="x", user_id=test_user.id,
+                   agent_id=test_agent.id, company_id=test_user.company_id, is_company_rag=True)
+    db_session.add(doc)
+    db_session.flush()
+    return doc
+
+
+def test_upsert_candidate_profile_creates_then_skips(db_session, test_user, test_agent):
+    doc = _make_cv_doc(db_session, test_user, test_agent)
+    profile = {"full_name": "Jane", "years_experience": 5, "skills": ["python"],
+               "languages": [], "raw_extraction": {"summary": "x"}}
+
+    created = upsert_candidate_profile(
+        db_session, document_id=doc.id, company_id=test_user.company_id,
+        folder_id=None, profile=profile, model_id="gpt-4o-mini",
+    )
+    assert created is True
+    assert db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc.id).count() == 1
+
+    # Second call is idempotent: skipped, no duplicate.
+    again = upsert_candidate_profile(
+        db_session, document_id=doc.id, company_id=test_user.company_id,
+        folder_id=None, profile=profile, model_id="gpt-4o-mini",
+    )
+    assert again is False
+    assert db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc.id).count() == 1
