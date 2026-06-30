@@ -79,16 +79,17 @@ export default function CompanionSettings() {
   const [refreshingDocId, setRefreshingDocId] = useState(null);
   const [agentFolders, setAgentFolders] = useState([]);
   const [uploadFolderId, setUploadFolderId] = useState(null);
-  const folderImportRef = useRef(null);
   const [importingFolder, setImportingFolder] = useState(false);
   const [importProgress, setImportProgress] = useState(null); // { total, done, skipped, failed }
 
-  useEffect(() => {
-    if (folderImportRef.current) {
-      folderImportRef.current.setAttribute('webkitdirectory', '');
-      folderImportRef.current.setAttribute('directory', '');
+  // Callback ref: set the directory-picker attributes whenever the input mounts
+  // (a mount-time effect misses it because the input is in a conditionally-rendered section).
+  const setFolderInputRef = (el) => {
+    if (el) {
+      el.setAttribute('webkitdirectory', '');
+      el.setAttribute('directory', '');
     }
-  }, []);
+  };
 
   // Traceability docs
   const [traceabilityDocs, setTraceabilityDocs] = useState([]);
@@ -1436,7 +1437,7 @@ export default function CompanionSettings() {
                     <Plus className="w-4 h-4" /><span>{t('agents:buttons.clickToChoose')}</span>
                   </label>
                   <label className={`cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-sm hover:bg-purple-50 transition-all font-medium text-sm ${importingFolder ? 'opacity-60 pointer-events-none' : ''}`}>
-                    <input ref={folderImportRef} type="file" multiple className="hidden" disabled={importingFolder}
+                    <input ref={setFolderInputRef} type="file" multiple className="hidden" disabled={importingFolder}
                       onChange={handleFolderImport} />
                     {importingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                     <span>{importingFolder ? t('agents:buttons.importingFolder') : t('agents:buttons.importFolder')}</span>
