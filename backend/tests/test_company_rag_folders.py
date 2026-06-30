@@ -495,3 +495,69 @@ async def test_company_import_requires_admin(client, member_cookies, mock_redis_
         cookies=member_cookies,
     )
     assert resp.status_code == 403
+
+
+# -- folder import: subtree retrieval + status (company) ----------------------
+
+
+@pytest.mark.asyncio
+async def test_company_retrieval_parent_selection_includes_subtree(db_session, test_company, test_admin_user):
+    """Selecting a PARENT company folder includes docs that live in its subfolder."""
+    from rag_engine import search_similar_texts_for_user
+    from database import CompanyFolder, DocumentChunk
+    from tests.factories import AgentFactory
+
+    agent = AgentFactory.build(user_id=test_admin_user.id, company_id=test_company.id, include_company_rag=True)
+    db_session.add(agent)
+    db_session.flush()
+
+    parent = _make_folder(db_session, test_company.id, "Legal")
+    child = CompanyFolder(company_id=test_company.id, name="Contracts", parent_id=parent.id)
+    db_session.add(child)
+    db_session.flush()
+
+    vec = [1.0] + [0.0] * 1023
+    doc = _make_company_doc(db_session, test_admin_user.id, test_company.id, child.id)
+    doc.filename = "in_subfolder.txt"
+    db_session.add(
+        DocumentChunk(document_id=doc.id, company_id=test_company.id, chunk_text="c", embedding_vec=vec, chunk_index=0)
+    )
+    db_session.flush()
+
+    results = search_similar_texts_for_user(
+        vec,
+        test_admin_user.id,
+        db_session,
+        top_k=10,
+        agent_id=agent.id,
+        company_id=test_company.id,
+        include_company_rag=True,
+        company_rag_folder_ids=[parent.id],  # select only the parent
+    )
+    assert any(r["document_name"] == "in_subfolder.txt" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_company_import_async_path_and_status(client, admin_cookies, mock_redis, monkeypatch):
+    import routers.company_rag as cr
+
+    monkeypatch.setattr(cr, "_run_company_folder_import", lambda *a, **k: None)
+    resp = await client.post(
+        "/api/company-rag/folders/import",
+        files=[("files", ("a.txt", b"hi", "text/plain"))],
+        data={"paths": ["Root/a.txt"]},
+        cookies=admin_cookies,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "processing" and body["import_task_id"]
+
+    status = await client.get(f"/api/company-rag/folders/import-status/{body['import_task_id']}", cookies=admin_cookies)
+    assert status.status_code == 200
+    assert status.json()["status"] == "processing" and status.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_company_import_status_unknown_404(client, admin_cookies, mock_redis):
+    resp = await client.get("/api/company-rag/folders/import-status/does-not-exist", cookies=admin_cookies)
+    assert resp.status_code == 404
