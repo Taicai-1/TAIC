@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
-from mistral_embeddings import get_embedding, get_embedding_fast
+from mistral_embeddings import get_embedding, get_embedding_fast, get_embeddings_batch
 from openai_client import get_chat_response, get_chat_response_stream
 from database import Document, DocumentChunk, User, Agent
 from file_loader import load_text_from_pdf, chunk_text
@@ -1219,25 +1219,29 @@ def ingest_text_content(
         if progress_callback:
             progress_callback("chunking", 30, len(chunks))
 
+        # Flatten every chunk into its sub-chunks (oversized chunks split further),
+        # batch-embed them all in one path, then average sub-chunk vectors per chunk.
+        sub_texts = []
+        sub_owner = []  # parallel to sub_texts: index of the owning chunk
         for i, chunk in enumerate(chunks):
-            logger.info(f"Processing chunk {i + 1}/{len(chunks)} with Mistral embedding")
-            if progress_callback:
-                # Embedding phase spans 30-95%
-                pct = 30 + int((i / max(len(chunks), 1)) * 65)
-                progress_callback("embedding", pct, len(chunks), i + 1)
-            try:
-                sub_chunks = split_for_embedding(chunk, 8192)
-                embeddings = []
-                for sub in sub_chunks:
-                    embedding = get_embedding_fast(sub)
-                    embeddings.append(embedding)
-                if embeddings:
-                    avg_embedding = list(np.mean(np.array(embeddings), axis=0))
-                else:
-                    raise ValueError("No sub-chunks produced for embedding")
-            except Exception as e:
-                logger.error(f"Failed to get Mistral embedding for chunk {i}: {e}")
-                raise
+            for sub in split_for_embedding(chunk, 8192):
+                sub_texts.append(sub)
+                sub_owner.append(i)
+
+        if progress_callback:
+            progress_callback("embedding", 50, len(chunks))
+
+        sub_embeddings = get_embeddings_batch(sub_texts)
+
+        by_chunk = {}
+        for owner, emb in zip(sub_owner, sub_embeddings):
+            by_chunk.setdefault(owner, []).append(emb)
+
+        for i, chunk in enumerate(chunks):
+            embs = by_chunk.get(i)
+            if not embs:
+                raise ValueError(f"No sub-chunks produced for chunk {i}")
+            avg_embedding = list(np.mean(np.array(embs), axis=0))
             doc_chunk = DocumentChunk(
                 document_id=document.id,
                 company_id=company_id,
