@@ -259,6 +259,54 @@ def test_ingest_file_writes_failed_status_when_extraction_raises(db_session, tes
     assert prof is not None and prof.extraction_status == "failed"
 
 
+def test_import_into_cv_base_profiles_whole_subtree(db_session, test_user, test_company, monkeypatch):
+    """Importing into a CV base extracts docs even when webkitdirectory nests them in a
+    subfolder, and the created subfolder inherits is_cv_base."""
+    root = CompanyFolder(company_id=test_company.id, name="CV Root", is_cv_base=True)
+    db_session.add(root)
+    db_session.flush()
+
+    doc = Document(
+        filename="d.pdf",
+        content="x",
+        user_id=test_user.id,
+        company_id=test_company.id,
+        is_company_rag=True,
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    monkeypatch.setattr(company_rag, "validate_file_extension", lambda fn: True)
+    monkeypatch.setattr(company_rag, "validate_file_content", lambda content, fn: True)
+    monkeypatch.setattr(company_rag, "process_document_for_user", lambda *a, **k: doc.id)
+    monkeypatch.setattr(
+        company_rag,
+        "extract_cv_metadata",
+        lambda text, model_id=None: {"full_name": "Sub", "raw_extraction": {}},
+    )
+
+    summary = company_rag._company_folder_import_with_db(
+        task_id="t4",
+        company_id=test_company.id,
+        user_id=test_user.id,
+        destination_parent_id=root.id,
+        items=[("d.pdf", "batch-2025/d.pdf", b"PDFBYTES")],
+        db=db_session,
+    )
+
+    assert summary["done"] == 1
+    # The subfolder created during the import inherits the CV-base flag.
+    sub = (
+        db_session.query(CompanyFolder)
+        .filter(CompanyFolder.parent_id == root.id, CompanyFolder.name == "batch-2025")
+        .first()
+    )
+    assert sub is not None and sub.is_cv_base is True
+    # The document was profiled despite landing in the subfolder.
+    prof = db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc.id).first()
+    assert prof is not None and prof.full_name == "Sub"
+
+
 def test_resolve_import_file_cap():
     assert resolve_import_file_cap(is_cv_base=False) == MAX_IMPORT_FILES
     assert resolve_import_file_cap(is_cv_base=True) == MAX_CV_IMPORT_FILES
