@@ -2,6 +2,7 @@ import rag_engine
 import routers.company_rag as company_rag
 from database import Document, DocumentChunk, CandidateProfile, CompanyFolder
 from cv_extraction import upsert_candidate_profile
+from routers.company_rag import resolve_import_file_cap, MAX_IMPORT_FILES, MAX_CV_IMPORT_FILES
 
 
 def test_ingest_text_content_batches_embeddings(db_session, test_user, test_agent, monkeypatch):
@@ -185,3 +186,9 @@ def test_ingest_file_writes_failed_status_when_extraction_raises(db_session, tes
     assert summary["done"] == 1
     prof = db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc.id).first()
     assert prof is not None and prof.extraction_status == "failed"
+
+
+def test_resolve_import_file_cap():
+    assert resolve_import_file_cap(is_cv_base=False) == MAX_IMPORT_FILES
+    assert resolve_import_file_cap(is_cv_base=True) == MAX_CV_IMPORT_FILES
+    assert MAX_CV_IMPORT_FILES > MAX_IMPORT_FILES

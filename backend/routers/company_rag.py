@@ -38,6 +38,15 @@ logger = logging.getLogger(__name__)
 # Default small model for CV metadata extraction (Phase 1; tune via POC, see spec section 8).
 CV_EXTRACTION_MODEL = "gpt-4o-mini"
 
+# CV bases legitimately contain far more files than an interactive folder import.
+MAX_CV_IMPORT_FILES = 5000
+
+
+def resolve_import_file_cap(is_cv_base: bool) -> int:
+    """Per-destination file cap: CV-base folders allow a much larger bulk import."""
+    return MAX_CV_IMPORT_FILES if is_cv_base else MAX_IMPORT_FILES
+
+
 router = APIRouter()
 
 ALLOWED_TYPES = [".pdf", ".txt", ".docx", ".ics", ".json"]
@@ -524,8 +533,6 @@ async def import_company_folder(
     company_id = _require_company_id(user_id, db)
     if len(files) != len(paths):
         raise HTTPException(status_code=400, detail="files and paths length mismatch")
-    if len(files) > MAX_IMPORT_FILES:
-        raise HTTPException(status_code=413, detail=f"Too many files (max {MAX_IMPORT_FILES})")
     dest_parent_id = None
     if parent_id not in (None, ""):
         try:
@@ -533,6 +540,15 @@ async def import_company_folder(
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="parent_id must be an integer or null")
         _folder_or_404(dest_parent_id, company_id, db)
+    dest_is_cv_base = False
+    if dest_parent_id is not None:
+        row = db.query(CompanyFolder.is_cv_base).filter(
+            CompanyFolder.id == dest_parent_id, CompanyFolder.company_id == company_id
+        ).first()
+        dest_is_cv_base = bool(row[0]) if row else False
+    file_cap = resolve_import_file_cap(dest_is_cv_base)
+    if len(files) > file_cap:
+        raise HTTPException(status_code=413, detail=f"Too many files (max {file_cap})")
 
     items = []
     total_size = 0
