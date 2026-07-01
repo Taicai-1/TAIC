@@ -452,7 +452,17 @@ async def move_company_document(
 
 
 def _company_folder_import_with_db(task_id, company_id, user_id, destination_parent_id, items, db):
-    """Run a company folder import using the provided DB session."""
+    """Run a company folder import using the provided DB session.
+
+    If the destination is a CV-base folder, the whole imported subtree is treated as CVs:
+    subfolders created during the import inherit ``is_cv_base`` and every document is profiled.
+    This makes the common browser folder-upload flow work (webkitdirectory always nests the
+    files under a top-level subfolder).
+    """
+    dest_is_cv_base = False
+    if destination_parent_id is not None:
+        _dest_row = db.query(CompanyFolder.is_cv_base).filter(CompanyFolder.id == destination_parent_id).first()
+        dest_is_cv_base = bool(_dest_row[0]) if _dest_row else False
 
     def find_child(parent_id, name):
         q = db.query(CompanyFolder.id).filter(CompanyFolder.company_id == company_id, CompanyFolder.name == name)
@@ -465,7 +475,8 @@ def _company_folder_import_with_db(task_id, company_id, user_id, destination_par
         return row[0] if row else None
 
     def create_child(parent_id, name):
-        folder = CompanyFolder(company_id=company_id, name=name, parent_id=parent_id)
+        # Subfolders created while importing into a CV base are themselves CV bases.
+        folder = CompanyFolder(company_id=company_id, name=name, parent_id=parent_id, is_cv_base=dest_is_cv_base)
         db.add(folder)
         db.commit()
         db.refresh(folder)
@@ -477,8 +488,6 @@ def _company_folder_import_with_db(task_id, company_id, user_id, destination_par
     _cv_base_cache = {}
 
     def _folder_is_cv_base(folder_id):
-        # Phase 1: only the immediate destination folder is checked, not ancestors —
-        # CVs imported into a subfolder of a cv_base folder are not profiled.
         if folder_id is None:
             return False
         if folder_id not in _cv_base_cache:
@@ -490,7 +499,8 @@ def _company_folder_import_with_db(task_id, company_id, user_id, destination_par
         document_id = process_document_for_user(
             filename, content, user_id, db, company_id=company_id, is_company_rag=True, folder_id=folder_id
         )
-        if document_id and _folder_is_cv_base(folder_id):
+        # Extract when importing into a CV base (whole subtree) or into a folder already flagged.
+        if document_id and (dest_is_cv_base or _folder_is_cv_base(folder_id)):
             text_content = db.query(Document.content).filter(Document.id == document_id).scalar() or ""
             try:
                 profile = extract_cv_metadata(text_content, model_id=CV_EXTRACTION_MODEL)
