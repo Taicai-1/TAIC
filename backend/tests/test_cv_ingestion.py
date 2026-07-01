@@ -1,5 +1,6 @@
 import rag_engine
 import routers.company_rag as company_rag
+from sqlalchemy import text
 from database import Document, DocumentChunk, CandidateProfile, CompanyFolder
 from cv_extraction import upsert_candidate_profile
 from routers.company_rag import resolve_import_file_cap, MAX_IMPORT_FILES, MAX_CV_IMPORT_FILES
@@ -192,3 +193,23 @@ def test_resolve_import_file_cap():
     assert resolve_import_file_cap(is_cv_base=False) == MAX_IMPORT_FILES
     assert resolve_import_file_cap(is_cv_base=True) == MAX_CV_IMPORT_FILES
     assert MAX_CV_IMPORT_FILES > MAX_IMPORT_FILES
+
+
+def test_deleting_document_cascades_candidate_profile(db_session, test_user, test_agent):
+    doc = Document(filename="cv.pdf", content="x", user_id=test_user.id,
+                   agent_id=test_agent.id, company_id=test_user.company_id, is_company_rag=True)
+    db_session.add(doc)
+    db_session.flush()
+    doc_id = doc.id
+
+    profile = CandidateProfile(document_id=doc_id, company_id=test_user.company_id,
+                               full_name="Erasable Person", extraction_status="done")
+    db_session.add(profile)
+    db_session.flush()
+    assert db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc_id).count() == 1
+
+    # RGPD erasure: deleting the Document must cascade-remove its CandidateProfile.
+    db_session.execute(text("DELETE FROM documents WHERE id = :id"), {"id": doc_id})
+    db_session.flush()
+    db_session.expire_all()
+    assert db_session.query(CandidateProfile).filter(CandidateProfile.document_id == doc_id).count() == 0
