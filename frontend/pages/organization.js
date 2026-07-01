@@ -278,6 +278,19 @@ export default function Organization() {
     }
   };
 
+  const handleToggleCvBase = async (folder) => {
+    const next = !folder.is_cv_base;
+    // Only future imports into this folder are analyzed as CVs; existing docs are unaffected.
+    if (next && !window.confirm(t('organization:companyRag.cvBaseEnableConfirm'))) return;
+    try {
+      await api.put(`/api/company-rag/folders/${folder.id}`, { is_cv_base: next });
+      toast.success(next ? t('organization:companyRag.cvBaseEnabled') : t('organization:companyRag.cvBaseDisabled'));
+      await loadFolders();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || t('organization:companyRag.cvBaseError'));
+    }
+  };
+
   const handleDeleteFolder = async (folder) => {
     if (!confirm(t('organization:companyRag.folderDeleteConfirm'))) return;
     try {
@@ -433,8 +446,18 @@ export default function Organization() {
             onClick={() => setSelectedFolderId(f.id)}>
             <span className="font-medium">{f.name}</span>
             <span className="ml-2 text-xs text-gray-400">{f.document_count}</span>
+            {f.is_cv_base && (
+              <span
+                className="ml-2 inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-700"
+                title={t('organization:companyRag.cvBaseBadgeTitle')}>
+                {t('organization:companyRag.cvBaseBadge')}
+              </span>
+            )}
             {canManage && (
               <span className="ml-2 hidden group-hover:inline-flex items-center gap-1">
+                <button onClick={(ev) => { ev.stopPropagation(); handleToggleCvBase(f); }}
+                  className={f.is_cv_base ? 'text-teal-600 hover:text-teal-800' : 'text-gray-400 hover:text-gray-700'}
+                  title={f.is_cv_base ? t('organization:companyRag.cvBaseDisableTitle') : t('organization:companyRag.cvBaseEnableTitle')}>👤</button>
                 <button onClick={(ev) => { ev.stopPropagation(); handleCreateSubfolder(f); }}
                   className="text-gray-400 hover:text-gray-700" title={t('organization:companyRag.addSubfolder')}>+</button>
                 <button onClick={(ev) => { ev.stopPropagation(); handleRenameFolder(f); }}
