@@ -33,6 +33,7 @@ from database import (
     ensure_columns,
     ensure_company_rag_default_folders,
     ensure_folder_hierarchy_constraints,
+    ensure_candidate_profile_indexes,
     ensure_llm_usage_table,
     ensure_support_tables,
     ensure_pgvector,
@@ -446,6 +447,9 @@ async def startup_event():
             # Support account: is_support column + support_audit_logs
             ensure_support_tables()
             logger.info("ensure_support_tables done (%s)", _elapsed())
+            # CV companion: GIN index on candidate_profiles.skills
+            ensure_candidate_profile_indexes()
+            logger.info("ensure_candidate_profile_indexes done (%s)", _elapsed())
             # Run Alembic migrations to apply any pending schema changes
             try:
                 from alembic.config import Config as AlembicConfig

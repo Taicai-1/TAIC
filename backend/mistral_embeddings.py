@@ -99,3 +99,40 @@ def get_embedding_fast(text: str) -> List[float]:
     except Exception as e:
         logger.error(f"Mistral fast embedding error: {e}")
         raise
+
+
+def get_embeddings_batch(texts: List[str], batch_size: int = 64) -> List[List[float]]:
+    """Embed many texts, returning embeddings in the same order as ``texts``.
+
+    Serves cache hits individually; sends only cache misses to the API in groups of
+    ``batch_size`` (the Mistral embeddings endpoint accepts a list of inputs per call).
+    Raises on API failure (no zero-vector fallback), consistent with get_embedding_fast
+    (single attempt, no retry).
+    """
+    if not texts:
+        return []
+
+    results: List[List[float]] = [None] * len(texts)
+    miss_indices: List[int] = []
+    for i, t in enumerate(texts):
+        cached = _get_cached_embedding(t)
+        if cached is not None:
+            results[i] = cached
+        else:
+            miss_indices.append(i)
+
+    client = _get_client()
+    for start in range(0, len(miss_indices), batch_size):
+        group = miss_indices[start : start + batch_size]
+        inputs = [texts[i] for i in group]
+        try:
+            response = client.embeddings.create(model=EMBEDDING_MODEL, inputs=inputs)
+        except Exception as e:
+            logger.error(f"Mistral batch embedding error (batch start {start}, {len(inputs)} inputs): {e}")
+            raise
+        for idx, item in zip(group, response.data):
+            emb = item.embedding
+            results[idx] = emb
+            _set_cached_embedding(texts[idx], emb)
+
+    return results
