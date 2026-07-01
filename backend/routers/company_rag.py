@@ -534,18 +534,14 @@ async def import_company_folder(
     if len(files) != len(paths):
         raise HTTPException(status_code=400, detail="files and paths length mismatch")
     dest_parent_id = None
+    dest_folder = None
     if parent_id not in (None, ""):
         try:
             dest_parent_id = int(parent_id)
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="parent_id must be an integer or null")
-        _folder_or_404(dest_parent_id, company_id, db)
-    dest_is_cv_base = False
-    if dest_parent_id is not None:
-        row = db.query(CompanyFolder.is_cv_base).filter(
-            CompanyFolder.id == dest_parent_id, CompanyFolder.company_id == company_id
-        ).first()
-        dest_is_cv_base = bool(row[0]) if row else False
+        dest_folder = _folder_or_404(dest_parent_id, company_id, db)
+    dest_is_cv_base = bool(dest_folder.is_cv_base) if dest_folder is not None else False
     file_cap = resolve_import_file_cap(dest_is_cv_base)
     if len(files) > file_cap:
         raise HTTPException(status_code=413, detail=f"Too many files (max {file_cap})")
