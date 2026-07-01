@@ -196,6 +196,68 @@ async def test_rename_folder_collision_409(client, admin_cookies, db_session, te
     assert resp.status_code == 409
 
 
+# -- is_cv_base flag ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_folder_with_cv_base(client, admin_cookies):
+    """Creating a folder with is_cv_base=True marks it as a CV base."""
+    resp = await client.post(
+        "/api/company-rag/folders",
+        json={"name": "CV Base", "is_cv_base": True},
+        cookies=admin_cookies,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["is_cv_base"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_folders_includes_cv_base_default_false(client, admin_cookies, db_session, test_company):
+    """A folder created without the flag lists is_cv_base=False."""
+    folder = _make_folder(db_session, test_company.id, "Plain")
+
+    resp = await client.get("/api/company-rag/folders", cookies=admin_cookies)
+    assert resp.status_code == 200
+    match = next((f for f in resp.json()["folders"] if f["id"] == folder.id), None)
+    assert match is not None
+    assert match["is_cv_base"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_folder_toggles_cv_base(client, admin_cookies, db_session, test_company):
+    """PUT with is_cv_base toggles the flag without requiring a name, and can toggle back."""
+    folder = _make_folder(db_session, test_company.id, "Toggle Me")
+
+    on = await client.put(
+        f"/api/company-rag/folders/{folder.id}",
+        json={"is_cv_base": True},
+        cookies=admin_cookies,
+    )
+    assert on.status_code == 200
+    assert on.json()["is_cv_base"] is True
+
+    off = await client.put(
+        f"/api/company-rag/folders/{folder.id}",
+        json={"is_cv_base": False},
+        cookies=admin_cookies,
+    )
+    assert off.status_code == 200
+    assert off.json()["is_cv_base"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_folder_empty_payload_400(client, admin_cookies, db_session, test_company):
+    """PUT with neither name nor is_cv_base returns 400."""
+    folder = _make_folder(db_session, test_company.id, "Nothing To Do")
+
+    resp = await client.put(
+        f"/api/company-rag/folders/{folder.id}",
+        json={},
+        cookies=admin_cookies,
+    )
+    assert resp.status_code == 400
+
+
 # -- delete ------------------------------------------------------------------
 
 

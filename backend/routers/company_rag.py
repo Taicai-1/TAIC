@@ -270,6 +270,7 @@ async def list_company_folders(
                     "parent_id": f.parent_id,
                     "created_at": f.created_at.isoformat() if f.created_at else None,
                     "document_count": int(counts.get(f.id, 0)),
+                    "is_cv_base": bool(f.is_cv_base),
                 }
                 for f in folders
             ]
@@ -310,11 +311,19 @@ async def create_company_folder(
         )
         if sibling_q.first():
             raise HTTPException(status_code=409, detail="A folder with this name already exists here")
-        folder = CompanyFolder(company_id=company_id, name=name, parent_id=parent_id)
+        folder = CompanyFolder(
+            company_id=company_id, name=name, parent_id=parent_id, is_cv_base=bool(payload.get("is_cv_base"))
+        )
         db.add(folder)
         db.commit()
         db.refresh(folder)
-        return {"id": folder.id, "name": folder.name, "parent_id": folder.parent_id, "document_count": 0}
+        return {
+            "id": folder.id,
+            "name": folder.name,
+            "parent_id": folder.parent_id,
+            "document_count": 0,
+            "is_cv_base": bool(folder.is_cv_base),
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -324,39 +333,50 @@ async def create_company_folder(
 
 
 @router.put("/api/company-rag/folders/{folder_id}")
-async def rename_company_folder(
+async def update_company_folder(
     folder_id: int,
     payload: dict = Body(...),
     user_id: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
-    """Rename a company-RAG folder (owner/admin only)."""
+    """Update a company-RAG folder: rename and/or toggle its ``is_cv_base`` flag (owner/admin only).
+
+    Both fields are optional; at least one must be provided. Setting ``is_cv_base`` true marks the
+    folder as a CV base, so future imports into it extract a CandidateProfile per document.
+    """
     try:
         company_id = require_role(int(user_id), db, "admin").company_id
         folder = _folder_or_404(folder_id, company_id, db)
-        name = (payload.get("name") or "").strip()
-        if not name:
-            raise HTTPException(status_code=400, detail="Folder name is required")
-        if len(name) > MAX_FOLDER_NAME_LENGTH:
-            raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
-        # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
-        sibling_q = db.query(CompanyFolder).filter(
-            CompanyFolder.company_id == company_id, CompanyFolder.name == name, CompanyFolder.id != folder_id
-        )
-        sibling_q = (
-            sibling_q.filter(CompanyFolder.parent_id.is_(None))
-            if folder.parent_id is None
-            else sibling_q.filter(CompanyFolder.parent_id == folder.parent_id)
-        )
-        if sibling_q.first():
-            raise HTTPException(status_code=409, detail="A folder with this name already exists here")
-        folder.name = name
+        name = payload.get("name")
+        is_cv_base = payload.get("is_cv_base")
+        if name is None and is_cv_base is None:
+            raise HTTPException(status_code=400, detail="Nothing to update")
+        if name is not None:
+            name = name.strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="Folder name is required")
+            if len(name) > MAX_FOLDER_NAME_LENGTH:
+                raise HTTPException(status_code=400, detail=f"Folder name too long (max {MAX_FOLDER_NAME_LENGTH})")
+            # Pre-check for a friendlier 409; the DB UniqueConstraint is the real guard against races.
+            sibling_q = db.query(CompanyFolder).filter(
+                CompanyFolder.company_id == company_id, CompanyFolder.name == name, CompanyFolder.id != folder_id
+            )
+            sibling_q = (
+                sibling_q.filter(CompanyFolder.parent_id.is_(None))
+                if folder.parent_id is None
+                else sibling_q.filter(CompanyFolder.parent_id == folder.parent_id)
+            )
+            if sibling_q.first():
+                raise HTTPException(status_code=409, detail="A folder with this name already exists here")
+            folder.name = name
+        if is_cv_base is not None:
+            folder.is_cv_base = bool(is_cv_base)
         db.commit()
-        return {"id": folder.id, "name": folder.name}
+        return {"id": folder.id, "name": folder.name, "is_cv_base": bool(folder.is_cv_base)}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error renaming company folder {folder_id}: {e}")
+        logger.error(f"Error updating company folder {folder_id}: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
 
@@ -471,21 +491,29 @@ def _company_folder_import_with_db(task_id, company_id, user_id, destination_par
             filename, content, user_id, db, company_id=company_id, is_company_rag=True, folder_id=folder_id
         )
         if document_id and _folder_is_cv_base(folder_id):
-            text_content = (
-                db.query(Document.content).filter(Document.id == document_id).scalar() or ""
-            )
+            text_content = db.query(Document.content).filter(Document.id == document_id).scalar() or ""
             try:
                 profile = extract_cv_metadata(text_content, model_id=CV_EXTRACTION_MODEL)
                 upsert_candidate_profile(
-                    db, document_id=document_id, company_id=company_id, folder_id=folder_id,
-                    profile=profile, model_id=CV_EXTRACTION_MODEL, status="done",
+                    db,
+                    document_id=document_id,
+                    company_id=company_id,
+                    folder_id=folder_id,
+                    profile=profile,
+                    model_id=CV_EXTRACTION_MODEL,
+                    status="done",
                 )
             except Exception as e:
                 logger.warning(f"CV extraction failed for {filename}: {e}")
                 try:
                     upsert_candidate_profile(
-                        db, document_id=document_id, company_id=company_id, folder_id=folder_id,
-                        profile={"raw_extraction": {}}, model_id=CV_EXTRACTION_MODEL, status="failed",
+                        db,
+                        document_id=document_id,
+                        company_id=company_id,
+                        folder_id=folder_id,
+                        profile={"raw_extraction": {}},
+                        model_id=CV_EXTRACTION_MODEL,
+                        status="failed",
                     )
                 except Exception as e2:
                     logger.warning(f"CV failed-status upsert also failed for {filename}: {e2}")
