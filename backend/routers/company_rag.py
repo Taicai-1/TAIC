@@ -491,21 +491,29 @@ def _company_folder_import_with_db(task_id, company_id, user_id, destination_par
             filename, content, user_id, db, company_id=company_id, is_company_rag=True, folder_id=folder_id
         )
         if document_id and _folder_is_cv_base(folder_id):
-            text_content = (
-                db.query(Document.content).filter(Document.id == document_id).scalar() or ""
-            )
+            text_content = db.query(Document.content).filter(Document.id == document_id).scalar() or ""
             try:
                 profile = extract_cv_metadata(text_content, model_id=CV_EXTRACTION_MODEL)
                 upsert_candidate_profile(
-                    db, document_id=document_id, company_id=company_id, folder_id=folder_id,
-                    profile=profile, model_id=CV_EXTRACTION_MODEL, status="done",
+                    db,
+                    document_id=document_id,
+                    company_id=company_id,
+                    folder_id=folder_id,
+                    profile=profile,
+                    model_id=CV_EXTRACTION_MODEL,
+                    status="done",
                 )
             except Exception as e:
                 logger.warning(f"CV extraction failed for {filename}: {e}")
                 try:
                     upsert_candidate_profile(
-                        db, document_id=document_id, company_id=company_id, folder_id=folder_id,
-                        profile={"raw_extraction": {}}, model_id=CV_EXTRACTION_MODEL, status="failed",
+                        db,
+                        document_id=document_id,
+                        company_id=company_id,
+                        folder_id=folder_id,
+                        profile={"raw_extraction": {}},
+                        model_id=CV_EXTRACTION_MODEL,
+                        status="failed",
                     )
                 except Exception as e2:
                     logger.warning(f"CV failed-status upsert also failed for {filename}: {e2}")

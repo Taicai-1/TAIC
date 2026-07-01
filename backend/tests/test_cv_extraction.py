@@ -21,8 +21,8 @@ def test_coerce_cv_profile_happy_path():
         "full_name": "Jean Dupont",
         "current_title": "Senior Backend Engineer",
         "seniority": "senior",
-        "years_experience": "8",          # string -> int
-        "skills": ["Python", "react.js"], # normalized
+        "years_experience": "8",  # string -> int
+        "skills": ["Python", "react.js"],  # normalized
         "languages": ["French", "English"],
         "education_level": "Master",
         "location": "Paris",
@@ -39,8 +39,8 @@ def test_coerce_cv_profile_happy_path():
 def test_coerce_cv_profile_handles_missing_and_garbage():
     p = coerce_cv_profile({"years_experience": "n/a", "skills": "Python"})
     assert p["full_name"] is None
-    assert p["years_experience"] is None      # unparseable -> None
-    assert p["skills"] == []                   # non-list -> []
+    assert p["years_experience"] is None  # unparseable -> None
+    assert p["skills"] == []  # non-list -> []
     assert p["raw_extraction"] == {"years_experience": "n/a", "skills": "Python"}
 
 
@@ -99,8 +99,8 @@ def test_get_embeddings_batch_preserves_order_and_uses_cache(monkeypatch):
     monkeypatch.setattr(mistral_embeddings, "_get_client", lambda: _Client())
 
     out = mistral_embeddings.get_embeddings_batch(["a", "bbb", "cc"], batch_size=2)
-    assert out == [[1.0], [3.0], [2.0]]   # order preserved
-    assert calls["n"] == 2                 # 3 items, batch_size 2 -> 2 API calls
+    assert out == [[1.0], [3.0], [2.0]]  # order preserved
+    assert calls["n"] == 2  # 3 items, batch_size 2 -> 2 API calls
 
 
 def test_get_embeddings_batch_empty():

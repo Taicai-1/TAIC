@@ -144,7 +144,8 @@ def upsert_candidate_profile(db, document_id, company_id, folder_id, profile, mo
         languages=profile.get("languages") or [],
         education_level=profile.get("education_level"),
         last_company=profile.get("last_company"),
-        raw_extraction=profile.get("raw_extraction") or {},  # 'summary' from the profile dict is captured here (no summary column)
+        raw_extraction=profile.get("raw_extraction")
+        or {},  # 'summary' from the profile dict is captured here (no summary column)
         extraction_status=status,
         extraction_model=model_id,
     )
