@@ -273,6 +273,20 @@ def get_answer(
         # subfolders for BOTH the doc-listing gate below and the retrieval scope.
         company_rag_folder_ids = _expand_company_folder_ids(company_rag_folder_ids, company_scope_id, db)
 
+        # CV companion: if the agent's company-RAG folders include a CV base, let the CV
+        # intent router try to answer (sourcing/analytics/Q&A). None -> fall back to RAG.
+        # `not selected_doc_ids` prevents re-entry: the Q&A path re-calls get_answer with an
+        # explicit selected_doc_ids, which must run plain targeted RAG (no re-routing).
+        if include_company_rag and agent_id and not selected_doc_ids:
+            import cv_agent
+
+            if cv_agent.folders_include_cv_base(db, company_scope_id, company_rag_folder_ids):
+                _cv = cv_agent.answer_cv(
+                    question, user_id, db, agent_id, history, model_id, company_scope_id, company_rag_folder_ids
+                )
+                if _cv is not None:
+                    return _cv
+
         # Get documents to consider for RAG
         # If selected_doc_ids provided, use those (and respect agent_id if present).
         # The company-RAG folder filter is intentionally NOT applied here: an explicit

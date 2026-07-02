@@ -118,3 +118,56 @@ def route_cv_intent(question, history, model_id):
     if resp.tool_call is None:
         return None
     return resp.tool_call.name, (resp.tool_call.arguments or {})
+
+
+class _CvContext:
+    """Everything a tool handler needs, bundled so handlers share one signature."""
+
+    def __init__(self, question, user_id, db, agent_id, history, model_id, company_id, folder_ids):
+        self.question = question
+        self.user_id = user_id
+        self.db = db
+        self.agent_id = agent_id
+        self.history = history
+        self.model_id = model_id
+        self.company_id = company_id
+        self.folder_ids = folder_ids
+
+
+# Populated by later tasks: {"cv_qa": fn, "cv_sourcing": fn, "cv_analytics": fn}.
+# Each handler has signature (args: dict, ctx: _CvContext) -> dict | None.
+_HANDLERS = {}
+
+
+def answer_cv(question, user_id, db, agent_id, history, model_id, company_id, folder_ids):
+    """Route the message to a CV tool and return an answer dict, or None to fall back to RAG."""
+    routed = route_cv_intent(question, history, model_id)
+    if routed is None:
+        return None
+    name, args = routed
+    handler = _HANDLERS.get(name)
+    if handler is None:
+        return None
+    try:
+        ctx = _CvContext(question, user_id, db, agent_id, history, model_id, company_id, folder_ids)
+        result = handler(args, ctx)
+        if not result:
+            return None
+        # A handler may ask the orchestrator to run targeted single-CV RAG (Q&A).
+        if result.get("stream_doc_id"):
+            import rag_engine
+
+            return rag_engine.get_answer(
+                result["question"],
+                ctx.user_id,
+                ctx.db,
+                selected_doc_ids=[result["stream_doc_id"]],
+                agent_id=ctx.agent_id,
+                history=ctx.history,
+                model_id=ctx.model_id,
+                company_id=ctx.company_id,
+            )
+        return result
+    except Exception as e:
+        logger.warning(f"cv_agent handler '{name}' failed: {e}")
+        return None

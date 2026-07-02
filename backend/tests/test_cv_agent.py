@@ -56,3 +56,31 @@ def test_route_cv_intent_exception_returns_none(monkeypatch):
 
     monkeypatch.setattr(cv_agent, "get_chat_response_with_tools", boom)
     assert cv_agent.route_cv_intent("anything", history=None, model_id=None) is None
+
+
+def test_answer_cv_dispatches_and_falls_back(monkeypatch):
+    # No tool chosen -> None (fallback to RAG).
+    monkeypatch.setattr(cv_agent, "route_cv_intent", lambda q, history, model_id: None)
+    assert (
+        cv_agent.answer_cv("hi", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7]) is None
+    )
+
+    # A tool chosen -> its handler result is returned.
+    monkeypatch.setattr(
+        cv_agent,
+        "route_cv_intent",
+        lambda q, history, model_id: ("cv_analytics", {"metric": "count", "dimension": "skill"}),
+    )
+    monkeypatch.setattr(cv_agent, "_HANDLERS", {"cv_analytics": lambda args, ctx: {"answer": "42", "sources": []}})
+    out = cv_agent.answer_cv("combien", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7])
+    assert out == {"answer": "42", "sources": []}
+
+    # Handler raises -> None (graceful fallback).
+    def boom(args, ctx):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(cv_agent, "_HANDLERS", {"cv_analytics": boom})
+    assert (
+        cv_agent.answer_cv("combien", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7])
+        is None
+    )
