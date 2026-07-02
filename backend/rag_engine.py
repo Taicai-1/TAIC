@@ -280,7 +280,7 @@ def get_answer(
         if include_company_rag and agent_id and not selected_doc_ids:
             import cv_agent
 
-            if cv_agent.folders_include_cv_base(db, company_scope_id, company_rag_folder_ids):
+            if cv_agent.cv_tools_available(db, company_scope_id, company_rag_folder_ids):
                 cv_answer = cv_agent.answer_cv(
                     question, user_id, db, agent_id, history, model_id, company_scope_id, company_rag_folder_ids
                 )
@@ -603,7 +603,7 @@ def get_answer_stream(
         if include_company_rag and agent_id and not selected_doc_ids:
             import cv_agent
 
-            if cv_agent.folders_include_cv_base(db, company_scope_id, company_rag_folder_ids):
+            if cv_agent.cv_tools_available(db, company_scope_id, company_rag_folder_ids):
                 _cv_stream = cv_agent.answer_cv_stream(
                     question, user_id, db, agent_id, history, model_id, company_scope_id, company_rag_folder_ids
                 )

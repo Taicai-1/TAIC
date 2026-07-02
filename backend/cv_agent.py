@@ -32,6 +32,31 @@ def folders_include_cv_base(db, company_id, folder_ids):
     return bool(db.query(q.exists()).scalar())
 
 
+def _has_candidate_profiles(db, company_id, folder_ids):
+    """True if at least one extracted CandidateProfile exists in the given scope."""
+    if not company_id:
+        return False
+    from database import CandidateProfile
+
+    q = db.query(CandidateProfile.id).filter(
+        CandidateProfile.company_id == company_id,
+        CandidateProfile.extraction_status == "done",
+    )
+    if folder_ids:
+        q = q.filter(CandidateProfile.folder_id.in_(folder_ids))
+    return bool(db.query(q.exists()).scalar())
+
+
+def cv_tools_available(db, company_id, folder_ids):
+    """CV intelligence activates only when there is a CV-base folder AND extracted profiles.
+
+    Without profiles (e.g. CVs imported before extraction was wired, or before the folder was
+    flagged as a CV base — extraction is not retroactive) the CV tools have nothing to work with,
+    so callers must fall back to normal RAG over the CV text instead of dead-ending.
+    """
+    return folders_include_cv_base(db, company_id, folder_ids) and _has_candidate_profiles(db, company_id, folder_ids)
+
+
 CV_TOOLS = [
     {
         "type": "function",
@@ -245,11 +270,9 @@ def _handle_cv_qa(args, ctx):
     sub_question = (args.get("question") or ctx.question or "").strip()
     hits = find_candidate_by_name(ctx.db, ctx.company_id, ctx.folder_ids, name)
     if not hits:
-        return {
-            "answer": f"Je n'ai trouvé aucun candidat nommé « {name} » dans cette base.",
-            "sources": [],
-            "graph_data": None,
-        }
+        # Name not found among extracted profiles (e.g. accent/typo mismatch, or that CV has no
+        # profile yet). Fall back to normal RAG over the CV text rather than dead-ending.
+        return None
     if len(hits) > 1:
         names = ", ".join(h["full_name"] for h in hits[:8])
         return {

@@ -18,6 +18,42 @@ def test_folders_include_cv_base(db_session, test_company):
     assert cv_agent.folders_include_cv_base(db_session, None, [cv.id]) is False
 
 
+def test_cv_tools_available_requires_cv_base_and_profiles(db_session, test_company, test_user):
+    cv = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
+    plain = CompanyFolder(company_id=test_company.id, name="Docs", is_cv_base=False)
+    db_session.add_all([cv, plain])
+    db_session.flush()
+
+    # CV-base folder but NO extracted profiles yet -> not available (caller falls back to RAG)
+    assert cv_agent.cv_tools_available(db_session, test_company.id, [cv.id]) is False
+
+    doc = Document(
+        filename="a.pdf",
+        content="x",
+        user_id=test_user.id,
+        company_id=test_company.id,
+        is_company_rag=True,
+        folder_id=cv.id,
+    )
+    db_session.add(doc)
+    db_session.flush()
+    db_session.add(
+        CandidateProfile(
+            document_id=doc.id,
+            company_id=test_company.id,
+            folder_id=cv.id,
+            full_name="Jean",
+            extraction_status="done",
+        )
+    )
+    db_session.flush()
+
+    # CV-base folder WITH a profile -> available
+    assert cv_agent.cv_tools_available(db_session, test_company.id, [cv.id]) is True
+    # a non-CV-base folder is never available
+    assert cv_agent.cv_tools_available(db_session, test_company.id, [plain.id]) is False
+
+
 def test_route_cv_intent_returns_tool(monkeypatch):
     from openai_client import ToolCall, ToolCallResponse
 
@@ -283,11 +319,11 @@ def test_answer_cv_qa_runs_targeted_rag(monkeypatch):
     assert captured["docs"] == [11] and "senior engineer" in out["answer"]
 
 
-def test_handle_cv_qa_no_candidate(monkeypatch):
+def test_handle_cv_qa_no_candidate_falls_back_to_rag(monkeypatch):
+    # Name not found among profiles -> return None so the orchestrator falls back to normal RAG.
     monkeypatch.setattr(cv_agent, "find_candidate_by_name", lambda db, cid, fids, name: [])
     ctx = cv_agent._CvContext("résume X", 1, None, 2, None, None, 5, [7])
-    out = cv_agent._handle_cv_qa({"candidate_name": "Ghost", "question": "?"}, ctx)
-    assert "Ghost" in out["answer"] and out["sources"] == []
+    assert cv_agent._handle_cv_qa({"candidate_name": "Ghost", "question": "?"}, ctx) is None
 
 
 def test_handle_cv_qa_ambiguous(monkeypatch):
