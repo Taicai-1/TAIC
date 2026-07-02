@@ -48,3 +48,11 @@ def test_cv_tools_are_valid_openai_schema():
         assert t["type"] == "function"
         assert t["function"]["name"] in {"cv_sourcing", "cv_analytics", "cv_qa"}
         assert t["function"]["parameters"]["type"] == "object"
+
+
+def test_route_cv_intent_exception_returns_none(monkeypatch):
+    def boom(messages, tools, model_id=None, gemini_only=False):
+        raise RuntimeError("timeout")
+
+    monkeypatch.setattr(cv_agent, "get_chat_response_with_tools", boom)
+    assert cv_agent.route_cv_intent("anything", history=None, model_id=None) is None

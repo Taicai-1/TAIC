@@ -84,7 +84,7 @@ CV_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "candidate_name": {"type": "string"},
+                    "candidate_name": {"type": "string", "description": "Full or partial name of the candidate"},
                     "question": {"type": "string", "description": "The question to answer about the candidate"},
                 },
                 "required": ["candidate_name", "question"],
@@ -104,7 +104,7 @@ _ROUTER_SYSTEM = (
 def route_cv_intent(question, history, model_id):
     """Return (tool_name, args_dict) chosen by the LLM, or None to fall back to normal RAG."""
     messages = [{"role": "system", "content": _ROUTER_SYSTEM}]
-    for m in (history or [])[-6:]:
+    for m in (history or [])[-6:]:  # last 3 turns for routing context
         role = m.get("role") if isinstance(m, dict) else None
         content = m.get("content") if isinstance(m, dict) else None
         if role in ("user", "assistant") and content:
