@@ -7,6 +7,7 @@ otherwise callers fall back to the normal RAG flow (answer_cv returns None)."""
 import json
 import logging
 
+from cv_extraction import normalize_skills
 from openai_client import get_chat_response, get_chat_response_with_tools
 from streaming_response import sse_event
 
@@ -271,3 +272,102 @@ def find_candidate_by_name(db, company_id, folder_ids, name):
     if folder_ids:
         q = q.filter(CandidateProfile.folder_id.in_(folder_ids))
     return [{"document_id": r[0], "full_name": r[1]} for r in q.limit(10).all()]
+
+
+def _rank_candidates(rows):
+    """Sort by number of matched skills (desc) then vector similarity (desc)."""
+    return sorted(
+        rows,
+        key=lambda r: (len(r.get("matched_skills") or []), r.get("similarity") or 0.0),
+        reverse=True,
+    )
+
+
+def search_candidates(
+    db,
+    company_id,
+    folder_ids,
+    *,
+    skills=None,
+    seniority=None,
+    location=None,
+    min_years=None,
+    query_embedding=None,
+    agent_id=None,
+    limit=10,
+):
+    """Return ranked distinct candidates matching the SQL filters (+ optional vector signal).
+
+    Each result: {document_id, full_name, current_title, seniority, years_experience,
+    matched_skills, similarity}.
+    """
+    from database import CandidateProfile
+
+    if not company_id:
+        return []
+    wanted = normalize_skills(skills) if skills else []
+    q = db.query(
+        CandidateProfile.document_id,
+        CandidateProfile.full_name,
+        CandidateProfile.current_title,
+        CandidateProfile.seniority,
+        CandidateProfile.years_experience,
+        CandidateProfile.skills,
+    ).filter(
+        CandidateProfile.company_id == company_id,
+        CandidateProfile.extraction_status == "done",
+    )
+    if folder_ids:
+        q = q.filter(CandidateProfile.folder_id.in_(folder_ids))
+    if wanted:
+        q = q.filter(CandidateProfile.skills.contains(wanted))  # skills @> [...]  (has ALL)
+    if seniority:
+        q = q.filter(CandidateProfile.seniority == seniority)
+    if location:
+        q = q.filter(CandidateProfile.location.ilike(f"%{location}%"))
+    if min_years is not None:
+        q = q.filter(CandidateProfile.years_experience >= min_years)
+
+    rows = q.limit(200).all()
+
+    # Optional vector signal: best chunk similarity per candidate document.
+    sims = {}
+    if query_embedding is not None and rows:
+        import rag_engine
+
+        doc_ids = [r[0] for r in rows]
+        # Pass agent_id + company-RAG scope so the retrieval hits the company CV docs (the
+        # user-level branch would filter on Document.user_id and match nothing here).
+        hits = rag_engine.search_similar_texts_for_user(
+            query_embedding,
+            user_id=None,
+            db=db,
+            top_k=200,
+            selected_doc_ids=doc_ids,
+            agent_id=agent_id,
+            company_id=company_id,
+            include_company_rag=True,
+            company_rag_folder_ids=folder_ids,
+        )
+        for h in hits:
+            d = h.get("document_id")
+            s = h.get("similarity") or 0.0
+            if d not in sims or s > sims[d]:
+                sims[d] = s
+
+    out = []
+    for r in rows:
+        cand_skills = r[5] or []
+        matched = [s for s in wanted if s in cand_skills]
+        out.append(
+            {
+                "document_id": r[0],
+                "full_name": r[1],
+                "current_title": r[2],
+                "seniority": r[3],
+                "years_experience": r[4],
+                "matched_skills": matched,
+                "similarity": sims.get(r[0], 0.0),
+            }
+        )
+    return _rank_candidates(out)[:limit]

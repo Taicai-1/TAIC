@@ -310,3 +310,54 @@ def test_handle_cv_qa_empty_name_returns_none():
     ctx = cv_agent._CvContext("résume ce candidat", 1, None, 2, None, None, 5, [7])
     assert cv_agent._handle_cv_qa({"candidate_name": "", "question": "résume"}, ctx) is None
     assert cv_agent._handle_cv_qa({"question": "résume"}, ctx) is None
+
+
+def test_rank_candidates_orders_by_criteria_then_vector():
+    rows = [
+        {"document_id": 1, "matched_skills": ["python"], "similarity": 0.9},
+        {"document_id": 2, "matched_skills": ["python", "react"], "similarity": 0.1},
+        {"document_id": 3, "matched_skills": [], "similarity": 0.5},
+    ]
+    ranked = cv_agent._rank_candidates(rows)
+    assert [r["document_id"] for r in ranked] == [2, 1, 3]  # more matched skills first, then similarity
+
+
+def test_search_candidates_filters_and_groups(db_session, test_company):
+    folder = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
+    db_session.add(folder)
+    db_session.flush()
+
+    def mk(name, skills, seniority, years):
+        doc = Document(
+            filename=f"{name}.pdf",
+            content="x",
+            user_id=1,
+            company_id=test_company.id,
+            is_company_rag=True,
+            folder_id=folder.id,
+        )
+        db_session.add(doc)
+        db_session.flush()
+        db_session.add(
+            CandidateProfile(
+                document_id=doc.id,
+                company_id=test_company.id,
+                folder_id=folder.id,
+                full_name=name,
+                skills=skills,
+                seniority=seniority,
+                years_experience=years,
+                extraction_status="done",
+            )
+        )
+        db_session.flush()
+
+    mk("A Py", ["python", "sql"], "senior", 8)
+    mk("B React", ["react"], "junior", 1)
+    mk("C PyReact", ["python", "react"], "lead", 12)
+
+    res = cv_agent.search_candidates(db_session, test_company.id, [folder.id], skills=["python"], limit=10)
+    names = {r["full_name"] for r in res}
+    assert names == {"A Py", "C PyReact"}  # both have python; B filtered out
+    res2 = cv_agent.search_candidates(db_session, test_company.id, [folder.id], skills=["python"], min_years=10)
+    assert {r["full_name"] for r in res2} == {"C PyReact"}
