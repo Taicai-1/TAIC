@@ -453,7 +453,9 @@ def _aggregate_filters(filter_dict):
     if f.get("skill"):
         normalized = normalize_skills([f["skill"]])
         if normalized:  # omit the filter entirely if normalization yields nothing (never match-all)
-            frags.append("skills @> :f_skill::jsonb")
+            # Use CAST(... AS jsonb) not `:f_skill::jsonb`: a `::` cast glued to a bound param
+            # breaks SQLAlchemy text() colon parsing (Postgres "syntax error at or near :").
+            frags.append("skills @> CAST(:f_skill AS jsonb)")
             params["f_skill"] = json.dumps([normalized[0]])
     if f.get("seniority"):
         frags.append("seniority = :f_seniority")
