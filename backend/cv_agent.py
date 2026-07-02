@@ -512,3 +512,39 @@ def aggregate_candidates(db, company_id, folder_ids, *, metric, dimension, filte
         cstmt = cstmt.bindparams(bindparam("fids", expanding=True))
     total = int(db.execute(cstmt, params).scalar() or 0)
     return {"metric": metric, "dimension": dimension, "rows": rows, "total": total}
+
+
+def _handle_cv_analytics(args, ctx):
+    """Run a whitelisted aggregation and phrase the numbers. Returns None on invalid args (-> RAG fallback)."""
+    try:
+        result = aggregate_candidates(
+            ctx.db,
+            ctx.company_id,
+            ctx.folder_ids,
+            metric=args.get("metric"),
+            dimension=args.get("dimension"),
+            filter=args.get("filter"),
+        )
+    except ValueError:
+        return None
+
+    if not result["rows"]:
+        return {"answer": "Je n'ai pas de données correspondant à cette demande dans la base.", "sources": []}
+
+    table = "\n".join(f"{r['key']}: {r['value']}" for r in result["rows"][:30])
+    # avg_experience is a single GLOBAL average (not grouped) — describe it accurately.
+    if result["metric"] == "avg_experience":
+        scope = f"moyenne globale des années d'expérience (sur {result['total']} candidats)"
+    else:
+        scope = f"{result['metric']} par {result['dimension']} (total {result['total']} candidats)"
+    prompt = (
+        "Tu es un assistant analytics RH. Réponds en français, de façon concise, en t'appuyant "
+        "STRICTEMENT sur ces chiffres agrégés (n'invente rien).\n\n"
+        f"Question : {ctx.question}\n"
+        f"Résultat — {scope} :\n{table}"
+    )
+    answer = get_chat_response([{"role": "user", "content": prompt}], model_id=ctx.model_id)
+    return {"answer": answer, "sources": []}
+
+
+_HANDLERS["cv_analytics"] = _handle_cv_analytics

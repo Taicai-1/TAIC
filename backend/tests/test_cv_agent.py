@@ -542,3 +542,31 @@ def test_aggregate_candidates_with_skill_filter(db_session, test_company):
     assert counts.get("senior") == 1 and counts.get("junior") == 1
     assert "react" not in {r["key"] for r in res["rows"]}
     assert res["total"] == 2  # true candidate count with the filter applied
+
+
+def test_handle_cv_analytics(monkeypatch):
+    monkeypatch.setattr(
+        cv_agent,
+        "aggregate_candidates",
+        lambda db, cid, fids, **kw: {
+            "metric": "count",
+            "dimension": "skill",
+            "rows": [{"key": "python", "value": 2}, {"key": "react", "value": 1}],
+            "total": 3,
+        },
+    )
+    monkeypatch.setattr(cv_agent, "get_chat_response", lambda messages, model_id=None: "Python: 2, React: 1.")
+    ctx = cv_agent._CvContext("combien maîtrisent chaque techno", 1, None, 2, None, "gpt-4o-mini", 5, [7])
+    out = cv_agent._handle_cv_analytics({"metric": "count", "dimension": "skill"}, ctx)
+    assert "Python" in out["answer"]
+    assert out["sources"] == []
+
+
+def test_handle_cv_analytics_bad_args_returns_none(monkeypatch):
+    # Invalid enum -> aggregate raises ValueError -> handler returns None (router falls back to RAG).
+    ctx = cv_agent._CvContext("x", 1, None, 2, None, None, 5, [7])
+    assert cv_agent._handle_cv_analytics({"metric": "nope", "dimension": "skill"}, ctx) is None
+
+
+def test_cv_analytics_registered():
+    assert "cv_analytics" in cv_agent._HANDLERS
