@@ -1,3 +1,5 @@
+import pytest
+
 import cv_agent
 from database import CandidateProfile, CompanyFolder, Document
 
@@ -432,3 +434,62 @@ def test_handle_cv_sourcing_embedding_failure_falls_back_to_sql(monkeypatch):
     out = cv_agent._handle_cv_sourcing({"skills": ["python"], "free_text": "python dev"}, ctx)
     assert captured["embedding"] is None  # embedding was None after the failure
     assert out["sources"][0]["document_id"] == 1  # SQL path still ran
+
+
+def test_aggregate_rejects_unknown_metric_dimension():
+    with pytest.raises(ValueError):
+        cv_agent.aggregate_candidates(None, 1, [1], metric="drop_table", dimension="skill")
+    with pytest.raises(ValueError):
+        cv_agent.aggregate_candidates(None, 1, [1], metric="count", dimension="ssn")
+
+
+def test_aggregate_candidates_db(db_session, test_company):
+    folder = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
+    db_session.add(folder)
+    db_session.flush()
+
+    def mk(name, skills, seniority, years):
+        doc = Document(
+            filename=f"{name}.pdf",
+            content="x",
+            user_id=1,
+            company_id=test_company.id,
+            is_company_rag=True,
+            folder_id=folder.id,
+        )
+        db_session.add(doc)
+        db_session.flush()
+        db_session.add(
+            CandidateProfile(
+                document_id=doc.id,
+                company_id=test_company.id,
+                folder_id=folder.id,
+                full_name=name,
+                skills=skills,
+                seniority=seniority,
+                years_experience=years,
+                extraction_status="done",
+            )
+        )
+        db_session.flush()
+
+    mk("A", ["python", "sql"], "senior", 8)
+    mk("B", ["python"], "junior", 2)
+    mk("C", ["react"], "senior", 6)
+
+    by_skill = cv_agent.aggregate_candidates(
+        db_session, test_company.id, [folder.id], metric="count", dimension="skill"
+    )
+    counts = {r["key"]: r["value"] for r in by_skill["rows"]}
+    assert counts["python"] == 2 and counts["sql"] == 1 and counts["react"] == 1
+
+    avg = cv_agent.aggregate_candidates(
+        db_session, test_company.id, [folder.id], metric="avg_experience", dimension="seniority"
+    )
+    assert round(avg["rows"][0]["value"]) == round((8 + 2 + 6) / 3)
+
+    dist = cv_agent.aggregate_candidates(
+        db_session, test_company.id, [folder.id], metric="distribution", dimension="seniority"
+    )
+    dcounts = {r["key"]: r["value"] for r in dist["rows"]}
+    assert dcounts["senior"] == 2 and dcounts["junior"] == 1

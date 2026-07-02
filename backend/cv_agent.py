@@ -7,6 +7,8 @@ otherwise callers fall back to the normal RAG flow (answer_cv returns None)."""
 import json
 import logging
 
+from sqlalchemy import bindparam, text
+
 from cv_extraction import normalize_skills
 from mistral_embeddings import get_embedding_fast
 from openai_client import get_chat_response, get_chat_response_with_tools
@@ -427,3 +429,79 @@ def _handle_cv_sourcing(args, ctx):
 
 
 _HANDLERS["cv_sourcing"] = _handle_cv_sourcing
+
+_ALLOWED_METRICS = {"count", "avg_experience", "distribution"}
+_ALLOWED_DIMENSIONS = {"skill", "seniority", "location", "language"}
+# Whitelisted column/expression per dimension — NEVER interpolate user input as SQL identifiers.
+_DIM_COLUMN = {"seniority": "seniority", "location": "location"}
+_DIM_JSONB = {"skill": "skills", "language": "languages"}
+
+
+def _aggregate_filters(filter_dict):
+    """Return (sql_fragment, params) for the optional filter, using bound params only."""
+    frags, params = [], {}
+    f = filter_dict or {}
+    if f.get("skill"):
+        frags.append("skills @> :f_skill")
+        params["f_skill"] = json.dumps([normalize_skills([f["skill"]])[0]]) if normalize_skills([f["skill"]]) else "[]"
+    if f.get("seniority"):
+        frags.append("seniority = :f_seniority")
+        params["f_seniority"] = f["seniority"]
+    if f.get("location"):
+        frags.append("location ILIKE :f_location")
+        params["f_location"] = f"%{f['location']}%"
+    if f.get("min_years") is not None:
+        frags.append("years_experience >= :f_min_years")
+        params["f_min_years"] = int(f["min_years"])
+    return ("".join(" AND " + fr for fr in frags), params)
+
+
+def aggregate_candidates(db, company_id, folder_ids, *, metric, dimension, filter=None):
+    """Whitelisted aggregation over candidate_profiles. Returns {metric, dimension, rows, total}."""
+    if metric not in _ALLOWED_METRICS:
+        raise ValueError(f"unknown metric: {metric}")
+    if dimension not in _ALLOWED_DIMENSIONS:
+        raise ValueError(f"unknown dimension: {dimension}")
+    if not company_id:
+        return {"metric": metric, "dimension": dimension, "rows": [], "total": 0}
+
+    filt_sql, params = _aggregate_filters(filter)
+    params["cid"] = company_id
+    where = "cp.company_id = :cid AND cp.extraction_status = 'done'" + filt_sql
+    if folder_ids:
+        where += " AND cp.folder_id IN :fids"
+        params["fids"] = tuple(folder_ids)
+
+    if metric == "avg_experience":
+        sql = f"SELECT AVG(cp.years_experience)::float AS v, COUNT(*) AS n FROM candidate_profiles cp WHERE {where}"
+        stmt = text(sql)
+        if folder_ids:
+            stmt = stmt.bindparams(bindparam("fids", expanding=True))
+        row = db.execute(stmt, params).first()
+        avg = row[0] if row and row[0] is not None else 0.0
+        return {
+            "metric": metric,
+            "dimension": dimension,
+            "rows": [{"key": "avg_experience", "value": avg}],
+            "total": int(row[1]) if row else 0,
+        }
+
+    # count / distribution -> GROUP BY dimension
+    if dimension in _DIM_JSONB:
+        col = _DIM_JSONB[dimension]
+        sql = (
+            f"SELECT elem AS k, COUNT(*) AS v FROM candidate_profiles cp, "
+            f"jsonb_array_elements_text(cp.{col}) AS elem WHERE {where} "
+            f"GROUP BY elem ORDER BY v DESC LIMIT 50"
+        )
+    else:
+        col = _DIM_COLUMN[dimension]
+        sql = (
+            f"SELECT COALESCE(cp.{col}, 'inconnu') AS k, COUNT(*) AS v FROM candidate_profiles cp "
+            f"WHERE {where} GROUP BY cp.{col} ORDER BY v DESC LIMIT 50"
+        )
+    stmt = text(sql)
+    if folder_ids:
+        stmt = stmt.bindparams(bindparam("fids", expanding=True))
+    rows = [{"key": r[0], "value": int(r[1])} for r in db.execute(stmt, params).all()]
+    return {"metric": metric, "dimension": dimension, "rows": rows, "total": sum(r["value"] for r in rows)}
