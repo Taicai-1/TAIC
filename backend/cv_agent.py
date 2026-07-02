@@ -7,6 +7,8 @@ otherwise callers fall back to the normal RAG flow (answer_cv returns None)."""
 import json
 import logging
 
+from openai_client import get_chat_response, get_chat_response_with_tools
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,3 +25,96 @@ def folders_include_cv_base(db, company_id, folder_ids):
     if folder_ids:
         q = q.filter(CompanyFolder.id.in_(folder_ids))
     return bool(db.query(q.exists()).scalar())
+
+
+CV_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "cv_sourcing",
+            "description": "Find and rank candidate CVs matching required skills / seniority / location. Use for 'find/trouve/cherche des candidats/profils qui ...'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skills": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Required skills, e.g. ['python','react']",
+                    },
+                    "seniority": {"type": "string", "description": "junior|confirmé|senior|lead"},
+                    "location": {"type": "string"},
+                    "min_years": {"type": "integer"},
+                    "free_text": {
+                        "type": "string",
+                        "description": "Free-text of the need / job offer for semantic ranking",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cv_analytics",
+            "description": "Aggregate statistics over the CV base (counts, averages, distributions). Use for 'combien / how many / moyenne / répartition ...'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric": {"type": "string", "enum": ["count", "avg_experience", "distribution"]},
+                    "dimension": {"type": "string", "enum": ["skill", "seniority", "location", "language"]},
+                    "filter": {
+                        "type": "object",
+                        "properties": {
+                            "skill": {"type": "string"},
+                            "seniority": {"type": "string"},
+                            "location": {"type": "string"},
+                            "min_years": {"type": "integer"},
+                        },
+                    },
+                },
+                "required": ["metric", "dimension"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cv_qa",
+            "description": "Answer a question about ONE specific named candidate. Use for 'résume le parcours de X', 'quelles compétences a X'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "candidate_name": {"type": "string"},
+                    "question": {"type": "string", "description": "The question to answer about the candidate"},
+                },
+                "required": ["candidate_name", "question"],
+            },
+        },
+    },
+]
+
+_ROUTER_SYSTEM = (
+    "You route a recruiter's message about a CV database to the right tool. "
+    "Call cv_sourcing to find/rank candidates, cv_analytics for counts/averages/distributions, "
+    "cv_qa for a question about one named candidate. "
+    "If the message is small talk or unrelated to the CV base, DO NOT call any tool."
+)
+
+
+def route_cv_intent(question, history, model_id):
+    """Return (tool_name, args_dict) chosen by the LLM, or None to fall back to normal RAG."""
+    messages = [{"role": "system", "content": _ROUTER_SYSTEM}]
+    for m in (history or [])[-6:]:
+        role = m.get("role") if isinstance(m, dict) else None
+        content = m.get("content") if isinstance(m, dict) else None
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": question})
+    try:
+        resp = get_chat_response_with_tools(messages, tools=CV_TOOLS, model_id=model_id)
+    except Exception as e:
+        logger.warning(f"cv route failed: {e}")
+        return None
+    if resp.tool_call is None:
+        return None
+    return resp.tool_call.name, (resp.tool_call.arguments or {})
