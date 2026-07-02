@@ -596,6 +596,10 @@ def get_answer_stream(
         # subfolders for BOTH the doc-listing gate below and the retrieval scope.
         company_rag_folder_ids = _expand_company_folder_ids(company_rag_folder_ids, company_scope_id, db)
 
+        # CV companion: if the agent's company-RAG folders include a CV base, let the CV
+        # intent router try to answer (sourcing/analytics/Q&A). None -> fall back to RAG.
+        # `not selected_doc_ids` prevents re-entry: the Q&A path re-calls get_answer_stream with an
+        # explicit selected_doc_ids, which must stream plain targeted RAG (no re-routing). Do NOT remove.
         if include_company_rag and agent_id and not selected_doc_ids:
             import cv_agent
 

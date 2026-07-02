@@ -245,12 +245,17 @@ def _handle_cv_qa(args, ctx):
     sub_question = (args.get("question") or ctx.question or "").strip()
     hits = find_candidate_by_name(ctx.db, ctx.company_id, ctx.folder_ids, name)
     if not hits:
-        return {"answer": f"Je n'ai trouvé aucun candidat nommé « {name} » dans cette base.", "sources": []}
+        return {
+            "answer": f"Je n'ai trouvé aucun candidat nommé « {name} » dans cette base.",
+            "sources": [],
+            "graph_data": None,
+        }
     if len(hits) > 1:
         names = ", ".join(h["full_name"] for h in hits[:8])
         return {
             "answer": f"Plusieurs candidats correspondent à « {name} » : {names}. Peux-tu préciser lequel ?",
             "sources": [],
+            "graph_data": None,
         }
     return {"stream_doc_id": hits[0]["document_id"], "question": sub_question}
 
@@ -401,7 +406,11 @@ def _handle_cv_sourcing(args, ctx):
         limit=10,
     )
     if not candidates:
-        return {"answer": "Aucun candidat ne correspond à ces critères dans la base.", "sources": []}
+        return {
+            "answer": "Aucun candidat ne correspond à ces critères dans la base.",
+            "sources": [],
+            "graph_data": None,
+        }
 
     lines = [
         f"- {c['full_name']} — {c.get('current_title') or '?'} ({c.get('seniority') or '?'}, "
@@ -425,7 +434,7 @@ def _handle_cv_sourcing(args, ctx):
         }
         for c in candidates
     ]
-    return {"answer": answer, "sources": sources}
+    return {"answer": answer, "sources": sources, "graph_data": None}
 
 
 _HANDLERS["cv_sourcing"] = _handle_cv_sourcing
@@ -450,8 +459,9 @@ def _aggregate_filters(filter_dict):
         frags.append("seniority = :f_seniority")
         params["f_seniority"] = f["seniority"]
     if f.get("location"):
+        loc = f["location"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         frags.append("location ILIKE :f_location")
-        params["f_location"] = f"%{f['location']}%"
+        params["f_location"] = f"%{loc}%"
     if f.get("min_years") is not None:
         frags.append("years_experience >= :f_min_years")
         params["f_min_years"] = int(f["min_years"])
@@ -475,6 +485,7 @@ def aggregate_candidates(db, company_id, folder_ids, *, metric, dimension, filte
         params["fids"] = tuple(folder_ids)
 
     if metric == "avg_experience":
+        # v1: avg_experience is a single global average; `dimension` is intentionally not used here.
         sql = f"SELECT AVG(cp.years_experience)::float AS v, COUNT(*) AS n FROM candidate_profiles cp WHERE {where}"
         stmt = text(sql)
         if folder_ids:
@@ -529,7 +540,11 @@ def _handle_cv_analytics(args, ctx):
         return None
 
     if not result["rows"]:
-        return {"answer": "Je n'ai pas de données correspondant à cette demande dans la base.", "sources": []}
+        return {
+            "answer": "Je n'ai pas de données correspondant à cette demande dans la base.",
+            "sources": [],
+            "graph_data": None,
+        }
 
     table = "\n".join(f"{r['key']}: {r['value']}" for r in result["rows"][:30])
     # avg_experience is a single average (not grouped) — describe it accurately, and don't
@@ -547,7 +562,7 @@ def _handle_cv_analytics(args, ctx):
         f"Résultat — {scope} :\n{table}"
     )
     answer = get_chat_response([{"role": "user", "content": prompt}], model_id=ctx.model_id)
-    return {"answer": answer, "sources": []}
+    return {"answer": answer, "sources": [], "graph_data": None}
 
 
 _HANDLERS["cv_analytics"] = _handle_cv_analytics
