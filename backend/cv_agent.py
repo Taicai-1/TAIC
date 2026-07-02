@@ -232,11 +232,14 @@ def find_candidate_by_name(db, company_id, folder_ids, name):
     """Return [{document_id, full_name}] whose full_name matches ``name`` (ILIKE), tenant-scoped."""
     from database import CandidateProfile
 
-    if not company_id or not name or not name.strip():
+    name = (name or "").strip()
+    if not company_id or not name:
         return []
+    # Escape LIKE metacharacters so an LLM-supplied '%'/'_' is matched literally, not as a wildcard.
+    pattern = "%" + name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     q = db.query(CandidateProfile.document_id, CandidateProfile.full_name).filter(
         CandidateProfile.company_id == company_id,
-        CandidateProfile.full_name.ilike(f"%{name.strip()}%"),
+        CandidateProfile.full_name.ilike(pattern, escape="\\"),
         CandidateProfile.extraction_status == "done",
     )
     if folder_ids:

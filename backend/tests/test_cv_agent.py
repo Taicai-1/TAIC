@@ -201,3 +201,44 @@ def test_find_candidate_by_name(db_session, test_company):
     assert cv_agent.find_candidate_by_name(db_session, test_company.id, [folder.id], "Nobody") == []
     # tenant isolation: other company sees nothing
     assert cv_agent.find_candidate_by_name(db_session, test_company.id + 999, [folder.id], "dupont") == []
+
+
+def test_find_candidate_by_name_escapes_like_metachars():
+    # A DB-less check that '%' in the name does not become a wildcard: we capture the pattern
+    # passed to ilike via a fake query object.
+    captured = {}
+
+    class _FakeCol:
+        def ilike(self, pattern, escape=None):
+            captured["pattern"] = pattern
+            captured["escape"] = escape
+            return "ilike-clause"
+
+    class _FakeQ:
+        def filter(self, *a, **k):
+            return self
+
+        def limit(self, n):
+            return self
+
+        def all(self):
+            return []
+
+    class _FakeDB:
+        def query(self, *a, **k):
+            return _FakeQ()
+
+    import cv_agent
+    from database import CandidateProfile
+
+    # Patch the ORM column's ilike by swapping the attribute lookup: simplest is to monkeypatch
+    # CandidateProfile.full_name with a fake exposing .ilike. Use monkeypatch-free manual swap.
+    orig = CandidateProfile.full_name
+    try:
+        CandidateProfile.full_name = _FakeCol()
+        cv_agent.find_candidate_by_name(_FakeDB(), 1, None, "50%_off")
+    finally:
+        CandidateProfile.full_name = orig
+
+    assert captured["escape"] == "\\"
+    assert "\\%" in captured["pattern"] and "\\_" in captured["pattern"]
