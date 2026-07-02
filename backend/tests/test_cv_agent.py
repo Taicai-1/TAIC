@@ -493,3 +493,52 @@ def test_aggregate_candidates_db(db_session, test_company):
     )
     dcounts = {r["key"]: r["value"] for r in dist["rows"]}
     assert dcounts["senior"] == 2 and dcounts["junior"] == 1
+
+
+def test_aggregate_candidates_with_skill_filter(db_session, test_company):
+    folder = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
+    db_session.add(folder)
+    db_session.flush()
+
+    def mk(name, skills, seniority):
+        doc = Document(
+            filename=f"{name}.pdf",
+            content="x",
+            user_id=1,
+            company_id=test_company.id,
+            is_company_rag=True,
+            folder_id=folder.id,
+        )
+        db_session.add(doc)
+        db_session.flush()
+        db_session.add(
+            CandidateProfile(
+                document_id=doc.id,
+                company_id=test_company.id,
+                folder_id=folder.id,
+                full_name=name,
+                skills=skills,
+                seniority=seniority,
+                years_experience=5,
+                extraction_status="done",
+            )
+        )
+        db_session.flush()
+
+    mk("A", ["python"], "senior")
+    mk("B", ["python"], "junior")
+    mk("C", ["react"], "senior")
+
+    # distribution by seniority, filtered to python candidates -> only A(senior) and B(junior)
+    res = cv_agent.aggregate_candidates(
+        db_session,
+        test_company.id,
+        [folder.id],
+        metric="distribution",
+        dimension="seniority",
+        filter={"skill": "python"},
+    )
+    counts = {r["key"]: r["value"] for r in res["rows"]}
+    assert counts.get("senior") == 1 and counts.get("junior") == 1
+    assert "react" not in {r["key"] for r in res["rows"]}
+    assert res["total"] == 2  # true candidate count with the filter applied

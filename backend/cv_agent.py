@@ -442,8 +442,10 @@ def _aggregate_filters(filter_dict):
     frags, params = [], {}
     f = filter_dict or {}
     if f.get("skill"):
-        frags.append("skills @> :f_skill")
-        params["f_skill"] = json.dumps([normalize_skills([f["skill"]])[0]]) if normalize_skills([f["skill"]]) else "[]"
+        normalized = normalize_skills([f["skill"]])
+        if normalized:  # omit the filter entirely if normalization yields nothing (never match-all)
+            frags.append("skills @> :f_skill::jsonb")
+            params["f_skill"] = json.dumps([normalized[0]])
     if f.get("seniority"):
         frags.append("seniority = :f_seniority")
         params["f_seniority"] = f["seniority"]
@@ -504,4 +506,9 @@ def aggregate_candidates(db, company_id, folder_ids, *, metric, dimension, filte
     if folder_ids:
         stmt = stmt.bindparams(bindparam("fids", expanding=True))
     rows = [{"key": r[0], "value": int(r[1])} for r in db.execute(stmt, params).all()]
-    return {"metric": metric, "dimension": dimension, "rows": rows, "total": sum(r["value"] for r in rows)}
+    count_sql = f"SELECT COUNT(*) FROM candidate_profiles cp WHERE {where}"
+    cstmt = text(count_sql)
+    if folder_ids:
+        cstmt = cstmt.bindparams(bindparam("fids", expanding=True))
+    total = int(db.execute(cstmt, params).scalar() or 0)
+    return {"metric": metric, "dimension": dimension, "rows": rows, "total": total}
