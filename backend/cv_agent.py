@@ -8,6 +8,7 @@ import json
 import logging
 
 from openai_client import get_chat_response, get_chat_response_with_tools
+from streaming_response import sse_event
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,49 @@ class _CvContext:
 # Populated by later tasks: {"cv_qa": fn, "cv_sourcing": fn, "cv_analytics": fn}.
 # Each handler has signature (args: dict, ctx: _CvContext) -> dict | None.
 _HANDLERS = {}
+
+
+def answer_cv_stream(question, user_id, db, agent_id, history, model_id, company_id, folder_ids):
+    """Streaming variant. Returns an SSE generator, or None to fall back to RAG streaming.
+
+    Q&A on a single resolved candidate delegates to rag_engine.get_answer_stream for real
+    token streaming; everything else emits the finished text as one token + a done event.
+    """
+    routed = route_cv_intent(question, history, model_id)
+    if routed is None:
+        return None
+    name, args = routed
+    handler = _HANDLERS.get(name)
+    if handler is None:
+        return None
+    try:
+        ctx = _CvContext(question, user_id, db, agent_id, history, model_id, company_id, folder_ids)
+        result = handler(args, ctx)
+    except Exception as e:
+        logger.warning(f"cv_agent stream handler '{name}' failed: {e}")
+        return None
+    if not result:
+        return None
+
+    if result.get("stream_doc_id"):
+        import rag_engine
+
+        return rag_engine.get_answer_stream(
+            result.get("question", ctx.question),
+            user_id,
+            db,
+            selected_doc_ids=[result["stream_doc_id"]],
+            agent_id=agent_id,
+            history=history,
+            model_id=model_id,
+            company_id=company_id,
+        )
+
+    def _gen():
+        yield sse_event("token", {"t": result["answer"]})
+        yield sse_event("done", {"full_text": result["answer"], "sources": result.get("sources", [])})
+
+    return _gen()
 
 
 def answer_cv(question, user_id, db, agent_id, history, model_id, company_id, folder_ids):

@@ -108,3 +108,30 @@ def test_answer_cv_stream_doc_id_delegates_to_get_answer(monkeypatch):
     out = cv_agent.answer_cv("résume X", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7])
     assert captured["docs"] == [11] and captured["q"] == "résume X"
     assert out["answer"] == "ok"
+
+
+def test_answer_cv_stream_emits_sse(monkeypatch):
+    monkeypatch.setattr(
+        cv_agent,
+        "route_cv_intent",
+        lambda q, history, model_id: ("cv_analytics", {"metric": "count", "dimension": "skill"}),
+    )
+    monkeypatch.setattr(
+        cv_agent, "_HANDLERS", {"cv_analytics": lambda args, ctx: {"answer": "42 profils", "sources": []}}
+    )
+
+    gen = cv_agent.answer_cv_stream(
+        "combien", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7]
+    )
+    events = list(gen)
+    blob = "".join(events)
+    assert "42 profils" in blob
+    assert "event: done" in blob
+
+
+def test_answer_cv_stream_none_when_no_tool(monkeypatch):
+    monkeypatch.setattr(cv_agent, "route_cv_intent", lambda q, history, model_id: None)
+    assert (
+        cv_agent.answer_cv_stream("hi", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7])
+        is None
+    )

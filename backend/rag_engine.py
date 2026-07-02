@@ -596,6 +596,17 @@ def get_answer_stream(
         # subfolders for BOTH the doc-listing gate below and the retrieval scope.
         company_rag_folder_ids = _expand_company_folder_ids(company_rag_folder_ids, company_scope_id, db)
 
+        if include_company_rag and agent_id and not selected_doc_ids:
+            import cv_agent
+
+            if cv_agent.folders_include_cv_base(db, company_scope_id, company_rag_folder_ids):
+                _cv_stream = cv_agent.answer_cv_stream(
+                    question, user_id, db, agent_id, history, model_id, company_scope_id, company_rag_folder_ids
+                )
+                if _cv_stream is not None:
+                    yield from _cv_stream
+                    return
+
         # --- Document retrieval (same as get_answer) ---
         # Folder filter intentionally not applied to an explicit selected_doc_ids set
         # (explicit user selection overrides folder scoping); company_id tenant filter still applies.
