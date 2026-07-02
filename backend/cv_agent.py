@@ -159,7 +159,10 @@ def answer_cv_stream(question, user_id, db, agent_id, history, model_id, company
     except Exception as e:
         logger.warning(f"cv_agent stream handler '{name}' failed: {e}")
         return None
-    if not result:
+    if result is None:
+        return None
+    if not result:  # empty dict = handler bug; fall back to RAG but make it visible
+        logger.warning(f"cv_agent stream handler '{name}' returned an empty result")
         return None
 
     if result.get("stream_doc_id"):
@@ -176,9 +179,14 @@ def answer_cv_stream(question, user_id, db, agent_id, history, model_id, company
             company_id=company_id,
         )
 
+    answer_text = result.get("answer")
+    if not answer_text:
+        logger.warning(f"cv_agent stream handler '{name}' returned a result without 'answer'")
+        return None
+
     def _gen():
-        yield sse_event("token", {"t": result["answer"]})
-        yield sse_event("done", {"full_text": result["answer"], "sources": result.get("sources", [])})
+        yield sse_event("token", {"t": answer_text})
+        yield sse_event("done", {"full_text": answer_text, "sources": result.get("sources", []), "graph_data": None})
 
     return _gen()
 

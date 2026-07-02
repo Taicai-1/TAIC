@@ -86,7 +86,7 @@ def test_answer_cv_dispatches_and_falls_back(monkeypatch):
     )
 
 
-def test_answer_cv_stream_doc_id_delegates_to_get_answer(monkeypatch):
+def test_answer_cv_delegates_via_stream_doc_id(monkeypatch):
     monkeypatch.setattr(
         cv_agent,
         "route_cv_intent",
@@ -135,3 +135,32 @@ def test_answer_cv_stream_none_when_no_tool(monkeypatch):
         cv_agent.answer_cv_stream("hi", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7])
         is None
     )
+
+
+def test_answer_cv_stream_delegates_via_stream_doc_id(monkeypatch):
+    monkeypatch.setattr(
+        cv_agent,
+        "route_cv_intent",
+        lambda q, history, model_id: ("cv_qa", {"candidate_name": "X", "question": "résume"}),
+    )
+    monkeypatch.setattr(
+        cv_agent, "_HANDLERS", {"cv_qa": lambda args, ctx: {"stream_doc_id": 11, "question": "résume X"}}
+    )
+    captured = {}
+
+    import rag_engine
+    from streaming_response import sse_event
+
+    def fake_stream(question, user_id, db, selected_doc_ids=None, **k):
+        captured["docs"] = selected_doc_ids
+        yield sse_event("token", {"t": "streamed"})
+        yield sse_event("done", {"full_text": "streamed", "sources": [], "graph_data": None})
+
+    monkeypatch.setattr(rag_engine, "get_answer_stream", fake_stream)
+    events = list(
+        cv_agent.answer_cv_stream(
+            "résume X", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7]
+        )
+    )
+    assert captured["docs"] == [11]
+    assert any("streamed" in e for e in events)
