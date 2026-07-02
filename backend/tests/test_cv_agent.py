@@ -1,5 +1,5 @@
 import cv_agent
-from database import CompanyFolder
+from database import CandidateProfile, CompanyFolder, Document
 
 
 def test_folders_include_cv_base(db_session, test_company):
@@ -164,3 +164,40 @@ def test_answer_cv_stream_delegates_via_stream_doc_id(monkeypatch):
     )
     assert captured["docs"] == [11]
     assert any("streamed" in e for e in events)
+
+
+def _cv_doc_with_profile(db_session, test_company, folder_id, name):
+    doc = Document(
+        filename=f"{name}.pdf",
+        content="x",
+        user_id=1,
+        company_id=test_company.id,
+        is_company_rag=True,
+        folder_id=folder_id,
+    )
+    db_session.add(doc)
+    db_session.flush()
+    prof = CandidateProfile(
+        document_id=doc.id,
+        company_id=test_company.id,
+        folder_id=folder_id,
+        full_name=name,
+        extraction_status="done",
+    )
+    db_session.add(prof)
+    db_session.flush()
+    return doc
+
+
+def test_find_candidate_by_name(db_session, test_company):
+    folder = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
+    db_session.add(folder)
+    db_session.flush()
+    _cv_doc_with_profile(db_session, test_company, folder.id, "Jean Dupont")
+    _cv_doc_with_profile(db_session, test_company, folder.id, "Marie Martin")
+
+    hits = cv_agent.find_candidate_by_name(db_session, test_company.id, [folder.id], "dupont")
+    assert len(hits) == 1 and hits[0]["full_name"] == "Jean Dupont"
+    assert cv_agent.find_candidate_by_name(db_session, test_company.id, [folder.id], "Nobody") == []
+    # tenant isolation: other company sees nothing
+    assert cv_agent.find_candidate_by_name(db_session, test_company.id + 999, [folder.id], "dupont") == []

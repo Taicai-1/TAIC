@@ -226,3 +226,19 @@ def answer_cv(question, user_id, db, agent_id, history, model_id, company_id, fo
     except Exception as e:
         logger.warning(f"cv_agent handler '{name}' failed: {e}")
         return None
+
+
+def find_candidate_by_name(db, company_id, folder_ids, name):
+    """Return [{document_id, full_name}] whose full_name matches ``name`` (ILIKE), tenant-scoped."""
+    from database import CandidateProfile
+
+    if not company_id or not name or not name.strip():
+        return []
+    q = db.query(CandidateProfile.document_id, CandidateProfile.full_name).filter(
+        CandidateProfile.company_id == company_id,
+        CandidateProfile.full_name.ilike(f"%{name.strip()}%"),
+        CandidateProfile.extraction_status == "done",
+    )
+    if folder_ids:
+        q = q.filter(CandidateProfile.folder_id.in_(folder_ids))
+    return [{"document_id": r[0], "full_name": r[1]} for r in q.limit(10).all()]
