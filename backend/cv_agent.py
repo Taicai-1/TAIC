@@ -324,11 +324,14 @@ def search_candidates(
     if seniority:
         q = q.filter(CandidateProfile.seniority == seniority)
     if location:
-        q = q.filter(CandidateProfile.location.ilike(f"%{location}%"))
+        loc_pattern = "%" + location.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        q = q.filter(CandidateProfile.location.ilike(loc_pattern, escape="\\"))
     if min_years is not None:
         q = q.filter(CandidateProfile.years_experience >= min_years)
 
-    rows = q.limit(200).all()
+    rows = (
+        q.order_by(CandidateProfile.years_experience.desc().nullslast(), CandidateProfile.document_id).limit(200).all()
+    )
 
     # Optional vector signal: best chunk similarity per candidate document.
     sims = {}
