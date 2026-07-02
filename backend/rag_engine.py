@@ -281,11 +281,11 @@ def get_answer(
             import cv_agent
 
             if cv_agent.folders_include_cv_base(db, company_scope_id, company_rag_folder_ids):
-                _cv = cv_agent.answer_cv(
+                cv_answer = cv_agent.answer_cv(
                     question, user_id, db, agent_id, history, model_id, company_scope_id, company_rag_folder_ids
                 )
-                if _cv is not None:
-                    return _cv
+                if cv_answer is not None:
+                    return cv_answer
 
         # Get documents to consider for RAG
         # If selected_doc_ids provided, use those (and respect agent_id if present).

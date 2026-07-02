@@ -84,3 +84,27 @@ def test_answer_cv_dispatches_and_falls_back(monkeypatch):
         cv_agent.answer_cv("combien", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7])
         is None
     )
+
+
+def test_answer_cv_stream_doc_id_delegates_to_get_answer(monkeypatch):
+    monkeypatch.setattr(
+        cv_agent,
+        "route_cv_intent",
+        lambda q, history, model_id: ("cv_qa", {"candidate_name": "X", "question": "résume"}),
+    )
+    monkeypatch.setattr(
+        cv_agent, "_HANDLERS", {"cv_qa": lambda args, ctx: {"stream_doc_id": 11, "question": "résume X"}}
+    )
+    captured = {}
+
+    import rag_engine
+
+    def fake_get_answer(question, user_id, db, selected_doc_ids=None, **k):
+        captured["docs"] = selected_doc_ids
+        captured["q"] = question
+        return {"answer": "ok", "sources": [{"document_id": 11}]}
+
+    monkeypatch.setattr(rag_engine, "get_answer", fake_get_answer)
+    out = cv_agent.answer_cv("résume X", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7])
+    assert captured["docs"] == [11] and captured["q"] == "résume X"
+    assert out["answer"] == "ok"

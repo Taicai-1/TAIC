@@ -151,14 +151,17 @@ def answer_cv(question, user_id, db, agent_id, history, model_id, company_id, fo
     try:
         ctx = _CvContext(question, user_id, db, agent_id, history, model_id, company_id, folder_ids)
         result = handler(args, ctx)
-        if not result:
+        if result is None:
+            return None
+        if not result:  # empty dict = handler bug; fall back to RAG but make it visible
+            logger.warning(f"cv_agent handler '{name}' returned an empty result")
             return None
         # A handler may ask the orchestrator to run targeted single-CV RAG (Q&A).
         if result.get("stream_doc_id"):
             import rag_engine
 
             return rag_engine.get_answer(
-                result["question"],
+                result.get("question", ctx.question),
                 ctx.user_id,
                 ctx.db,
                 selected_doc_ids=[result["stream_doc_id"]],
