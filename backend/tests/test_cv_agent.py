@@ -242,3 +242,65 @@ def test_find_candidate_by_name_escapes_like_metachars():
 
     assert captured["escape"] == "\\"
     assert "\\%" in captured["pattern"] and "\\_" in captured["pattern"]
+
+
+def test_handle_cv_qa_single_candidate_returns_marker(monkeypatch):
+    # A single match returns a delegation marker; the orchestrator runs the targeted RAG (no get_answer here).
+    monkeypatch.setattr(
+        cv_agent,
+        "find_candidate_by_name",
+        lambda db, cid, fids, name: [{"document_id": 11, "full_name": "Jean Dupont"}],
+    )
+    ctx = cv_agent._CvContext("résume Jean", 1, None, 2, None, "gpt-4o-mini", 5, [7])
+    out = cv_agent._handle_cv_qa({"candidate_name": "Jean Dupont", "question": "résume son parcours"}, ctx)
+    assert out == {"stream_doc_id": 11, "question": "résume son parcours"}
+
+
+def test_answer_cv_qa_runs_targeted_rag(monkeypatch):
+    # End-to-end: router picks cv_qa, single match -> answer_cv runs get_answer scoped to that doc.
+    monkeypatch.setattr(
+        cv_agent, "route_cv_intent", lambda q, h, m: ("cv_qa", {"candidate_name": "Jean Dupont", "question": "résume"})
+    )
+    monkeypatch.setattr(
+        cv_agent,
+        "find_candidate_by_name",
+        lambda db, cid, fids, name: [{"document_id": 11, "full_name": "Jean Dupont"}],
+    )
+    captured = {}
+
+    import rag_engine
+
+    def fake_get_answer(question, user_id, db, selected_doc_ids=None, **k):
+        captured["docs"] = selected_doc_ids
+        return {"answer": "Jean is a senior engineer.", "sources": [{"document_id": 11}]}
+
+    monkeypatch.setattr(rag_engine, "get_answer", fake_get_answer)
+    out = cv_agent.answer_cv(
+        "résume Jean", 1, None, agent_id=2, history=None, model_id=None, company_id=5, folder_ids=[7]
+    )
+    assert captured["docs"] == [11] and "senior engineer" in out["answer"]
+
+
+def test_handle_cv_qa_no_candidate(monkeypatch):
+    monkeypatch.setattr(cv_agent, "find_candidate_by_name", lambda db, cid, fids, name: [])
+    ctx = cv_agent._CvContext("résume X", 1, None, 2, None, None, 5, [7])
+    out = cv_agent._handle_cv_qa({"candidate_name": "Ghost", "question": "?"}, ctx)
+    assert "Ghost" in out["answer"] and out["sources"] == []
+
+
+def test_handle_cv_qa_ambiguous(monkeypatch):
+    monkeypatch.setattr(
+        cv_agent,
+        "find_candidate_by_name",
+        lambda db, cid, fids, name: [
+            {"document_id": 1, "full_name": "Jean Dupont"},
+            {"document_id": 2, "full_name": "Jean Durand"},
+        ],
+    )
+    ctx = cv_agent._CvContext("résume Jean", 1, None, 2, None, None, 5, [7])
+    out = cv_agent._handle_cv_qa({"candidate_name": "Jean", "question": "?"}, ctx)
+    assert "Jean Dupont" in out["answer"] and "Jean Durand" in out["answer"]  # asks to disambiguate
+
+
+def test_cv_qa_registered():
+    assert "cv_qa" in cv_agent._HANDLERS

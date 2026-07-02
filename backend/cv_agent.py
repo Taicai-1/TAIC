@@ -228,6 +228,30 @@ def answer_cv(question, user_id, db, agent_id, history, model_id, company_id, fo
         return None
 
 
+def _handle_cv_qa(args, ctx):
+    """Q&A about one named candidate: resolve the name, then return a targeted-RAG marker.
+
+    0 match / ambiguous -> a plain answer dict. Exactly 1 match -> a {"stream_doc_id","question"}
+    marker; the orchestrator (answer_cv / answer_cv_stream) runs the single-CV RAG so get_answer
+    is invoked exactly once, in the right (stream or non-stream) form.
+    """
+    name = (args.get("candidate_name") or "").strip()
+    sub_question = (args.get("question") or ctx.question or "").strip()
+    hits = find_candidate_by_name(ctx.db, ctx.company_id, ctx.folder_ids, name)
+    if not hits:
+        return {"answer": f"Je n'ai trouvé aucun candidat nommé « {name} » dans cette base.", "sources": []}
+    if len(hits) > 1:
+        names = ", ".join(h["full_name"] for h in hits[:8])
+        return {
+            "answer": f"Plusieurs candidats correspondent à « {name} » : {names}. Peux-tu préciser lequel ?",
+            "sources": [],
+        }
+    return {"stream_doc_id": hits[0]["document_id"], "question": sub_question}
+
+
+_HANDLERS["cv_qa"] = _handle_cv_qa
+
+
 def find_candidate_by_name(db, company_id, folder_ids, name):
     """Return [{document_id, full_name}] whose full_name matches ``name`` (ILIKE), tenant-scoped."""
     from database import CandidateProfile
