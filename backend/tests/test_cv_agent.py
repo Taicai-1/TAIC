@@ -168,11 +168,11 @@ def test_answer_cv_stream_delegates_via_stream_doc_id(monkeypatch):
     assert any("streamed" in e for e in events)
 
 
-def _cv_doc_with_profile(db_session, test_company, folder_id, name):
+def _cv_doc_with_profile(db_session, test_company, test_user, folder_id, name):
     doc = Document(
         filename=f"{name}.pdf",
         content="x",
-        user_id=1,
+        user_id=test_user.id,
         company_id=test_company.id,
         is_company_rag=True,
         folder_id=folder_id,
@@ -191,12 +191,12 @@ def _cv_doc_with_profile(db_session, test_company, folder_id, name):
     return doc
 
 
-def test_find_candidate_by_name(db_session, test_company):
+def test_find_candidate_by_name(db_session, test_company, test_user):
     folder = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
     db_session.add(folder)
     db_session.flush()
-    _cv_doc_with_profile(db_session, test_company, folder.id, "Jean Dupont")
-    _cv_doc_with_profile(db_session, test_company, folder.id, "Marie Martin")
+    _cv_doc_with_profile(db_session, test_company, test_user, folder.id, "Jean Dupont")
+    _cv_doc_with_profile(db_session, test_company, test_user, folder.id, "Marie Martin")
 
     hits = cv_agent.find_candidate_by_name(db_session, test_company.id, [folder.id], "dupont")
     assert len(hits) == 1 and hits[0]["full_name"] == "Jean Dupont"
@@ -324,7 +324,7 @@ def test_rank_candidates_orders_by_criteria_then_vector():
     assert [r["document_id"] for r in ranked] == [2, 1, 3]  # more matched skills first, then similarity
 
 
-def test_search_candidates_filters_and_groups(db_session, test_company):
+def test_search_candidates_filters_and_groups(db_session, test_company, test_user):
     folder = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
     db_session.add(folder)
     db_session.flush()
@@ -333,7 +333,7 @@ def test_search_candidates_filters_and_groups(db_session, test_company):
         doc = Document(
             filename=f"{name}.pdf",
             content="x",
-            user_id=1,
+            user_id=test_user.id,
             company_id=test_company.id,
             is_company_rag=True,
             folder_id=folder.id,
@@ -443,7 +443,7 @@ def test_aggregate_rejects_unknown_metric_dimension():
         cv_agent.aggregate_candidates(None, 1, [1], metric="count", dimension="ssn")
 
 
-def test_aggregate_candidates_db(db_session, test_company):
+def test_aggregate_candidates_db(db_session, test_company, test_user):
     folder = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
     db_session.add(folder)
     db_session.flush()
@@ -452,7 +452,7 @@ def test_aggregate_candidates_db(db_session, test_company):
         doc = Document(
             filename=f"{name}.pdf",
             content="x",
-            user_id=1,
+            user_id=test_user.id,
             company_id=test_company.id,
             is_company_rag=True,
             folder_id=folder.id,
@@ -495,7 +495,7 @@ def test_aggregate_candidates_db(db_session, test_company):
     assert dcounts["senior"] == 2 and dcounts["junior"] == 1
 
 
-def test_aggregate_candidates_with_skill_filter(db_session, test_company):
+def test_aggregate_candidates_with_skill_filter(db_session, test_company, test_user):
     folder = CompanyFolder(company_id=test_company.id, name="CVs", is_cv_base=True)
     db_session.add(folder)
     db_session.flush()
@@ -504,7 +504,7 @@ def test_aggregate_candidates_with_skill_filter(db_session, test_company):
         doc = Document(
             filename=f"{name}.pdf",
             content="x",
-            user_id=1,
+            user_id=test_user.id,
             company_id=test_company.id,
             is_company_rag=True,
             folder_id=folder.id,
