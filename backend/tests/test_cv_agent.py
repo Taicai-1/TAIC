@@ -400,3 +400,35 @@ def test_handle_cv_sourcing_no_match(monkeypatch):
 
 def test_cv_sourcing_registered():
     assert "cv_sourcing" in cv_agent._HANDLERS
+
+
+def test_handle_cv_sourcing_embedding_failure_falls_back_to_sql(monkeypatch):
+    captured = {}
+
+    def boom(t):
+        raise RuntimeError("Mistral API down")
+
+    monkeypatch.setattr(cv_agent, "get_embedding_fast", boom)
+    monkeypatch.setattr(
+        cv_agent,
+        "search_candidates",
+        lambda db, cid, fids, query_embedding=None, **kw: (
+            captured.__setitem__("embedding", query_embedding)
+            or [
+                {
+                    "document_id": 1,
+                    "full_name": "A Py",
+                    "current_title": "Dev",
+                    "seniority": "senior",
+                    "years_experience": 5,
+                    "matched_skills": ["python"],
+                    "similarity": 0.0,
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(cv_agent, "get_chat_response", lambda messages, model_id=None: "A Py est disponible.")
+    ctx = cv_agent._CvContext("trouve des devs python", 1, None, 2, None, None, 5, [7])
+    out = cv_agent._handle_cv_sourcing({"skills": ["python"], "free_text": "python dev"}, ctx)
+    assert captured["embedding"] is None  # embedding was None after the failure
+    assert out["sources"][0]["document_id"] == 1  # SQL path still ran
