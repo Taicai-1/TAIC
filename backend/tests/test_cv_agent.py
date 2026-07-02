@@ -570,3 +570,28 @@ def test_handle_cv_analytics_bad_args_returns_none(monkeypatch):
 
 def test_cv_analytics_registered():
     assert "cv_analytics" in cv_agent._HANDLERS
+
+
+def test_handle_cv_analytics_avg_experience_scope(monkeypatch):
+    monkeypatch.setattr(
+        cv_agent,
+        "aggregate_candidates",
+        lambda db, cid, fids, **kw: {
+            "metric": "avg_experience",
+            "dimension": "seniority",
+            "rows": [{"key": "avg_experience", "value": 5.5}],
+            "total": 10,
+        },
+    )
+    captured = {}
+    monkeypatch.setattr(
+        cv_agent,
+        "get_chat_response",
+        lambda messages, model_id=None: captured.update({"prompt": messages[0]["content"]}) or "5.5 ans.",
+    )
+    ctx = cv_agent._CvContext("quelle est la moyenne", 1, None, 2, None, None, 5, [7])
+    out = cv_agent._handle_cv_analytics({"metric": "avg_experience", "dimension": "seniority"}, ctx)
+    assert "moyenne des années d'expérience" in captured["prompt"]
+    assert "par seniority" not in captured["prompt"]  # must not claim grouping for avg
+    assert "<<<quelle est la moyenne>>>" in captured["prompt"]  # question delimited
+    assert out["sources"] == []
