@@ -8,6 +8,7 @@ import json
 import logging
 
 from cv_extraction import normalize_skills
+from mistral_embeddings import get_embedding_fast
 from openai_client import get_chat_response, get_chat_response_with_tools
 from streaming_response import sse_event
 
@@ -374,3 +375,54 @@ def search_candidates(
             }
         )
     return _rank_candidates(out)[:limit]
+
+
+def _handle_cv_sourcing(args, ctx):
+    """Rank candidates matching the recruiter's criteria and phrase the shortlist."""
+    free_text = (args.get("free_text") or ctx.question or "").strip()
+    query_embedding = None
+    if free_text:
+        try:
+            query_embedding = get_embedding_fast(free_text)
+        except Exception:
+            query_embedding = None
+    candidates = search_candidates(
+        ctx.db,
+        ctx.company_id,
+        ctx.folder_ids,
+        skills=args.get("skills"),
+        seniority=args.get("seniority"),
+        location=args.get("location"),
+        min_years=args.get("min_years"),
+        query_embedding=query_embedding,
+        agent_id=ctx.agent_id,
+        limit=10,
+    )
+    if not candidates:
+        return {"answer": "Aucun candidat ne correspond à ces critères dans la base.", "sources": []}
+
+    lines = [
+        f"- {c['full_name']} — {c.get('current_title') or '?'} ({c.get('seniority') or '?'}, "
+        f"{c.get('years_experience') if c.get('years_experience') is not None else '?'} ans) — "
+        f"compétences: {', '.join(c.get('matched_skills') or []) or '—'}"
+        for c in candidates
+    ]
+    prompt = (
+        "Tu es un assistant de sourcing RH. Présente cette liste classée de candidats de façon "
+        "concise et professionnelle, en français, sans inventer d'information.\n\n"
+        "Demande initiale : " + ctx.question + "\n\nCandidats (déjà classés) :\n" + "\n".join(lines)
+    )
+    answer = get_chat_response([{"role": "user", "content": prompt}], model_id=ctx.model_id)
+    sources = [
+        {
+            "text": c["full_name"],
+            "document_name": c["full_name"],
+            "score": c.get("similarity") or 0.0,
+            "document_id": c["document_id"],
+        }
+        for c in candidates
+    ]
+    return {"answer": answer, "sources": sources}
+
+
+_HANDLERS["cv_sourcing"] = _handle_cv_sourcing

@@ -361,3 +361,42 @@ def test_search_candidates_filters_and_groups(db_session, test_company):
     assert names == {"A Py", "C PyReact"}  # both have python; B filtered out
     res2 = cv_agent.search_candidates(db_session, test_company.id, [folder.id], skills=["python"], min_years=10)
     assert {r["full_name"] for r in res2} == {"C PyReact"}
+
+
+def test_handle_cv_sourcing(monkeypatch):
+    monkeypatch.setattr(
+        cv_agent,
+        "search_candidates",
+        lambda db, cid, fids, **kw: [
+            {
+                "document_id": 3,
+                "full_name": "C PyReact",
+                "current_title": "Lead",
+                "seniority": "lead",
+                "years_experience": 12,
+                "matched_skills": ["python", "react"],
+                "similarity": 0.4,
+            },
+        ],
+    )
+    monkeypatch.setattr(cv_agent, "get_embedding_fast", lambda t: [0.0] * 1024)
+    monkeypatch.setattr(
+        cv_agent, "get_chat_response", lambda messages, model_id=None: "Voici 1 candidat : C PyReact (Lead)."
+    )
+
+    ctx = cv_agent._CvContext("trouve des devs python react", 1, None, 2, None, "gpt-4o-mini", 5, [7])
+    out = cv_agent._handle_cv_sourcing({"skills": ["python", "react"], "free_text": "dev python react"}, ctx)
+    assert "C PyReact" in out["answer"]
+    assert out["sources"] and out["sources"][0]["document_id"] == 3
+
+
+def test_handle_cv_sourcing_no_match(monkeypatch):
+    monkeypatch.setattr(cv_agent, "search_candidates", lambda db, cid, fids, **kw: [])
+    monkeypatch.setattr(cv_agent, "get_embedding_fast", lambda t: [0.0] * 1024)
+    ctx = cv_agent._CvContext("trouve des devs cobol", 1, None, 2, None, None, 5, [7])
+    out = cv_agent._handle_cv_sourcing({"skills": ["cobol"]}, ctx)
+    assert "aucun" in out["answer"].lower()
+
+
+def test_cv_sourcing_registered():
+    assert "cv_sourcing" in cv_agent._HANDLERS
