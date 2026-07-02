@@ -304,3 +304,9 @@ def test_handle_cv_qa_ambiguous(monkeypatch):
 
 def test_cv_qa_registered():
     assert "cv_qa" in cv_agent._HANDLERS
+
+
+def test_handle_cv_qa_empty_name_returns_none():
+    ctx = cv_agent._CvContext("résume ce candidat", 1, None, 2, None, None, 5, [7])
+    assert cv_agent._handle_cv_qa({"candidate_name": "", "question": "résume"}, ctx) is None
+    assert cv_agent._handle_cv_qa({"question": "résume"}, ctx) is None

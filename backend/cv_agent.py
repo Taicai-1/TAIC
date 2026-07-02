@@ -236,6 +236,8 @@ def _handle_cv_qa(args, ctx):
     is invoked exactly once, in the right (stream or non-stream) form.
     """
     name = (args.get("candidate_name") or "").strip()
+    if not name:
+        return None  # no candidate name extracted -> let the orchestrator fall back to normal RAG
     sub_question = (args.get("question") or ctx.question or "").strip()
     hits = find_candidate_by_name(ctx.db, ctx.company_id, ctx.folder_ids, name)
     if not hits:
